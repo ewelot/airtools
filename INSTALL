@@ -1,0 +1,51 @@
+
+
+
+Software Requirements:
+-----------------------
+
+The airtools software relies on a number of other programs to be present on
+runtime. Many of those are available in the form of software packages from
+your Linux distribution. Installation on a Debian/Ubuntu-based distribution
+is done via the following command (run as root):
+
+    apt-get update
+    apt-get install imagemagick xpa-tools wcstools gnuplot-x11 \
+        librsvg2-bin potrace exiftool curl wget gawk
+
+
+Build dependencies:
+--------------------
+
+Building the included C programs and those from third party software depends
+on a number of libraries which can be installed via:
+
+    apt-get install libnetpbm10-dev libjasper-dev libjpeg-dev libcfitsio3-dev \
+        libtiff5-dev libfftw3-dev libblas-dev libatlas-base-dev \
+        libplplot-dev plplot12-driver-xwin libshp-dev
+
+
+Installation:
+--------------
+
+Default installation is under /usr/local (e.g. binaries into /usr/local/bin).
+You need root privileges to run any of the following "make install" commands.
+
+Installation consists of several steps.
+
+Unpacking archives (in any temporary directory):
+    tar xf airtools-*tar.gz
+    tar xf bundle3rd.tar
+
+Compiling and installing airtools:
+    cd airtools-*
+    make
+    make install
+
+Compiling and installing external software packages (from bundle3rd.tar):
+    make externc
+    make install_externc
+    make astromatic
+    make install_astromatic
+    make install_ds9
+    make install_stilts

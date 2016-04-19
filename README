@@ -1,0 +1,35 @@
+
+AIRTOOLS is based on many programs/tools which are available from package
+repositories of most Linux distributions, including:
+- ImageMagick
+- XPA messaging tools
+- WCSTools
+- Gnuplot
+
+
+It also uses powerful third party astronomical software packages:
+
+- Astromatic software (E. Bertin, http://www.astromatic.net)
+    sextractor
+    scamp
+    skymaker
+    stiff
+    swarp
+
+- stilts (M. Taylor, http://www.starlink.ac.uk/stilts/)
+    Table processing (e.g. manipulation of FITS tables)
+
+- SAOImage DS9 (http://ds9.si.edu/site/Home.html)
+    Astronomical imaging and data visualization.
+
+
+In addition, subsets of some smaller tools are used:
+
+- cdsclient (http://cdsweb.u-strasbg.fr/doc/cdsclient.html)
+    Fast access to astronomical databases at CDS 
+- cexamples (http://heasarc.gsfc.nasa.gov/docs/software/fitsio/cexamples.html)
+    Simple FITS routines
+
+
+For your convenience, sources of those external programs have been bundled in
+a single archive (bundle3rd.tar) which must be downloaded separately.

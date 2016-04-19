@@ -1,0 +1,185 @@
+#
+# SAOImage DS9 analysis commands for airfun.sh
+#
+# notes:
+#	- must use AIexamine as a wrapper around ds9 which first creates the
+#     required parameter files
+#   - any command is passed to aircmd.sh which in turn executes function
+#     ds9cmd from airfun.sh
+#
+
+
+# parameter files
+#-----------------
+param default
+@default.par
+end
+
+param regphot
+@regphot.par
+end
+
+param psfextract
+@psfextract.par
+end 
+
+param wcscalib
+@wcscalib.par
+end 
+
+param bggradient
+@bggradient.par
+end 
+
+param cometphot
+@cometphot.par
+end 
+
+param manualkeys
+@manualkeys.par
+end 
+
+param photcal
+@photcal.par
+end 
+
+
+# menu entries
+#---------------
+
+# Main Help
+# note: do not use keys a,c,v,x
+# hidden: Show info about current image set (i)
+
+help Help on airfun tasks
+dcontrast (d)   - Set display contract from local noise statistics
+regswitch (o)   - Switch region marker on/off
+regstat (s)     - Statistics in image regions
+regphot (r)     - Photometry in selected regions
+
+wcscalib (w)    - Astrometric calibration
+bggradient (b)  - Remove background gradient
+psfextract (e)  - PSF extraction
+cometphot (l)   - Comet extraction and Large aperture photometry
+manualkeys (m)  - Add data from manual measurements
+photcal (p)     - Photometric calibration
+endhelp
+---
+
+
+Switch Region Marker On/Off (o)
+*
+menu
+aircmd.sh regswitch |& $text
+
+
+Statistics in image regions (s)
+*
+menu
+$param(default); aircmd.sh regstat $set $img |& $text
+ 
+
+Region Photometry (r)
+*
+menu
+$param(regphot); aircmd.sh regphot $set $image $photcat $bgrgb $ddiff |& $text
+---
+
+Astrometric calibration (w)
+*
+menu
+$param(wcscalib); aircmd.sh wcscalib $set $catalog $maglim $thres |& $text
+
+
+Remove background gradient (b)
+*
+menu
+$param(bggradient); aircmd.sh bggradient $set $bgmult $badbg |& $text
+
+
+PSF Extraction (e)
+*
+menu
+$param(psfextract); aircmd.sh psfextract $set $starstack $cometstack $rlim $merrlim $psfsize "$skip" |& $text
+
+
+Comet Extraction and Large Aperture Photometry (l)
+*
+menu
+$param(cometphot); aircmd.sh cometphot $set $starstack $cometstack $bgfit10 $comult |& $text
+
+
+Add data from manual measurements (m)
+*
+menu
+$param(manualkeys); aircmd.sh manualkeys $set $idx "$ccorr" "$stlim" "$dtlen" "$dtang" "$ptlen" "$ptang" |& $text
+
+
+Photometric Calibration using Reference Catalog (p)
+*
+menu
+$param(photcal); aircmd.sh photcal $set $catalog "$aprad" "$topts" "$aopts" "$skip" |& $text
+
+
+# bind commands (keyboard shortcuts)
+#-------------------------------------
+Show info about current image set
+*
+bind i
+$param(default); aircmd.sh setinfo $set |& $text
+
+Set display contrast
+*
+bind d
+aircmd.sh dcontrast |& $text
+
+Test parameter handling
+*
+bind t
+$param(default); aircmd.sh test $set $img |& $text
+
+Switch Region Marker On/Off
+*
+bind o
+aircmd.sh regswitch |& $text
+
+
+Statistics in image regions
+*
+bind s
+$param(default); aircmd.sh regstat $set $img |& $text
+ 
+Region photometry
+*
+bind r
+$param(regphot); aircmd.sh regphot $set $image $photcat $bgrgb $ddiff |& $text
+
+Astrometric calibration
+*
+bind w
+$param(wcscalib); aircmd.sh wcscalib $set $catalog $maglim $thres |& $text
+
+Remove background gradient
+*
+bind b
+$param(bggradient); aircmd.sh bggradient $set $bgmult $badbg |& $text
+
+PSF extraction
+*
+bind e
+$param(psfextract); aircmd.sh psfextract $set $starstack $cometstack $rlim $merrlim $psfsize "$skip" |& $text
+
+Comet Extraction and Large Aperture Photometry
+*
+bind l
+$param(cometphot); aircmd.sh cometphot $set $starstack $cometstack $bgfit10 $comult |& $text
+
+Add data from manual measurements
+*
+bind m
+$param(manualkeys); aircmd.sh manualkeys $set $idx "$ccorr" "$stlim" "$dtlen" "$dtang" "$ptlen" "$ptang" |& $text
+
+Photometric Calibration using Reference Catalog
+*
+bind p
+$param(photcal); aircmd.sh photcal $set $catalog "$aprad" "$topts" "$aopts" "$skip" |& $text
