@@ -14,21 +14,22 @@
 # - in order to use SAOImage DS9 analysis tasks (via AIexamine) you must
 #   provide corresponding files airds9.ana and aircmd.sh
 ########################################################################
-AI_VERSION="2.7"
+AI_VERSION="2.7.1"
 : << '----'
 CHANGELOG
+    2.7.1 26 Apr 2016
+        * AIexamine: keep current pan/zoom when adding images
+        * get_mpcephem added option -w to save some data to image header file
+            (e.g. comet coordinates)
+
     2.7   17 Apr 2016
         * changed filename from imred_fun.sh to airfun.sh
         * stop writing log entries to $HOME/.imred_version because tracking of
             version info is already done via ds9cmd.log
         * AIcomet, AIphotcal: settled on keyword names
         * AIcomet: improved handling of image sets where individual images are
-            not available (e.g. only comet stacked and star stacked images
-            exist)
+            not available (e.g. only stacked images exist)
         * replaced dcraw in favour of dcraw-tl
-        * TODO: AIexamine: keep displayed image section
-            get_mpcephem add option to save some data to image header file
-            check_header
 
     2.7a3 11 Apr 2016
         * reg2pbm: bugfix when converting to pbm (changed value of threshold
@@ -2167,8 +2168,6 @@ get_telescope () {
     if [ -f $fname ]
     then
         tel=$(get_header -q $fname TELESCOP 2>/dev/null)
-        # fallback: first entry in cameradat
-        test -z "$tel" && tel=$(grep -v "^#" $cameradat | head -1 | cut -d ' ' -f1)
     fi
     test "$tel" && echo "$tel" && return
     
@@ -2191,15 +2190,20 @@ get_telescope () {
     }')
 
     test "$AI_DEBUG" && echo "line=$line" >&2
-    test $(echo $line | wc -w) -eq 0 &&
-        echo "ERROR: no match of flen=$flen fratio=$fratio in $cameradat" >&2 &&
+    if [ $(echo $line | wc -w) -eq 0 ]
+    then
+        echo "WARNING: no match of flen=$flen fratio=$fratio in $cameradat" >&2 &&
         return 255
-    test $(echo $line | wc -w) -eq 1 && echo $line && return
-    test $(echo $line | wc -w) -ge 2 && echo "$line" | grep -q -w ERROR - &&
-        echo "$line" >&2 && return 255
-    test $(echo $line | wc -w) -ge 2 &&
-        echo "ERROR: multiple matches of flen=$flen fratio=$fratio in $cameradat" >&2 &&
-        return 255
+        # fallback: first entry in cameradat
+        tel=$(grep -v "^#" $cameradat | head -1 | cut -d ' ' -f1)
+    else
+        test $(echo $line | wc -w) -eq 1 && echo $line && return
+        test $(echo $line | wc -w) -ge 2 && echo "$line" | grep -q -w ERROR - &&
+            echo "$line" >&2 && return 255
+        test $(echo $line | wc -w) -ge 2 &&
+            echo "ERROR: multiple matches of flen=$flen fratio=$fratio in $cameradat" >&2 &&
+            return 255
+    fi
 }
 
 get_param () {
@@ -3325,8 +3329,14 @@ get_cobs () {
 
 get_mpcephem () {
     local showhelp
-    (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
-
+    local do_write_header   # if set write some results to image header keywords
+    local i
+    for i in 1 2
+    do
+        (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
+        test "$1" == "-w" && do_write_header=1 && shift 1
+    done
+    
     local sname="$1"
     local objects="$2"  # e.g. "C/2012 K1,154P"
     # objects="C%2F2012+K1%2CC%2F2010+S1%2C154P%2C2P%2CC%2F2012+S1%2CC%2F2013+R1"
@@ -3336,6 +3346,7 @@ get_mpcephem () {
     local dhr=${6:-"24:00"}    # interval in HH:MM:SS
     local ref=http://www.minorplanetcenter.net/iau/MPEph/MPEph.html
     local url=http://www.minorplanetcenter.net/cgi-bin/mpeph2.cgi
+    local jd
     local dmin
     local interval
     local long
@@ -3345,16 +3356,28 @@ get_mpcephem () {
     local args2
     local tmp1=$(mktemp "/tmp/tmp_tmp1_$$.XXXXXX.html")
     local tmp2=$(mktemp "/tmp/tmp_tmp2_$$.XXXXXX.dat")
-
+    local ra
+    local de
+    local dr
+    local pa
+    local mphase
+    local mdist
+    local malt
+    local str
+    
     (test "$showhelp" || test $# -lt 1) &&
         echo -e "usage: get_mpcephem <set> [objects] [utday_yyyy-mm-dd] [uttime_hh:mm] [n|$n] [dhms|$dhr]" >&2 &&
         return 1
 
     test -z "$sname" && (test -z "objects" || test -z "$utday" || test -z "$uttime") &&
         echo "ERROR: set name or any of objects,utday,uttime missing." >&2 && return 255
-    
+
     test "$sname" && test ! -f set.dat &&
         echo "ERROR: file set.dat missing." >&2 && return 255
+    test "$do_write_header" && test -z "$sname" &&
+        echo "ERROR: set name is missing (required by option -w)" >&2 && return 255
+    test "$do_write_header" && test ! -s $sname.head &&
+        echo "ERROR: file $sname.head is missing (required by option -w)" >&2 && return 255
     if [ "$AI_SITE" ]
     then
         test "$sname" && test -f $sname.head &&
@@ -3367,11 +3390,15 @@ get_mpcephem () {
         test $? -ne 0 && return 255
         alt=$(get_param  -k 2 sites.dat alt  "$AI_SITE" "" 500)
     else
+        test "$do_write_header" &&
+            echo "ERROR: AI_SITE is not set (required by option -w)" >&2 && return 255
         echo "WARNING: AI_SITE is not set." >&2
         long=0
         lat=0
         alt=0
     fi
+    test "$do_write_header" && test $n -ne 1 &&
+        echo "WARNING: changing n from $n to 1 (required by option -w)" >&2 && n=1
     
     # convert and check interval
     dmin=$(echo "$dhr" | awk -F ":" '{printf("%.0f", $1*60+$2)}')
@@ -3452,6 +3479,21 @@ get_mpcephem () {
         }' > $tmp2
     grep "^#" $tmp2 >&2
     grep -v "^#" $tmp2
+    
+    if [ "$do_write_header" ] && grep -q -v "^#" $tmp2
+    then
+        set - $(grep -v "^#" $tmp2 | head -1) xx
+        if [ $# -eq 24 ]
+        then
+            shift 4
+            ra="$1:$2:$3"; de="$4:$5:$6"; shift 11
+            dr=$1; pa=$2; alt=$4; mphase=$6; mdist=$7; malt=$8
+            str=$(LANG=C printf "%s %s %s %s  %.1f@%.1f  %.2f %3g %s\n" $sname $ra $de $alt  $dr $pa  $mphase $mdist $malt)
+            AIsetkeys "$str" AI_CORA AI_CODEC AI_COALT AI_OMOVE AI_MOP AI_MOD AI_MOALT
+        else
+            echo "WARNING: $sname: wrong number of values, not writing to header" >&2
+        fi
+    fi
     test "$AI_DEBUG" && echo $tmp1 $tmp2 >&2
     test "$AI_DEBUG" || rm $tmp1 $tmp2
 }
@@ -6704,7 +6746,7 @@ imbg () {
     p=$(echo $scaledown | awk '{printf("%.1f", 100/$1)}')
     echo "# mkkernel $l $width $angle ..." >&2
     mkkernel $l $width $angle > $tmpkern
-    convert $img -resize ${p}% $tmpim
+    convert $img -scale ${p}% $tmpim
     echo "# kmedian $tmpim $tmpkern | convert - -resize $size\! -" >&2
     kmedian $tmpim $tmpkern | convert - -resize $size\! -
     rm -f $tmpim
@@ -7810,6 +7852,7 @@ AIimlist () {
     local num
     local ext
     local extlist
+    
 
     test "$showhelp" &&
         echo "usage: AIimlist [-q] [-f|-n] [set] [insuffix] [inext|$inext] [intype|$intype]" >&2 &&
@@ -7963,10 +8006,11 @@ AIexamine () {
     local nimg=0
     local cx
     local cy
+    local opts
     local fopts
     local xcmd
+    local fxcmd
     local infile
-    local fnum
     local zoom
     local pan
     local geom
@@ -7975,6 +8019,8 @@ AIexamine () {
     local lastimage
     local par
     local str
+    local pan
+    local zoom
     
 
     (test "$showhelp" || test $# -lt 1) &&
@@ -7995,29 +8041,46 @@ AIexamine () {
             add=1;;
     esac
 
-    # set window size
+
+    # ds9 startup options
     geom="860x940"
     test $small -gt 0 && geom="700x760"
-    test $small -gt 1 && geom="550x600" &&
-        ds9opts="-view colorbar no -view panner no -view object no \
-            -view magnifier no -view wcs no -view frame no -view physical no \
-            $ds9opts"
+    test $small -gt 1 && geom="550x600"
+    opts="-title $ds9name -geometry $geom"
+    test $small -gt 1 && opts="$opts -view colorbar no -view panner no -view object no \
+        -view magnifier no -view wcs no -view frame no -view physical no"
+    opts="$opts -frame delete"
 
     # check for analysis file
-    if [ ! -s "$afile" ]
+    if [ "$afile" ] && [ ! -s "$afile" ]
     then
         str=$(type -p $afile)
         test -z "$str" &&
             echo "ERROR: ds9 analysis file $afile not found." >&2 &&
             return 255
         afile=$str
+        opts="$opts -analysis load $afile"
     fi
     test "$AI_DEBUG" && echo "afile=$afile"
 
+    # set ds9 options for intensity scaling
+    if [ "$do_linear" ]
+    then
+        fopts="-scale linear"
+    else
+        fopts="-scale log"
+    fi
+    fopts="$fopts -scale mode zmax -cmap value 2.5 0.25"
+
+    # set xpa commands to be used for every image
+    if [ "$add" ]
+    then
+        zoom=$(xpaget $ds9name zoom)
+        pan=$(xpaget $ds9name pan)
+        fxcmd="xpaset -p $ds9name zoom to $zoom; xpaset -p $ds9name pan to $pan"
+    fi
+    
     # cycle over input files and create ds9 input file parameter list
-    #fopts="-mode region -log -frame delete"
-    fopts="-frame delete -lock bin yes -scale mode zmax -cmap value 2 0.2"
-    test -z "$do_linear" && fopts="$fopts -log"
     xcmd=""
     for infile in "$@"
     do
@@ -8025,8 +8088,8 @@ AIexamine () {
             echo "ERROR: input file $infile does not exist." >&2 && return 255
         # check region file
         is_reg $infile &&
-            fopts="$fopts -regionfile $infile" &&
-            xcmd="$xcmd xpaset -p $ds9name region $infile;" &&
+            opts="$opts -region $infile" &&
+            xcmd="$xcmd; xpaset -p $ds9name region $infile" &&
             continue
         # check image file type
         ftype=""
@@ -8037,14 +8100,8 @@ AIexamine () {
         test "$AI_DEBUG" && echo "$ftype: $infile" >&2
         b=$(basename ${infile%.*})
         case "$ftype" in
-            FITS)   if is_fitsrgb $infile
-                    then
-                        fopts="$fopts -frame new rgb -rgbimage $infile"
-                        xcmd="$xcmd xpaset -p $ds9name rgbimage new $infile;"
-                    else
-                        fopts="$fopts -frame new -fits $infile"
-                        xcmd="$xcmd xpaset -p $ds9name fits new $infile;"
-                    fi
+            FITS)   opts="$opts -fits $infile"
+                    xcmd="$xcmd; xpaset -p $ds9name fits new $infile"
                     ! listhead $infile | grep -q RADECSYS && has_wcs=""
                     test -z "$firstimage" && firstimage=$infile
                     lastimage=$infile
@@ -8052,8 +8109,8 @@ AIexamine () {
             FITZIP) tfits=$tdir/tmp_${RANDOM}_$b.fits
                     unzip -p $infile > $tfits
                     tlist="$tlist $tfits"
-                    fopts="$fopts $tfits"
-                    xcmd="$xcmd xpaset -p $ds9name fits new $tfits;"
+                    opts="$opts -fits $tfits"
+                    xcmd="$xcmd; xpaset -p $ds9name fits new $tfits"
                     ! listhead $tfits | grep -q RADECSYS && has_wcs=""
                     test -z "$firstimage" && firstimage=$infile
                     lastimage=$infile
@@ -8083,14 +8140,30 @@ AIexamine () {
                         has_wcs=""
                     fi
                     tlist="$tlist $tfits"
-                    fopts="$fopts $tfits"
-                    xcmd="$xcmd xpaset -p $ds9name fits new $tfits;"
+                    opts="$opts -fits $tfits"
+                    xcmd="$xcmd; xpaset -p $ds9name fits new $tfits"
                     test -z "$firstimage" && firstimage=$infile
                     lastimage=$infile
                     nimg=$((nimg + 1));;
-            *)      echo "WARNING: ignoring $infile, unsupported filetype $ftype." >&2;;
+            *)      echo "WARNING: ignoring $infile, unsupported filetype $ftype." >&2
+                    continue;;
         esac
+        xcmd="$xcmd; $fxcmd"
     done
+    xcmd=$(echo $xcmd | sed -e 's,^;,,')
+
+    # more ds9 command line options
+    test $nimg -gt 1 && opts="$opts -single -frame first"
+    opts="$opts -mode region $fopts -match scale -match colorbar"
+    test "$do_lock_colorbar" && opts="$opts -lock scale yes -lock colorbar yes"
+    test "$has_wcs" &&
+        opts="$opts -lock frame wcs"
+    test ! "$has_wcs" &&
+        opts="$opts -lock frame image"
+
+
+    #### creating ds9 parameter files used by analysis tasks
+    test -d $pardir || mkdir $pardir
 
     # names of image sets
     test -f $sdat && slist=$(AIsetinfo -o | grep -v "^#" | sed -e 's/ .*//g' | \
@@ -8098,8 +8171,6 @@ AIexamine () {
     # TODO: get setname from $firstimage or use first entry in $slist
     test -z "$set" && set=$(echo $slist | awk -F "|" '{printf("%s", $1)}')
 
-    # write new ds9 parameter files
-    test -d $pardir || mkdir $pardir
     if [ "$afile" ] # && [ ! "$(xpaget xpans 2>/dev/null)" ]
     then
         # ref.: https://heasarc.gsfc.nasa.gov/lheasoft/headas/pil/node12.html
@@ -8216,41 +8287,22 @@ skip,s,l,,,,"Stars to exclude (space sep.)"
 EOF
 
     fi
-    #zoom=$(xpaget ds9 zoom)
-    #pan=$(xpaget ds9 pan)
-    #xpaset -p ds9 frame new
-    #xpaset -p ds9 scale log
-    #xpaset -p ds9 fits $img
-    #xpaset -p ds9 zoom to $zoom
-    #xpaset -p ds9 pan to $pan
-    #xpaset -p ds9 lock frame image
 
+    # display images
     if [ "$add" ]
     then
-        test "$verbose" && echo "xcmd=\"$xcmd\"" >&2
+        test "$verbose" && echo $xcmd >&2
         echo "$xcmd" | bash
     else
-        test "$has_wcs" &&
-            fopts="$fopts -lock frame wcs -single -frame first -mode region"
-        test ! "$has_wcs" &&
-            fopts="$fopts -lock frame image -single -frame first -mode region"
-        test "$do_lock_colorbar" && fopts="$fopts -lock scale yes -lock colorbar yes"
-        # prepare eps plot
-        if [ "$afile" ]
-        then
-            #EPSFILE=/tmp/tmp_ds9.eps
-            #test -f $EPSFILE || touch $EPSFILE
-            #evince $EPSFILE &
-            ds9opts="$ds9opts -analysis load $afile"
-        fi
-        test "$verbose" && echo "ds9 -title $ds9name -geometry $geom $fopts $ds9opts" >&2
-        export DS9NAME=$ds9name
         # UPARM is used by ds9 when searching for parameter files
         # user modified variables are NOT written back to parameter files
+        export DS9NAME=$ds9name
         export UPARM=$pardir
-        ds9 -title $ds9name -geometry $geom $fopts $ds9opts
-        test "$tlist" && rm $tlist
+        test "$verbose" && echo ds9 $opts $ds9opts >&2
+        ds9 $opts $ds9opts
     fi
+
+    test "$tlist" && test -z "$AI_DEBUG" && rm $tlist
     rm -f $tmp1
     rm -f $pardir/*
     rmdir $pardir
@@ -11027,14 +11079,14 @@ AIbgmap () {
         # subtract user-provided bg model image first
         if [ "$bgmsub" ]
         then
-            convert "$bgmsub" -resize $(identify $outsmall | cut -d ' ' -f3)\! $tmpbg
+            convert "$bgmsub" -scale $(identify $outsmall | cut -d ' ' -f3)\! $tmpbg
             pnmccdred -a 1000 -d $tmpbg $tmpnofit $outsmall
         fi
 
         param=""; test "$do_fitplane" && param="-p"
         if [ "$weightmap" ]
         then
-            convert $weightmap -resize $(identify $outsmall | cut -d ' ' -f3)\! \
+            convert $weightmap -scale $(identify $outsmall | cut -d ' ' -f3)\! \
                 -depth 1 pbm: | pnmarith -mul $outsmall - > $tmp1 2>/dev/null
         else
             cp $outsmall $tmp1
@@ -13627,6 +13679,7 @@ AIcomet () {
     local gap
     local xrad
     local val
+    local copos
     local coregion
     local jdref
     local r
@@ -13837,6 +13890,8 @@ AIcomet () {
     fi
 
     # define regions for comet and background
+    copos=$(echo $omove | tr ',@' ' ' | awk -v h=$h '{printf("%.0f %.0f", $3, h-$4)}')
+    echo "# copos=$copos" >&2
     str=""
     if [ ! -f $coreg ] || ! grep -q -iwE "^polygon" $coreg
     then
@@ -13873,7 +13928,8 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
   - comet,       save as $coreg
   - background,  save as $bgreg
   - bad areas,   save as $badreg (optional)" &&
-        AIexamine -n CometRegion x.coblur.$ext $coreg $ststack
+        AIexamine -n CometRegion -p "-pan to $copos -regions shape polygon" \
+            x.coblur.$ext $coreg $ststack
 
     # TODO: allow for ellipse regions, needs some tweeks in reg2pbm
     ! grep -q -iwE "^polygon" $coreg &&
@@ -13979,7 +14035,7 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
         echo "physical" >> x.newphot.reg)
         echo "--> identify stars which need photometric correction, save as x.newphot.reg"
         #AIexamine $ststack $coreg $bgreg x.resid.$ext x.newphot.reg
-        AIexamine -n PhotCorr $ststack $coreg $bgreg $badreg x.resid.$ext x.newphot.reg
+        AIexamine -n PhotCorr -p "-pan to $copos" $ststack $coreg $bgreg $badreg x.resid.$ext x.newphot.reg
 
         if grep -q -iwE "^circle" x.newphot.reg
         then
@@ -14663,7 +14719,8 @@ ds9cmd () {
                     *)              angle=0;;
                 esac
                 AIwcs -f $set $catalog $maglim "" "" $angle $thres
-                test $? -eq 0 && xdg-open $(ls wcs/$set*.png | head -1) &
+                test $? -eq 0 && test -s $set.wcs.head &&
+                    xdg-open $(ls wcs/$set*.png | head -1) &
                 echo "$cmd finished"
                 echo ""
                 ;;
@@ -14710,7 +14767,7 @@ ds9cmd () {
                 fi
                 echo "displaying check images ..."
                 #AIexamine $set.bgs.$ext &
-                AIexamine -n BgSmall -s -s -l -p "-zoom to fit" bgcorr/$set.bgm${bgmult}{res,n}.$ext &
+                AIexamine -n BgSmall -s -s -l -p "-zoom to fit -frame last -cmap value 3 0.5 -frame first" bgcorr/$set.bgm${bgmult}{res,n}.$ext &
                 echo "$cmd finished"
                 echo ""
                 ;;
@@ -14788,7 +14845,7 @@ ds9cmd () {
                 echo "comet ${oxy/,/ }" | xy2reg $starstack - > x.comet.reg
                 AIexamine x.stsub.$ext x.psf.reg
                 xpaset -p $ds9name scale mode zmax
-                xpaset -p $ds9name cmap value 3 0.1
+                xpaset -p $ds9name cmap value 3 0.2
 
                 # check if psf stars are free of companions (new ds9 window)
                 AIpsfmask -m comet/$set.trailmask.pbm comet/$set.trailpsf.$ext x.trailpsf.$ext
@@ -14835,12 +14892,14 @@ ds9cmd () {
                 # check star removal
                 test -s comet/$set.newphot.dat &&
                     xy2reg $starstack comet/$set.newphot.dat > x.newphot.reg
+                test -e x.stsub.head && rm x.stsub.head
+                ln -s $set.head x.stsub.head
                 echo "# display check images ..."
                 badreg=comet/$set.bad.reg; test ! -f $badreg && badreg=""
                 AIexamine x.cosub.$ext x.coblur.$ext comet/$set.comet*.reg $badreg \
                     x.stsub.$ext x.resid.$ext x.newphot.reg
                 xpaset -p $ds9name scale mode zmax
-                xpaset -p $ds9name cmap value 3 0.1
+                xpaset -p $ds9name cmap value 3 0.2
                 echo "$cmd finished"
                 echo ""
                 ;;

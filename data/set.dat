@@ -1,0 +1,10 @@
+
+# 160424/25
+# T12 SSO
+
+# LT
+# h:m set  target type texp n1 n2   nref dark flat
+# focus 1739 -12
+04:51 dk01 bias     d   0 0001 0005 -    -    -    # T12 -16
+04:56 co01 2013X1   o 120 0006 0012 0009 do01 mg12 # T12 Green
+

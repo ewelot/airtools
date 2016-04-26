@@ -1,35 +1,38 @@
 
-AIRTOOLS is based on many programs/tools which are available from package
-repositories of most Linux distributions, including:
+AIRTOOLS is a collection of programs to aim at astronomical image reduction
+for both CCD and DSLR observations. The main tasks are implemented as shell
+functions (bash) in a single file airfun.sh. The functions utilize many tools
+readily available for most Linux desktops, including
 - ImageMagick
-- XPA messaging tools
 - WCSTools
 - Gnuplot
+- XPA messaging tools
+
+Special focus was given to support observations of comets and new procedures
+were developed to measure their coma brightness. Those image reduction steps
+are easily accessible as analysis tasks from the SAOImage display GUI.
 
 
-It also uses powerful third party astronomical software packages:
+The shell functions also use powerful third party software used in professional
+astronomy, which is freely available but not (yet) packaged by most Linux
+distributions and therefore must be installed separately:
 
-- Astromatic software (E. Bertin, http://www.astromatic.net)
-    sextractor
-    scamp
-    skymaker
-    stiff
-    swarp
-
-- stilts (M. Taylor, http://www.starlink.ac.uk/stilts/)
-    Table processing (e.g. manipulation of FITS tables)
-
-- SAOImage DS9 (http://ds9.si.edu/site/Home.html)
-    Astronomical imaging and data visualization.
-
+- Astromatic software: sextractor, scamp, skymaker, stiff, swarp
+  (by E. Bertin, http://www.astromatic.net)
+- stilts - table processing (by M. Taylor, http://www.starlink.ac.uk/stilts/)
+- SAOImage DS9 - image display and GUI (http://ds9.si.edu/site/Home.html)
 
 In addition, subsets of some smaller tools are used:
 
-- cdsclient (http://cdsweb.u-strasbg.fr/doc/cdsclient.html)
-    Fast access to astronomical databases at CDS 
-- cexamples (http://heasarc.gsfc.nasa.gov/docs/software/fitsio/cexamples.html)
-    Simple FITS routines
+- cdsclient for fast access to astronomical databases at CDS
+  (http://cdsweb.u-strasbg.fr/doc/cdsclient.html)
+- cexamples FITS routines
+  (http://heasarc.gsfc.nasa.gov/docs/software/fitsio/cexamples.html)
 
 
-For your convenience, sources of those external programs have been bundled in
-a single archive (bundle3rd.tar) which must be downloaded separately.
+For your convenience, sources of all external programs have been bundled in
+a single archive (bundle3rd.tar) which can be downloaded from
+  https://github.com/ewelot/temp
+
+For further instructions on compilation/installation of all required software
+components, please read the INSTALL file.
