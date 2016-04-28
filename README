@@ -4,18 +4,19 @@ for both CCD and DSLR observations. The main tasks are implemented as shell
 functions (bash) in a single file airfun.sh. The functions utilize many tools
 readily available for most Linux desktops, including
 - ImageMagick
+- Netpbm
 - WCSTools
 - Gnuplot
 - XPA messaging tools
 
-Special focus was given to support observations of comets and new procedures
-were developed to measure their coma brightness. Those image reduction steps
-are easily accessible as analysis tasks from the SAOImage display GUI.
+Special attention was drawn to support observations of comets. New procedures
+were developed to measure the total coma brightness. Those image reduction
+steps are easily accessible as analysis tasks from the SAOImage display GUI.
 
 
-The shell functions also use powerful third party software used in professional
-astronomy, which is freely available but not (yet) packaged by most Linux
-distributions and therefore must be installed separately:
+The shell functions also involve powerful third party software used in
+professional astronomy, which is freely available but not (yet) packaged by
+most Linux distributions and therefore must be installed separately:
 
 - Astromatic software: sextractor, scamp, skymaker, stiff, swarp
   (by E. Bertin, http://www.astromatic.net)

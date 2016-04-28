@@ -1,17 +1,16 @@
 
 
-
 Software Requirements:
 -----------------------
 
-The airtools software relies on a number of other programs to be present on
+The AIRTOOLS software relies on a number of other programs to be present on
 runtime. Many of those are available in the form of software packages from
 your Linux distribution. Installation on a Debian/Ubuntu-based distribution
 is done via the following command (run as root):
 
     apt-get update
     apt-get install imagemagick xpa-tools wcstools gnuplot-x11 \
-        librsvg2-bin potrace exiftool curl wget gawk
+        librsvg2-bin potrace exiftool curl wget gawk default-jre
 
 
 Build dependencies:
@@ -35,9 +34,10 @@ Installation consists of several steps.
 
 Unpacking archives (in any temporary directory):
     tar xf airtools-*tar.gz
+    # or: unzip airtools-*.zip
     tar xf bundle3rd.tar
 
-Compiling and installing airtools:
+Compiling and installing AIRTOOLS:
     cd airtools-*
     make
     make install

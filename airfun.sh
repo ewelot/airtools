@@ -17,7 +17,7 @@
 AI_VERSION="2.7.1"
 : << '----'
 CHANGELOG
-    2.7.1 26 Apr 2016
+    2.7.1 28 Apr 2016
         * AIexamine: keep current pan/zoom when adding images
         * get_mpcephem added option -w to save some data to image header file
             (e.g. comet coordinates)
@@ -1004,9 +1004,10 @@ CHANGELOG
 
 TODO:
         * set_header: add option to force value being of string type
+        * AIsource, AIpsfextract: do not rely on MAGZERO keyword, evaluate
+            camera.dat instead
         * get_param: remove special treatment of camera.dat avoiding call
             of get_telescope
-        * AIregister: propagate FITS keyword EXPOSURE to EXPTIME
         * AIstack: propagate FITS keywords from measure/<nref>.src.head to
             <set>.head: RATEL RA OBJCTRA DETEL DEC OBJCTDEC
         * AIccd/AIraw2gray: deal with fits images of all (?) different
@@ -1029,7 +1030,7 @@ TODO:
         * AIphotcal: remove field stars before measuring gapcorr
             build apass star id from coordinates (len=12)
             make limit for outlier detection depend on mag
-        * create new helper functions get_nref, get_jdref
+        * create new helper function get_jdref
         * AIbgdiff: handle image rotation (e.g. due to pier side flipping)
         * AIfindbad: revise algorithm for ppm images
         * replace fixed names of data files set.dat, exif.dat, camera.dat, sites.dat
@@ -3427,7 +3428,9 @@ get_mpcephem () {
     then
         # try to get jd from header of stacked image
         jd=""
-        test -f $sname.head &&
+        test -z "$jd" && test -f $sname.head &&
+            jd=$(get_header -q $sname.head JD_OBS | awk '{printf("%.3f\n", $1)}')
+        test -z "$jd" && test -f $sname.head &&
             jd=$(get_header -q $sname.head MJD_REF| awk '{printf("%.3f\n", $1)}')
         test -z "$jd" && test -f $sname.head &&
             jd=$(get_header -q $sname.head JD | awk '{printf("%.3f\n", $1)}')
@@ -3645,9 +3648,10 @@ phot2icq () {
         # reading keywords
         object=$(get_header $hdr OBJECT)
         test $? -ne 0 && echo "ERROR: no OBJECT in $hdr" >&2 && continue
-        mjd=$(get_header -q $hdr MJD_OBS)
-        test $? -eq 0 || mjd=$(get_header -q $hdr JD)
-        test $? -ne 0 && echo "ERROR: no MJD_OBS or JD in $hdr" >&2 && continue
+        mjd=$(get_header -q $hdr JD_OBS)
+        test -z "$mjd" && mjd=$(get_header -q $hdr MJD_OBS)
+        test -z "$mjd" && mjd=$(get_header -q $hdr JD)
+        test -z "$mjd" && echo "ERROR: no JD_OBS, MJD_OBS or JD in $hdr" >&2 && continue
         ut=$(jd2ut -p 2 $mjd)
         texp=$(get_header $hdr EXPTIME)
         test $? -ne 0 && echo "ERROR: no EXPTIME in $hdr" >&2 && continue
@@ -3657,38 +3661,28 @@ phot2icq () {
         test $? -ne 0 && echo "ERROR: no MAGZERO in $hdr" >&2 && continue
 
         # telescope, instrument, camera
-        # TODO: TELESCOP, OBSERVAT, FILTER should be filled in $sname.head
-        set - $(AIsetinfo $sname) x
-        flen=$5
-        fratio=$6
+        # TODO: FILTER should be read from $sname.head
         tel=$(get_header -q $hdr AI_TELID)
-        test -z "$tel" && if [ -f measure/$nref.src.head ]
-        then
-            tel=$(grep "^TELESCOP=" measure/$nref.src.head | tr ' ' '\n' | tr -d "'i" | \
-                grep "^T[0-9]*$" | head -1)
-            test -z "$tel" &&
-                tel=$(grep "^OBSERVAT=" measure/$nref.src.head | tr ' ' '\n' | tr -d "'i" | \
-                grep "^T[0-9]*$" | head -1)
-        fi
-        test -z "$tel" && tel=$(get_telescope $sname)
-        test -z "$tel" && tel="unknown"
-        case "$tel" in
-            T5)  inst="25.0L 3"; cam="CCD/G remote (Mayhill)";;
-            T08) inst="10.6R 5"; cam="CCD/G remote (SSO)";;
-            T11) inst="51.0L 4"; cam="CCD/G remote (Mayhill)";;
-            T12) inst="10.6R 5"; cam="CCD/G remote (SSO)";;
-            T14) inst="10.6R 5"; cam="CCD/G remote (Mayhill)";;
-            T16) inst="15.0R 7"; cam="CCD/V remote (Nerpio)";;
-            T20) inst="10.6R 5"; cam="CCD/G remote (Mayhill)";;
-            T21) inst="43.1L 4"; cam="CCD/G remote (Mayhill)";;
-            T31) inst="51.0L 4"; cam="CCD/G remote (SSO)";;
-            GR12) inst="30.0L 4"; cam="CCD/G images by G.Rhemann (Tivoli, Namibia)";;
-            MJ8*) inst="20.0L 3"; cam="CCD/G images by M.Jaeger (Austria)";;
-            unknown) inst="xxxxx x"; cam="unknown";;
-            *)   inst=$(echo $flen $fratio | awk '{
-                    t="L"; if($1<400){t="A"}
-                    printf("%04.1f%s%2.0f",$1/$2/10, t, $2)}'); cam="DSLR green";;
+        test $? -ne 0 && echo "ERROR: no AI_TELID in $hdr" >&2 && continue
+        apert=$(AI_TELESCOPE=$tel  get_param camera.dat aperture xxx)
+        fratio=$(AI_TELESCOPE=$tel get_param camera.dat fratio  xxx)
+        ttype=$(AI_TELESCOPE=$tel  get_param camera.dat ttype   xxx)
+        cam=$(AI_TELESCOPE=$tel    get_param camera.dat ctype   xxx)
+        inst=$(echo $apert $ttype $fratio | awk '{printf("%04.1f%s %.0f", $1/10, $2, $3)}')
+        test "$observer" == "LEHaa" && case "$tel" in
+            T5)   cam="CCD/G remote (Mayhill)";;
+            T08)  cam="CCD/G remote (SSO)";;
+            T11)  cam="CCD/G remote (Mayhill)";;
+            T12)  cam="CCD/G remote (SSO)";;
+            T14)  cam="CCD/G remote (Mayhill)";;
+            T16)  cam="CCD/V remote (Nerpio)";;
+            T20)  cam="CCD/G remote (Mayhill)";;
+            T21)  cam="CCD/G remote (Mayhill)";;
+            T31)  cam="CCD/G remote (SSO)";;
+            GR12) cam="CCD/G images by G.Rhemann (Tivoli, Namibia)";;
+            MJ8*) cam="CCD/G images by M.Jaeger (Austria)";;
         esac
+        test "$observer" == "LEHaa" && test "$cam" == "DSLR" && cam="DSLR green"
         
         # convert object name to icq notation
         test ${object: -1} == "P" && object=$(printf "%3d" ${object:0:-1})
@@ -7970,7 +7964,7 @@ AIimlist () {
 AIexamine () {
     # interactively examine images using ds9 and analysis scripts
     # note:
-    #   the name of the default ds9 instance is Main
+    #   the name of the default ds9 instance is AIRTOOLS
     #   the name of newly started instance is written to env variable DS9NAME
     #   the analysis 
     local showhelp
@@ -7978,7 +7972,7 @@ AIexamine () {
     local afile="airds9.ana"    # default ds9 analysis file
     local small=0               # if > 0 reduce window size
     local ds9opts
-    local ds9name="Main"
+    local ds9name="AIRTOOLS"
     local do_linear
     local do_lock_colorbar
     local verbose
@@ -8021,6 +8015,7 @@ AIexamine () {
     local str
     local pan
     local zoom
+    local ext
     
 
     (test "$showhelp" || test $# -lt 1) &&
@@ -8070,7 +8065,7 @@ AIexamine () {
     else
         fopts="-scale log"
     fi
-    fopts="$fopts -scale mode zmax -cmap value 2.5 0.25"
+    fopts="$fopts -scale mode zmax -cmap value 2.5 0.15"
 
     # set xpa commands to be used for every image
     if [ "$add" ]
@@ -8174,12 +8169,20 @@ AIexamine () {
     if [ "$afile" ] # && [ ! "$(xpaget xpans 2>/dev/null)" ]
     then
         # ref.: https://heasarc.gsfc.nasa.gov/lheasoft/headas/pil/node12.html
-        cat <<EOF > $pardir/default.par
+        cat <<EOF > $pardir/airtools.par
 #
-# general imred parameter file
+# default airtools parameter file
 #
 set,s,l,$set,$slist,,"Name of image set:"
 img,s,l,$firstimage,,,"First image:"
+EOF
+
+        cat <<EOF > $pardir/regstat.par
+#
+# regstat parameter file
+#
+set,s,l,$set,$slist,,"Name of image set:"
+img,s,l,$firstimage,,,"Image file name:"
 EOF
 
         # default is using residual image created by AIcomet
@@ -8211,8 +8214,9 @@ EOF
 # bggradient parameter file
 #
 set,s,l,$set,$slist,,"Name of image set:"
+starstack,s,l,$firstimage,,,"Image stacked on stars:"
+cometstack,s,l,$lastimage,,,"Image stacked on comet:"
 bgmult,r,l,10,,,"Multiplier for intensity stretching:"
-badbg,s,l,${par[0]},,,"Region file to mask out bad bg areas:"
 EOF
 
         par=("")     # id's of skipped stars (flagged by leading '#')
@@ -8233,10 +8237,15 @@ skip,s,l,"${par[0]}",,,"Stars to exclude from psf creation (space sep.)"
 EOF
 
         par=("")     # streched image used for bg correction
-        test -f bgcorr/$set.bgm10.pgm && par=("bgcorr/$set.bgm10.pgm")
-        test -f bgcorr/$set.bgm10.ppm && par=("bgcorr/$set.bgm10.ppm")
-        test -f bgcorr/$set.bgm10all.pgm && par=("bgcorr/$set.bgm10all.pgm")
-        test -f bgcorr/$set.bgm10all.ppm && par=("bgcorr/$set.bgm10all.ppm")
+        ext=""
+        is_pgm $firstimage && ext="pgm"
+        is_ppm $firstimage && ext="ppm"
+        if [ "$ext" ]
+        then
+            test -f bgcorr/$set.bgm10.$ext    && par=("bgcorr/$set.bgm10.$ext")
+            test -f bgcorr/$set.bgm10all.$ext && par=("bgcorr/$set.bgm10all.$ext")
+            test -z ${par[0]} && par=("bgcorr/$set.bgm10.$ext")
+        fi
         cat <<EOF > $pardir/cometphot.par
 #
 # cometphot parameter file
@@ -11214,7 +11223,7 @@ AIwcs () {
         hdr=${setname%.*}.head
         if [ -f $hdr ]
         then
-            magzero=$(grep "^MAGZERO" $hdr | tr '=' ' ' | awk '{if ($2>0) printf("%.2f", $2)}')
+            magzero=$(get_header -q $hdr MAGZERO)
             pixscale=$(get_wcspscale $hdr)
         fi
         test "$AI_PIXSCALE" && pixscale=$AI_PIXSCALE
@@ -12648,6 +12657,7 @@ AIphotcal () {
     local zangle        # position angle of zenith with respect to N
     local maxdist=2     # max distance for position matching in pixels
     local no_update     # if set do save results in header keywords
+    local codir="comet"
     local i
     for i in $(seq 1 17)
     do
@@ -12677,6 +12687,7 @@ AIphotcal () {
     local tmpres=$(mktemp "$tdir/tmp_res.XXXXXX.txt")
     local head
     local whead
+    local scat
     local inext
     local fwhm
     local gap
@@ -12737,8 +12748,9 @@ AIphotcal () {
     whead=$setname.wcs.head
     test ! -f "$whead" &&
         echo "ERROR: image wcs header file $whead not found." >&2 && return 255
-    test ! -f "$setname.src.dat" &&
-        echo "ERROR: source catalog $setname.src.dat not found." >&2 && return 255
+    scat=$codir/$setname.src.dat
+    test ! -f "$scat" &&
+        echo "ERROR: source catalog $scat not found." >&2 && return 255
 
     # check for input image
     inext=""
@@ -12779,20 +12791,6 @@ AIphotcal () {
 
 
     test -d phot || mkdir phot
-
-    # determine aprad and gap
-    fwhm=$(get_header $head AI_FWHM)
-    test -z "$fwhm" &&
-        echo "ERROR: missing FWHM in $head." >&2 && return 255
-    test -z "$aprad" && aprad=$(echo $fwhm | \
-        awk '{
-            x=1.3+$1
-            if ($1>3) x=4.3+0.8*($1-3)
-            if ($1>6) x=6.7+0.4*($1-6)
-            printf("%.1f", x)}')
-    test -z "$aprad" &&
-        echo "ERROR: cannot determine aprad." >&2 && return 255
-    gap=$(echo $aprad | awk '{printf("%.1f", 2+$1/2.5)}')
 
     # calculate image size (degrees)
     size=$(echo $(grep "^NAXIS[12]" $head | sort | awk '{print $3}') $(get_wcspscale $whead) | \
@@ -12836,6 +12834,27 @@ AIphotcal () {
             printf("%.0f,%.0f\n", (x1+x2)/2, (y1+y2)/2)}')
     fi
     test -z "$cxy" && cxy=$((w/2))","$((h/2))
+
+    # get fwhm
+    fwhm=$(get_header -q $head AI_FWHM)
+    if [ -z "$fwhm" ] && [ -f $scat ]
+    then
+        fwhm=$(sexselect -s $scat "" 0.03 $rlim "$cxy" "" 0 | \
+            grep FWHM_IMAGE | awk '{if($7>3) printf("%.2f", $2)}')
+    fi
+    test -z "$fwhm" &&
+        echo "ERROR: unknown FWHM." >&2 && return 255
+
+    # determine aprad and gap
+    test -z "$aprad" && aprad=$(echo $fwhm | \
+        awk '{
+            x=1.3+$1
+            if ($1>3) x=4.3+0.8*($1-3)
+            if ($1>6) x=6.7+0.4*($1-6)
+            printf("%.1f", x)}')
+    test -z "$aprad" &&
+        echo "ERROR: cannot determine aprad." >&2 && return 255
+    gap=$(echo $aprad | awk '{printf("%.1f", 2+$1/2.5)}')
     echo "# aprad=$aprad  gap=$gap  size=${size}deg  rlim=$rlim  radius=${radius}deg cxy=$cxy" >&2
 
     # download reference stars
@@ -12917,14 +12936,14 @@ AIphotcal () {
         else
             rade2xy phot/$setname.$catalog.dat $whead $catalog "$delim" > phot/$setname.$catalog.xy.dat
             #xy2reg $setname.$inext phot/$setname.$catalog.xy.dat > phot/$setname.$catalog.xy.reg
-            #sexselect -r $setname.src.dat "" 0.03 "$rlim" "$cxy" | grep "^circ" | \
+            #sexselect -r $scat "" 0.03 "$rlim" "$cxy" | grep "^circ" | \
             #    LANG=C sort -n -k4,4 | head -$((nlim*2)) | reg2xy $setname.$inext - > $tmp1
             xy2reg $setname.$inext phot/$setname.$catalog.xy.dat $xoff $(echo "-1 * $yoff" | bc) 10 \
                 > phot/$setname.$catalog.xy.reg
             refxydat=phot/$setname.$catalog.xy.dat
             refxyreg=phot/$setname.$catalog.xy.reg
         fi
-        sexselect -f $setname.src.dat "" $magerrlim "$rlim" "$cxy" | \
+        sexselect -f $scat "" $magerrlim "$rlim" "$cxy" | \
             regfilter - $refxyreg | sexselect -r - | \
             grep "^circ" | LANG=C sort -n -k4,4 | head -$((nlim*2)) | \
             reg2xy $setname.$inext - > $tmp1
@@ -12977,7 +12996,7 @@ AIphotcal () {
     then
         # select 30 brightest stars
         # TODO: only use starlike sources
-        sexselect -r $setname.src.dat "" $magerrlim "$rlim" "$cxy" | \
+        sexselect -r $scat "" $magerrlim "$rlim" "$cxy" | \
             grep "^circ" | LANG=C sort -n -k4,4 | head -50 | \
             awk -v f=$fwhm '{
                 x=$1; gsub(/[(),]/," ",x);
@@ -13752,15 +13771,29 @@ AIcomet () {
     test ! -e $wcshdr &&
         echo "ERROR: file $wcshdr not found." >&2 && return 255
 
-    # read some header keywords
-    jdref=$(get_header $hdr MJD_REF)
-    test -z "$jdref" &&
-        jdref=$(grep -E "^MJD_|^JD " $hdr | head -1 | tr '=' ' ' | \
-            awk '{printf("%s", $2)}')
+    # determine copos in FITS coordinates
+    h=$(identify $ststack | cut -d " " -f3 | cut -d "x" -f2)
+    w=$(identify $ststack | cut -d " " -f3 | cut -d "x" -f1)
+    copos=$(echo $omove | tr ',@' ' ' | awk -v h=$h '{printf("%.0f %.0f", $3, h-$4)}')
+    #echo "# omove=$omove  copos=$copos" >&2
+
+    # get jdref
+    jdref=$(get_header -q $hdr JD_REF)
+    test -z "$jdref" && jdref=$(get_header -q $hdr MJD_REF)
+    test -z "$jdref" && jdref=$(get_header -q $hdr JD_OBS)
+    test -z "$jdref" && jdref=$(get_header -q $hdr MJD_OBS)
+    test -z "$jdref" && jdref=$(get_header -q $hdr JD)
     test -z "$jdref" &&
         echo "ERROR: unknown JD." >&2 && return 255
-    fwhm=$(grep -E "^[A-Z_]*FWHM[A-Z_ ]*=" $hdr | head -1 | tr '=' ' ' | \
-        awk '{printf("%s", $2)}')
+    
+    # get fwhm
+    fwhm=$(get_header -q $hdr AI_FWHM)
+    if [ -z "$fwhm" ] && [ -f $codir/$sname.src.dat ]
+    then
+        x=$(echo $w $h | awk '{printf("%.0f", 0.2*sqrt($1*$1+$2*$2))}')
+        fwhm=$(sexselect -s $codir/$sname.src.dat "" 0.03 $x "${copos/ /,}" "" 0 | \
+            grep FWHM_IMAGE | awk '{if($7>3) printf("%.2f", $2)}')
+    fi
     test -z "$fwhm" &&
         echo "ERROR: unknown FWHM." >&2 && return 255
 
@@ -13777,9 +13810,8 @@ AIcomet () {
         echo "ERROR: missing keyword EXPTIME." >&2 && return 255
     test -z "$nexp" && nexp=1
     texp=$(echo $texp $nexp | awk '{printf("%f", $1/$2)}')  # single exposure
-
-    # read data from environment
-    test "$AI_MAGZERO"  && magzero=$AI_MAGZERO
+    test -z "$magzero" &&
+        magzero=$(get_param camera.dat magzero $sname AI_MAGZERO)
     test -z "$magzero" &&
         echo "ERROR: magzero unknown." >&2 && return 255
 
@@ -13890,8 +13922,6 @@ AIcomet () {
     fi
 
     # define regions for comet and background
-    copos=$(echo $omove | tr ',@' ' ' | awk -v h=$h '{printf("%.0f %.0f", $3, h-$4)}')
-    echo "# copos=$copos" >&2
     str=""
     if [ ! -f $coreg ] || ! grep -q -iwE "^polygon" $coreg
     then
@@ -14067,7 +14097,9 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
                 else
                     # measure new stars
                     id=$2; x=$3; y=$4
-                    echo "$id $x $y" | AIaphot x.resid.$ext - $rad $gap 4 | grep -v "^#"
+                    # note: AIaphot x.resid.$ext requires MAGZERO keyword
+                    echo "$id $x $y" | \
+                        AIaphot x.resid.$ext - $rad $gap 4 | grep -v "^#"
                 fi
             done | tee -a $newphot
         
@@ -14085,7 +14117,7 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
             AIpsfmask -q -m $starmask $starpsf $tmpim1 $psfoff
             AIskygen -o $tmpim2 $tmpdat1 $tmpim1 $texp $magzero $scale $w $h $psfoff
             pnmccdred -a $((bgres-psfoff)) -d $tmpim2 $ststack $stsub
-            # subtract trailsfrom comet stack -> new cosub
+            # subtract trails from comet stack -> new cosub
             AIpsfmask -q -m $trailmask $trailpsf $tmpim1 $psfoff
             AIskygen -o $tmpim2 $tmpdat1 $tmpim1 $texp $magzero $scale $w $h $psfoff
             pnmccdred -a $((bgres-psfoff)) -d $tmpim2 $costack $cosub
@@ -14113,7 +14145,12 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
                 #w=$(identify $tmpim1 | cut -d " " -f3 | cut -d "x" -f1)
                 #h=$(identify $tmpim1 | cut -d " " -f3 | cut -d "x" -f2)
                 #AIskygen -o $tmpim2 x.cometphot.dat $tmpim1 $x $magzero 1 $w $h $bgres
-                mkcotrail -o $tmpim2 $sname $tmpim1 $omove $obsdata $bgres
+                if [ $(grep -v "^#" $obsdata | wc -l) -le 1 ]
+                then
+                    pnmccdred -a -$bgres $tmpim1 $tmpim2
+                else
+                    mkcotrail -o $tmpim2 $sname $tmpim1 $omove $obsdata $bgres
+                fi
                 # paste result over full size of ststack
                 set - $(echo $coregion | tr 'x+' ' ')
                 pnmccdred -m 0 $ststack - | pnmpaste $tmpim2 $3 $4 - > x.cotrail.$ext
@@ -14647,7 +14684,7 @@ ds9cmd () {
                 echo "wdir=$wdir"
                 echo "tmp1=$tmp1"
                 echo "ana=$(type -p airds9.ana)"
-                cat $pardir/default.par
+                cat $pardir/airtools.par
                 # add bad objects (red) to variable skip
                 xpaset -p $ds9name regions save $tmp1
                 xpaset -p $ds9name regions save x.empty.reg
@@ -14718,19 +14755,30 @@ ds9cmd () {
                     T16)            angle=-80;;
                     *)              angle=0;;
                 esac
-                AIwcs -f $set $catalog $maglim "" "" $angle $thres
+                
+                # get approximate magzero
+                # TODO: should be implemented by AIsource
+                mzero=$(get_header -q $set.head MAGZERO)
+                test -z "$mzero" && mzero=$(get_param camera.dat magzero $set AI_MAGZERO)
+                
+                AI_MAGZERO=$mzero AIwcs -f $set $catalog $maglim "" "" $angle $thres
                 test $? -eq 0 && test -s $set.wcs.head &&
                     xdg-open $(ls wcs/$set*.png | head -1) &
                 echo "$cmd finished"
                 echo ""
                 ;;
         bggradient) set=$1
-                bgmult=$2
-                badbg=$3
-                echo "running bggradient $set $bgmult $badbg"
+                starstack=$2
+                cometstack=$3
+                bgmult=$4
+                badbg=bgcorr/$set.badbg.reg
+                echo "running bggradient $set $starstack $cometstack $bgmult"
                 
-                ext=""; test -f $set.pgm && ext=pgm; test -f $set.ppm && ext=ppm
-                test -z "$ext" && echo "ERROR: no image $set.p?m found."
+                # determine input image type
+                ext=""
+                is_pgm $starstack && ext="pgm"
+                is_ppm $starstack && ext="ppm"
+                
                 bgimg=""
                 test -f bgcorr/$set.bgm${bgmult}.$ext    && bgimg=bgcorr/$set.bgm${bgmult}.$ext
                 test -f bgcorr/$set.bgm${bgmult}all.$ext && bgimg=bgcorr/$set.bgm${bgmult}all.$ext
@@ -14747,7 +14795,7 @@ ds9cmd () {
                     if [ ! "$mask" ] 
                     then
                         # get regions from current frame
-                        echo "# save regions from current frame to $badbg"
+                        echo "# saving regions from current frame to $badbg"
                         xpaset -p $ds9name regions save $badbg
                         mask=$badbg
                     fi
@@ -14759,11 +14807,10 @@ ds9cmd () {
                 fi
                 if [ "$bgimg" ]
                 then
-                    echo "creating $set.bgs.$ext ..."
-                    imbgsub $set.$ext     $bgimg "" $bgmult > $set.bgs.$ext
-                    test -f ${set}_m.$ext &&
-                        echo "creating ${set}_m.bgs.$ext ..." &&
-                        imbgsub ${set}_m.$ext $bgimg "" $bgmult > ${set}_m.bgs.$ext
+                    echo "creating bg corrected images ..."
+                    imbgsub $starstack   $bgimg "" $bgmult > ${starstack%.*}.bgs.$ext
+                    imbgsub $cometstack  $bgimg "" $bgmult > ${cometstack%.*}.bgs.$ext
+                    AIexamine ${starstack%.*}.bgs.$ext
                 fi
                 echo "displaying check images ..."
                 #AIexamine $set.bgs.$ext &
@@ -14782,12 +14829,32 @@ ds9cmd () {
                 echo "running psfextract $set $starstack $cometstack $rlim $merrlim $psfsize"
                 test "$skip" && echo "skip=$skip"
                 
+                test ! -f $set.head &&
+                    echo "ERROR: missing header file $set.head." &&
+                    echo "" && return 255
+                
                 # determine input image type
-                test -f $set.pgm && ext="pgm"
-                test -f $set.ppm && ext="ppm"
+                is_pgm $starstack && ext="pgm"
+                is_ppm $starstack && ext="ppm"
+                
+                # check for bg subtracted images
+                test -f ${starstack%.*}.bgs.$ext &&
+                    starstack=${starstack%.*}.bgs.$ext &&
+                    echo "bg subtracted star stack found: $starstack"
+                test -f ${cometstack%.*}.bgs.$ext &&
+                    cometstack=${cometstack%.*}.bgs.$ext &&
+                    echo "bg subtracted comet stack found: $cometstack"
                 test ! -e ${starstack%.*}".head" && ln -s $set.head ${starstack%.*}".head"
                 test ! -e ${cometstack%.*}".head" && ln -s $set.head ${cometstack%.*}".head"
                 
+                # check for keyword MAGZERO
+                # TODO: query from camera.dat should be done by AIsource, AIpsfextract
+                mzero=$(get_header -q $set.head MAGZERO)
+                test -z "$mzero" && mzero=$(get_param camera.dat magzero $set AI_MAGZERO) &&
+                    set_header $set.head MAGZERO=$mzero
+                test -z $mzero &&
+                    echo "ERROR: unknown MAGZERO." >&2 && echo "" && return 255
+
                 # determine comet position
                 set - $(get_header -s $set.head AI_CORA,AI_CODEC,AI_OMOVE)
                 test $# -ne 3 &&
@@ -14802,6 +14869,10 @@ ds9cmd () {
                 test -z "$trail" && trail=$(get_header $set.head AI_TRAIL)
                 test -z "$trail" &&
                     echo "ERROR: cannot determine comet trail parameters." && echo "" && return 255
+                # if required (AI_TRAIL without angle) append angle to trail
+                test $(echo $trail | tr ',' '\n' | wc -l) -eq 1 &&
+                    trail=$trail","$(echo $str | cut -d '@' -f2)
+                echo "# trail=$trail" >&2
                 
                 # remove previous psf
                 test -d comet || mkdir comet
@@ -14845,7 +14916,7 @@ ds9cmd () {
                 echo "comet ${oxy/,/ }" | xy2reg $starstack - > x.comet.reg
                 AIexamine x.stsub.$ext x.psf.reg
                 xpaset -p $ds9name scale mode zmax
-                xpaset -p $ds9name cmap value 3 0.2
+                xpaset -p $ds9name cmap value 2.5 0.15
 
                 # check if psf stars are free of companions (new ds9 window)
                 AIpsfmask -m comet/$set.trailmask.pbm comet/$set.trailpsf.$ext x.trailpsf.$ext
@@ -14865,11 +14936,27 @@ ds9cmd () {
                 echo "running cometphot $set $starstack $cometstack $bgfit10 $comult \"$opts\""
                 
                 # determine input image type
-                test -f $set.pgm && ext="pgm"
-                test -f $set.ppm && ext="ppm"
+                is_pgm $starstack && ext="pgm"
+                is_ppm $starstack && ext="ppm"
+                
+                # check for bg subtracted images
+                test -f ${starstack%.*}.bgs.$ext &&
+                    starstack=${starstack%.*}.bgs.$ext &&
+                    echo "bg subtracted star stack found: $starstack"
+                test -f ${cometstack%.*}.bgs.$ext &&
+                    cometstack=${cometstack%.*}.bgs.$ext &&
+                    echo "bg subtracted comet stack found: $cometstack"
                 test ! -e ${starstack%.*}".head" && ln -s $set.head ${starstack%.*}".head"
                 test ! -e ${cometstack%.*}".head" && ln -s $set.head ${cometstack%.*}".head"
                 
+                # check for keyword MAGZERO
+                # TODO: query from camera.dat should be done by AIsource, AIpsfextract
+                mzero=$(get_header -q $set.head MAGZERO)
+                test -z "$mzero" && mzero=$(get_param camera.dat magzero $set AI_MAGZERO) &&
+                    set_header $set.head MAGZERO=$mzero
+                test -z $mzero &&
+                    echo "ERROR: unknown MAGZERO." >&2 && echo "" && return 255
+
                 # determine comet position
                 set - $(get_header -s $set.head AI_CORA,AI_CODEC,AI_OMOVE)
                 test $# -ne 3 &&
@@ -14883,7 +14970,7 @@ ds9cmd () {
                 
                 get_jd_dmag $set 2>/dev/null > x.obs.dat
                 test ! -s x.obs.dat &&
-                    echo "# WARNING: missing images for set $set (cannot determine jd, dmag)." | tee x.obs.dat
+                    echo "# WARNING: missing images for set $set (unknown individual jd, dmag)." | tee x.obs.dat
                     
                 # comet extraction and photometry
                 xy2reg $starstack comet/$set.starphot.dat > x.stars.reg
@@ -14899,7 +14986,7 @@ ds9cmd () {
                 AIexamine x.cosub.$ext x.coblur.$ext comet/$set.comet*.reg $badreg \
                     x.stsub.$ext x.resid.$ext x.newphot.reg
                 xpaset -p $ds9name scale mode zmax
-                xpaset -p $ds9name cmap value 3 0.2
+                xpaset -p $ds9name cmap value 2.5 0.15
                 echo "$cmd finished"
                 echo ""
                 ;;

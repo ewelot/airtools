@@ -11,8 +11,12 @@
 
 # parameter files
 #-----------------
-param default
-@default.par
+param airtools
+@airtools.par
+end
+
+param regstat
+@regstat.par
 end
 
 param regphot
@@ -51,7 +55,7 @@ end
 # note: do not use keys a,c,v,x
 # hidden: Show info about current image set (i)
 
-help Help on airfun tasks
+help Help on AIRTOOLS tasks
 dcontrast (d)   - Set display contract from local noise statistics
 regswitch (o)   - Switch region marker on/off
 regstat (s)     - Statistics in image regions
@@ -76,7 +80,7 @@ aircmd.sh regswitch |& $text
 Statistics in image regions (s)
 *
 menu
-$param(default); aircmd.sh regstat $set $img |& $text
+$param(regstat); aircmd.sh regstat $set $img |& $text
  
 
 Region Photometry (r)
@@ -94,7 +98,7 @@ $param(wcscalib); aircmd.sh wcscalib $set $catalog $maglim $thres |& $text
 Remove background gradient (b)
 *
 menu
-$param(bggradient); aircmd.sh bggradient $set $bgmult $badbg |& $text
+$param(bggradient); aircmd.sh bggradient $set $starstack $cometstack $bgmult |& $text
 
 
 PSF Extraction (e)
@@ -126,7 +130,7 @@ $param(photcal); aircmd.sh photcal $set $catalog "$aprad" "$topts" "$aopts" "$sk
 Show info about current image set
 *
 bind i
-$param(default); aircmd.sh setinfo $set |& $text
+$param(airtools); aircmd.sh setinfo $set |& $text
 
 Set display contrast
 *
@@ -136,7 +140,7 @@ aircmd.sh dcontrast |& $text
 Test parameter handling
 *
 bind t
-$param(default); aircmd.sh test $set $img |& $text
+$param(airtools); aircmd.sh test $set $img |& $text
 
 Switch Region Marker On/Off
 *
@@ -147,7 +151,7 @@ aircmd.sh regswitch |& $text
 Statistics in image regions
 *
 bind s
-$param(default); aircmd.sh regstat $set $img |& $text
+$param(regstat); aircmd.sh regstat $set $img |& $text
  
 Region photometry
 *
@@ -162,7 +166,7 @@ $param(wcscalib); aircmd.sh wcscalib $set $catalog $maglim $thres |& $text
 Remove background gradient
 *
 bind b
-$param(bggradient); aircmd.sh bggradient $set $bgmult $badbg |& $text
+$param(bggradient); aircmd.sh bggradient $set $starstack $cometstack $bgmult |& $text
 
 PSF extraction
 *

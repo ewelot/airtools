@@ -9,7 +9,7 @@ DATADIR = $(prefix)/share/$(PACKAGE)
 EXTDIR = extern
 PKGDIR = ..
 DATA = data/*
-DOCS = README
+DOCS = README GettingStarted.txt
 
 BIN = dcraw-tl pnmtomef pnmccdred pnmcombine
 BINSH = airfun.sh aircmd.sh
@@ -66,6 +66,7 @@ LIBFITS = -lcfitsio
 externc: extract_externc cdsclient cexamples
 
 extract_externc:
+	test -d $(EXTDIR) || mkdir $(EXTDIR)
 	for prog in cdsclient cexamples; do \
 		test ! -s $(PKGDIR)/$$prog*tar* && \
 			echo "WARNING: missing source archive for $$prog" && continue; \
@@ -104,6 +105,7 @@ ATLASINCDIR = /usr/include/atlas
 astromatic: extract_astromatic $(BINASTROMATIC)
 
 extract_astromatic:
+	test -d $(EXTDIR) || mkdir $(EXTDIR)
 	for prog in $(BINASTROMATIC); do \
 		test ! -s $(PKGDIR)/$$prog*tar* && \
 			echo "WARNING: missing source archive for $$prog" && continue; \
@@ -143,7 +145,8 @@ ifeq ($(ARCH), x86_64)
 endif
 
 install_ds9:
-	$(info extracting $(BINDS9))
+	$(info installing $(BINDS9))
+	test -d $(EXTDIR) || mkdir $(EXTDIR)
 	tar -C $(EXTDIR) -xf $(DS9TAR) && \
 	install -m 0755 -p $(EXTDIR)/$(BINDS9) $(BINDIR)
 
@@ -155,6 +158,7 @@ install_ds9:
 BINSTILTS = stilts stilts.jar
 
 install_stilts:
+	$(info Installing stilts)
 	for prog in $(BINSTILTS); do \
 		test ! -s $(PKGDIR)/$$prog && \
 			echo "WARNING: missing file $$prog" && continue; \
