@@ -32,8 +32,8 @@ In addition, subsets of some smaller tools are used:
 
 
 For your convenience, sources of all external programs have been bundled in
-a single archive (bundle3rd.tar) which can be downloaded from
-  https://github.com/ewelot/temp
+a single archive which can be downloaded via
+    https://github.com/ewelot/temp/raw/master/bundle3rd.tar
 
 For further instructions on compilation/installation of all required software
 components, please read the INSTALL file.

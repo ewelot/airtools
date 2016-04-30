@@ -28,7 +28,7 @@ Templates of those metadata files are provided under the directory
 /usr/local/share/airtools/
 
 Some notes about the observations data file: Usually an observation of a single
-target consists of multiple exposures - hereafter called an image set. Each
+target consists of multiple exposures - denoted as an image set. Each
 set must have a line in the observations data file with the following fields
 (separated by spaces):
 - approx start time
@@ -43,7 +43,6 @@ set must have a line in the observations data file with the following fields
 - name of flat field image (without extension)
 
 
-
 3. Basic image reduction
 --------------------------
 
@@ -51,7 +50,7 @@ All basic reduction steps can be done by AIRTOOLS commands but this is not
 covered in this short guide. Most users do have already their own pipeline
 using other - more commonly used - software.
 At the end you should have two stacked images: one centered on stars (hereafter
-refered to as star stack) and another centered on the comet (called comet
+referred to as star stack) and another centered on the comet (called comet
 stack).
 
 It is required that those images have a linear response between collected
@@ -67,12 +66,16 @@ natively operates on Netpbm image file formats (PGM, PPM). This has originally
 been decided on to best suit programs from ImageMagick and Netpbm toolkits and
 to handle DSLR images in first place.
 
-The conversion of a single color FITS image is done by invoking
-    meftopnm <fits_image> > <set>.pgm
-    listhead <fits_image> > <set>.head
+The conversion of a single color FITS image is done by using the command line
+program meftopnm. In addition, FITS header data are extracted to an ASCII
+header file (for star stack only):
 
-This creates both image files and associated ASCII header files containing
-image matadata originally stored in the FITS header.
+    meftopnm <star_stack_fits>   >  <set>.pgm
+    listhead <star_stack_fits>   >  <set>.head
+    meftopnm <comet_stack_fits>  >  <set>_cs.pgm
+
+Currently, the file name of the star stack PGM/PPM image and associated ASCII
+header file must start with the image set name as defined in set.dat.
 
 
 5. Image metadata
@@ -88,12 +91,13 @@ Additional information must be supplied:
   if north is not at top of stacked images
 
 Comet observations must also include
-- approximate length of star trails on comet stack in pixel (note: a more
+- approximate length of star trails on comet stack in pixels (note: a more
   accurate modelling of the comet trail can be achieved by providing a text
   file containing dates of individual exposures)
 - some ephemeral dates like comet coordinates and sky motion
 
 Example commands:
+
     set_header <set>.head AI_TELID=P300 AI_NPA=20 AI_TRAIL=5
     get_mpcephem -w <set>
 
@@ -108,8 +112,7 @@ by the command
     AIexamine <star_stack> <comet_stack> &
 
 where <star_stack> and <comet_stack> must be replaced by the appropriate
-image file names (either PGM or PPM format). Currently, the file name of the
-star stack must start with the image set name and a colon.
+image file names (either PGM or PPM format).
 The AIRTOOLS tasks are now available from the "Analysis" menu (bottom entries).
 
 The usual reduction pipeline involves the following steps:
@@ -118,3 +121,13 @@ The usual reduction pipeline involves the following steps:
 - PSF extraction
 - Comet extraction
 - Photometrc calibration
+
+After finishing your image reduction, you may savely remove some temporary
+files (name prefix x) from your working directory.
+
+
+7. Sample data
+----------------
+
+Sample images of a comet observations are provided at
+    https://github.com/ewelot/temp/raw/master/sample_160224.tar.gz

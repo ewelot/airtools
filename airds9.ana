@@ -98,7 +98,7 @@ $param(wcscalib); aircmd.sh wcscalib $set $catalog $maglim $thres |& $text
 Remove background gradient (b)
 *
 menu
-$param(bggradient); aircmd.sh bggradient $set $starstack $cometstack $bgmult |& $text
+$param(bggradient); aircmd.sh bggradient $set $starstack "$cometstack" $bgmult |& $text
 
 
 PSF Extraction (e)
@@ -166,7 +166,7 @@ $param(wcscalib); aircmd.sh wcscalib $set $catalog $maglim $thres |& $text
 Remove background gradient
 *
 bind b
-$param(bggradient); aircmd.sh bggradient $set $starstack $cometstack $bgmult |& $text
+$param(bggradient); aircmd.sh bggradient $set $starstack "$cometstack" $bgmult |& $text
 
 PSF extraction
 *

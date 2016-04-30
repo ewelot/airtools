@@ -17,10 +17,11 @@
 AI_VERSION="2.7.1"
 : << '----'
 CHANGELOG
-    2.7.1 28 Apr 2016
+    2.7.1 29 Apr 2016
         * AIexamine: keep current pan/zoom when adding images
         * get_mpcephem added option -w to save some data to image header file
             (e.g. comet coordinates)
+        * mkcotrail: deal with empty obsdata file
 
     2.7   17 Apr 2016
         * changed filename from imred_fun.sh to airfun.sh
@@ -1964,7 +1965,7 @@ mkcotrail () {
     for i in 1 2
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
-        test "$1" == "-o" && out=$2 && shift 2
+        test "$1" == "-o" && outimg=$2 && shift 2
     done
     local set=$1
     local coimg=$2      # comet image
@@ -1997,7 +1998,7 @@ mkcotrail () {
     local y
     
     (test "$showhelp" || test $# -lt 4) &&
-        echo "usage: mkcophot <set> <coimg> <omove> <obsdata>" >&2 &&
+        echo "usage: mkcophot <set> <coimg> <omove> <obsdata> [bgval|$bgval]" >&2 &&
         return 1
 
     # set output image name
@@ -2006,15 +2007,16 @@ mkcotrail () {
 
     # read some header keywords
     wcshdr=$set.wcs.head
-    jdref=$(get_header $set.head MJD_REF)
+    jdref=$(get_header -q $set.head JD_REF)
+    test -z "$jdref" && jdref=$(get_header -q $set.head MJD_REF)
+    test -z "$jdref" && jdref=$(get_header -q $set.head JD_OBS)
+    test -z "$jdref" && jdref=$(get_header -q $set.head MJD_OBS)
     test -z "$jdref" &&
         echo "ERROR: unknown JD." >&2 && return 255
     magzero=$(get_header $set.head MAGZERO)
     texp=$(get_header -s $set.head EXPTIME,NEXP | tr '\n' ' ' | awk '{print $1/$2}')
     r=$(get_wcsrot $wcshdr $(echo $omove | awk -F "@" '{print $3}' | tr ',' ' '))
     p=$(get_wcspscale $wcshdr)
-    mmag=$(grep -v "^#" $obsdata | awk '{x=x+exp(-0.4*$3*log(10))}
-            END {printf("%.3f\n", -2.5/log(10)*log(x/NR))}')
 
     # measure comet brightness (arbitrary zeropoint)
     w=$(identify $coimg | cut -d " " -f3 | cut -d "x" -f1)
@@ -2029,6 +2031,16 @@ mkcotrail () {
         tr '\n' ',' | sed -e 's/,$//')
     echo "# cmag=$cmag" >&2
 
+    # deal with empty obsdata file (no info about individual exposures)
+    x=$(grep -v "^#" $obsdata | wc -l)
+    test $x -eq 0 &&
+        pnmccdred -a -$bgval $coimg $outimg &&
+        rm -f $tmp1 && return
+
+    
+    # process obsdata file
+    mmag=$(grep -v "^#" $obsdata | awk '{x=x+exp(-0.4*$3*log(10))}
+            END {printf("%.3f\n", -2.5/log(10)*log(x/NR))}')
     grep -v "^#" $obsdata | while read id jd mag
     do
         # determine photometric correction with respect to ststack
@@ -2058,8 +2070,8 @@ mkcotrail () {
 
     x=$(echo $texp $(wc -l $tmp1) | awk '{printf("%f", $1/$2)}')
     test "$AI_DEBUG" &&
-        echo AIskygen -o $out $tmp1 $coimg $x $magzero 1 $w $h $bgval >&2
-    AIskygen -o $out $tmp1 $coimg $x $magzero 1 $w $h $bgval
+        echo AIskygen -o $outimg $tmp1 $coimg $x $magzero 1 $w $h $bgval >&2
+    AIskygen -o $outimg $tmp1 $coimg $x $magzero 1 $w $h $bgval
     
     test "$AI_DEBUG" || rm -f $tmp1
     return
@@ -11426,7 +11438,7 @@ END     " >> wcs/$b.src.ahead
                 -astrefmag_limits -99,$maglim -distort_degrees $fitdegrees \
                 -sn_thresholds 10,40 -match_resol $mres \
                 -mergedoutcat_type FITS_LDAC -mergedoutcat_name wcs/$b.match.dat \
-                $sopts $tmpcat 2>&1 | $cmd
+                $sopts $tmpcat 2>&1 | $cmd | grep -v "tmp.*reference pair.*processed'"
         else
             # requires aclient and online access to vizier database
             scamp -astref_catalog  $refcat -save_refcatalog Y \
@@ -11434,7 +11446,7 @@ END     " >> wcs/$b.src.ahead
                 -astrefmag_limits -99,$maglim -distort_degrees $fitdegrees \
                 -sn_thresholds 10,40 -match_resol $mres \
                 -mergedoutcat_type FITS_LDAC -mergedoutcat_name wcs/$b.match.dat \
-                $sopts $tmpcat 2>&1 | $cmd
+                $sopts $tmpcat 2>&1 | $cmd | grep -v "tmp.*reference pair.*processed'"
             vizcat=$(ls -tr *cat | grep -i "^$refcat" | tail -1)
             test ! "$vizcat" &&
                 echo "ERROR: download of reference catalog failed" >&2 &&
@@ -11469,7 +11481,7 @@ END     " >> wcs/$b.src.ahead
         echo $(get_header -s $b.wcs.head ASTRRMS1,ASTRRMS2) | awk '{
             printf("xrms=%.3f\"  yrms=%.3f\"\n", $1*3600, $2*3600)}'
                             
-        rm -f $tmpcat ${tmpcat%.*}.ahead
+        rm -f $tmpcat ${tmpcat%.*}.ahead scamp.xml
     done < $sdat
     test "$singleimage" == "y" && rm $sdat
     #rm -f $tmp1 $tmp2
@@ -13309,7 +13321,7 @@ AIphotcal () {
     
     #rm -f $tmp2
     test "$AI_DEBUG" && echo "$tmpgp" >&2
-    test "$AI_DEBUG" || rm -f $tmp1 $tmp2 $tmpbright $tmpgp $tmpres
+    test "$AI_DEBUG" || rm -f $tmp1 $tmp2 $tmpbright $tmpgp $tmpres fit.log
 }
 
 
@@ -13703,6 +13715,7 @@ AIcomet () {
     local jdref
     local r
     local p
+    local cmag
     local mmag
     local dm
     local dt
@@ -14038,12 +14051,7 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
             echo "ERROR: kmedian has failed." >&2 && return 255
 
         # create artificial comet trail
-        if [ $(grep -v "^#" $obsdata | wc -l) -le 1 ]
-        then
-            pnmccdred -a -$bgres $tmpim1 $tmpim2
-        else
-            mkcotrail -o $tmpim2 $sname $tmpim1 $omove $obsdata $bgres
-        fi
+        mkcotrail -o $tmpim2 $sname $tmpim1 $omove $obsdata $bgres
         set - $(echo $coregion | tr 'x+' ' ')
         pnmccdred -m 0 $ststack - | pnmpaste $tmpim2 $3 $4 - > x.cotrail.$ext
     fi
@@ -14141,17 +14149,9 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
                 kmedian $tmpim2 $tmpkernel > $tmpim1 2>/dev/null
                 test $? -ne 0 &&
                     echo "ERROR: kmedian has failed." >&2 && return 255
-                #x=$(echo $texp $(wc -l x.cometphot.dat) | awk '{printf("%f", $1/$2)}')
-                #w=$(identify $tmpim1 | cut -d " " -f3 | cut -d "x" -f1)
-                #h=$(identify $tmpim1 | cut -d " " -f3 | cut -d "x" -f2)
-                #AIskygen -o $tmpim2 x.cometphot.dat $tmpim1 $x $magzero 1 $w $h $bgres
-                if [ $(grep -v "^#" $obsdata | wc -l) -le 1 ]
-                then
-                    pnmccdred -a -$bgres $tmpim1 $tmpim2
-                else
-                    mkcotrail -o $tmpim2 $sname $tmpim1 $omove $obsdata $bgres
-                fi
-                # paste result over full size of ststack
+
+                # create artificial comet trail
+                mkcotrail -o $tmpim2 $sname $tmpim1 $omove $obsdata $bgres
                 set - $(echo $coregion | tr 'x+' ' ')
                 pnmccdred -m 0 $ststack - | pnmpaste $tmpim2 $3 $4 - > x.cotrail.$ext
 
@@ -14772,7 +14772,7 @@ ds9cmd () {
                 cometstack=$3
                 bgmult=$4
                 badbg=bgcorr/$set.badbg.reg
-                echo "running bggradient $set $starstack $cometstack $bgmult"
+                echo "running bggradient $set $starstack \"$cometstack\" $bgmult"
                 
                 # determine input image type
                 ext=""
@@ -14809,7 +14809,8 @@ ds9cmd () {
                 then
                     echo "creating bg corrected images ..."
                     imbgsub $starstack   $bgimg "" $bgmult > ${starstack%.*}.bgs.$ext
-                    imbgsub $cometstack  $bgimg "" $bgmult > ${cometstack%.*}.bgs.$ext
+                    test "$cometstack" &&
+                        imbgsub $cometstack  $bgimg "" $bgmult > ${cometstack%.*}.bgs.$ext
                     AIexamine ${starstack%.*}.bgs.$ext
                 fi
                 echo "displaying check images ..."
@@ -15188,7 +15189,7 @@ AIsetinfo () {
             # if nexp is missing make best guess
             test $nexp -eq 0 && test -d "$AI_TMPDIR" &&
                 nexp=$(AIimlist -q -f $sname 2>/dev/null | wc -l)
-            test $nexp -eq 0 && test -d "$AI_RAWDIR" && nexp=$(AIimlist -q -f $sname "" raw | wc -l)
+            test $nexp -eq 0 && test -d "$AI_RAWDIR" && nexp=$(AIimlist -q -f $sname "" raw 2>/dev/null | wc -l)
             # if nexp is still missing evaluate set.dat
             if [ $nexp -eq 0 ]
             then
@@ -15231,7 +15232,7 @@ AIsetinfo () {
 
         # get reference image number of calibration sets
         ! is_integer $nref && test -d "$AI_RAWDIR" &&
-            nref=$(AIimlist -q -n $sname "" raw | head -$((nexp/2 + 1)) | tail -1)
+            nref=$(AIimlist -q -n $sname "" raw 2>/dev/null | head -$((nexp/2 + 1)) | tail -1)
         ! is_integer $nref && nref=$(printf "%04g" $(echo "($n1+$n2)/2" | bc))
         
         # try to get flength and fratio from camera.dat
