@@ -14,9 +14,22 @@
 # - in order to use SAOImage DS9 analysis tasks (via AIexamine) you must
 #   provide corresponding files airds9.ana and aircmd.sh
 ########################################################################
-AI_VERSION="2.7.1"
+AI_VERSION="2.7.2"
 : << '----'
 CHANGELOG
+    2.7.2 23 Mai 2016
+        * AIwcs: added option -p to allow for using alternate plot driver
+            when creating checkplots
+        * AIexamine: if input image is PNM format then propagate some ASCII
+            header keywords to temporary FITS files and store original image
+            name in keyword AI_IMAGE
+        * ds9cmd: rework parameters on regstat, regphot, bggradient tasks,
+            use new keyword AI_COMST to obtain image file name of comet stack
+        * meftopnm: added option -a which creates an ASCII header file from
+            FITS header keywords (instead of doing the image conversion)
+        * get_mpcephem: handle missing m2 (empty value from web query)
+        * comet_lightcurve: bugfix to correctly handle size option
+
     2.7.1 29 Apr 2016
         * AIexamine: keep current pan/zoom when adding images
         * get_mpcephem added option -w to save some data to image header file
@@ -1004,6 +1017,11 @@ CHANGELOG
 
 
 TODO:
+        * AIexamine: copy ascii header data to header of temp FITS files
+        * AIpsfextract: also skip those stars for which region has been deleted
+        * AIpsfmask: improve performance
+        * AIphotcal: when using APASS, select those brightest stars exhibiting
+            both B and V measurements
         * set_header: add option to force value being of string type
         * AIsource, AIpsfextract: do not rely on MAGZERO keyword, evaluate
             camera.dat instead
@@ -1031,6 +1049,10 @@ TODO:
         * AIphotcal: remove field stars before measuring gapcorr
             build apass star id from coordinates (len=12)
             make limit for outlier detection depend on mag
+        * AIpsfextract: limit star subtraction to those close to PSF stars
+        * AIcomet: when applying photometric correction, do create diff images
+            of stars from comet/<set>.newphot.dat and do not subtract all stars
+            again
         * create new helper function get_jdref
         * AIbgdiff: handle image rotation (e.g. due to pier side flipping)
         * AIfindbad: revise algorithm for ppm images
@@ -2011,6 +2033,7 @@ mkcotrail () {
     test -z "$jdref" && jdref=$(get_header -q $set.head MJD_REF)
     test -z "$jdref" && jdref=$(get_header -q $set.head JD_OBS)
     test -z "$jdref" && jdref=$(get_header -q $set.head MJD_OBS)
+    test -z "$jdref" && jdref=$(get_header -q $set.head JD)
     test -z "$jdref" &&
         echo "ERROR: unknown JD." >&2 && return 255
     magzero=$(get_header $set.head MAGZERO)
@@ -3377,6 +3400,7 @@ get_mpcephem () {
     local mdist
     local malt
     local str
+    local nval
     
     (test "$showhelp" || test $# -lt 1) &&
         echo -e "usage: get_mpcephem <set> [objects] [utday_yyyy-mm-dd] [uttime_hh:mm] [n|$n] [dhms|$dhr]" >&2 &&
@@ -3498,15 +3522,18 @@ get_mpcephem () {
     if [ "$do_write_header" ] && grep -q -v "^#" $tmp2
     then
         set - $(grep -v "^#" $tmp2 | head -1) xx
-        if [ $# -eq 24 ]
+        nval=$#
+        if [ $nval -eq 24 ] || [ $nval -eq 23 ]
         then
             shift 4
-            ra="$1:$2:$3"; de="$4:$5:$6"; shift 11
+            ra="$1:$2:$3"; de="$4:$5:$6"
+            test $nval -eq 23 && shift 10
+            test $nval -eq 24 && shift 11
             dr=$1; pa=$2; alt=$4; mphase=$6; mdist=$7; malt=$8
             str=$(LANG=C printf "%s %s %s %s  %.1f@%.1f  %.2f %3g %s\n" $sname $ra $de $alt  $dr $pa  $mphase $mdist $malt)
             AIsetkeys "$str" AI_CORA AI_CODEC AI_COALT AI_OMOVE AI_MOP AI_MOD AI_MOALT
         else
-            echo "WARNING: $sname: wrong number of values, not writing to header" >&2
+            echo "WARNING: $sname: wrong number of values ($nval), not writing to header" >&2
         fi
     fi
     test "$AI_DEBUG" && echo $tmp1 $tmp2 >&2
@@ -3705,7 +3732,6 @@ phot2icq () {
         rot=$(get_wcsrot $sname)
         ticq=$(echo $texp | awk '{printf("%04.0f", $1)}' | sed -e 's/^0/a/' | sed -e \
             's/^1/A/; s/^2/B/; s/^3/C/; s/^4/D/; s/^5/E/; s/^6/F/; s/^7/G/')
-        observer=$(printf "%-8s" $observer)
 
         
         # get comet photometry/tail keywords
@@ -3769,8 +3795,9 @@ phot2icq () {
                 fi
 
                 # show results
+                str=$(printf "%-8s" $observer)
                 echo "$object${ut//-/ }  C $mag $refcat $inst$ticq " \
-                     "$coma $tail $pa        $observer    $mlim  $cam" $ptail
+                     "$coma $tail $pa        $str    $mlim  $cam" $ptail
             done
         else
             # old keywords, AI_VERSION<2.7
@@ -3823,8 +3850,9 @@ phot2icq () {
                 awk '{if($1=="-") {print $1} else {printf("%3.0f", ($1-90+$2+720)%360)}}')
         
             # show results
+            str=$(printf "%-8s" $observer)
             echo "$object${ut//-/ }  C $mag $refcat $inst$ticq " \
-                 "$coma $tail $pa        $observer    $mlim  $cam"
+                 "$coma $tail $pa        $str    $mlim  $cam"
         fi
     done < $sdat
 }
@@ -3937,7 +3965,7 @@ comet_lightcurve () {
     local keypos="top left reverse Left invert" # e.g. "bottom right"
     local kwidthadd=0   # additive correction to key area width
     local do_big    # if set create large plot
-    local size="5,3.5"  # w,h page size of output file (inches)
+    local size="6.5,4.5"  # w,h page size of output file (inches)
     local do_update # if set download new elements (MPCORB), ICQ and FGK observations
     local xrange    # date range
     local yrange    # mag range
@@ -4372,7 +4400,7 @@ comet_lightcurve () {
     # postscript:
     outfile=$comet.$obs.$(date +'%y%m%d').eps
     #test "$do_big" && size="7,4.9"
-    size="6.5,4.5"
+    #size="6.5,4.5"
     fsize=$(echo ${size#,*} $fsizeadd | awk '{printf("%.0f", $1*1.6+10+$2)}')
     cat <<EOF > $tmpgp
 #set term pngcairo size $size font "Arial,$fsize" enhanced
@@ -6449,51 +6477,60 @@ ppm2gray () {
 meftopnm () {
     # convert from FITS to 16bit PNM image, result goes to stdout
     local showhelp
+    local do_ascii_header   # if set, also create ASCII header
+                            # requires command line parameter outimage
     local i
-    for i in 1
+    for i in 1 2
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
+        test "$1" == "-a" && do_ascii_header=1 && shift 1
     done
     local fits=$1
+    local outfile
     local nx
     local tfits=$(mktemp "/tmp/tmp_im1_XXXXXX.fits")
     local tmptif=$(mktemp "/tmp/tmp_im1_XXXXXX.tif")
     local tmp=$(mktemp "/tmp/tmp_im2_XXXXXX")
     local sconf=$(mktemp "/tmp/tmp_stiff_XXXXXX.conf")
 
-    (test "$showhelp" || test $# -lt 1) &&
-        echo "usage: meftopnm <fits>" >&2 &&
+    (test "$showhelp" || test $# -ne 1) &&
+        echo "usage: meftopnm [-a] <fits>" >&2 &&
         return 1
     test ! -e "$fits" &&
         echo "ERROR: fits file $fits not found." >&2 &&
         return 255
 
-    nx=$(listhead $fits | grep "Header listing for HDU" | wc -l)
-    stiff -d > $sconf
-    for i in $(seq 0 $((nx-1)))
-    do
-        rm -f $tfits
-        test $nx -eq 1 && cp $fits $tfits
-        test $nx -gt 1 && imcopy $fits"[$i]" $tfits
-        listhead $tfits | grep -q "^DATAMIN " || sethead $tfits datamin=0
-        listhead $tfits | grep -q "^DATAMAX " || sethead $tfits datamax=65535
-        # note: fitstopnm does not handle 32bit FITS images
-        #test $nx -eq 1 && fitstopnm $tfits 2>/dev/null | pnmflip -tb
-        #test $nx -ne 1 && fitstopnm $tfits 2>/dev/null | pnmflip -tb > $tmp.$i
-        stiff -c $sconf -sky_type manual -min_type manual -min_level 0 \
-            -max_type manual -max_level 65535 -satur_level 65535 \
-            -gamma 1 -bits_per_channel 16 \
-            -verbose_type quiet -outfile_name $tmptif $tfits
-        rm -f stiff.xml
-        test $nx -eq 1 && convert $tmptif pgm:
-        test $nx -ne 1 && convert $tmptif pgm: > $tmp.$i
-    done
-    if [ $nx -ne 1 ]
+    if [ "$do_ascii_header" ]
     then
-        rgb3toppm $tmp.0 $tmp.1 $tmp.2
-        rm $tmp.0 $tmp.1 $tmp.2
+        listhead $fits | grep -E "^........=|^END$"
+    else
+        nx=$(listhead $fits | grep "Header listing for HDU" | wc -l)
+        stiff -d > $sconf
+        for i in $(seq 0 $((nx-1)))
+        do
+            rm -f $tfits
+            test $nx -eq 1 && cp $fits $tfits
+            test $nx -gt 1 && imcopy $fits"[$i]" $tfits
+            listhead $tfits | grep -q "^DATAMIN " || sethead $tfits datamin=0
+            listhead $tfits | grep -q "^DATAMAX " || sethead $tfits datamax=65535
+            # note: fitstopnm does not handle 32bit FITS images
+            #test $nx -eq 1 && fitstopnm $tfits 2>/dev/null | pnmflip -tb
+            #test $nx -ne 1 && fitstopnm $tfits 2>/dev/null | pnmflip -tb > $tmp.$i
+            stiff -c $sconf -sky_type manual -min_type manual -min_level 0 \
+                -max_type manual -max_level 65535 -satur_level 65535 \
+                -gamma 1 -bits_per_channel 16 \
+                -verbose_type quiet -outfile_name $tmptif $tfits
+            rm -f stiff.xml
+            convert $tmptif pgm: > $tmp.$i
+        done
+        if [ $nx -ne 1 ]
+        then
+            rgb3toppm $tmp.0 $tmp.1 $tmp.2
+        else
+            cat $tmp.0
+        fi
     fi
-    rm -f $tfits $tmp $tmptif $sconf
+    rm -f $tfits $tmp $tmptif $sconf $tmp.[0-9]
 }
 
 
@@ -8028,6 +8065,7 @@ AIexamine () {
     local pan
     local zoom
     local ext
+    local keys
     
 
     (test "$showhelp" || test $# -lt 1) &&
@@ -8135,6 +8173,15 @@ AIexamine () {
                             convert $infile pgm: | pnmtomef - > $tfits
                         fi
                     fi
+                    sethead $tfits AI_IMAGE=$infile
+                    # copy some header keywords
+                    if [ -f ${infile%.*}.head ]
+                    then
+                        keys=$(grep -E "^OBJECT|^AI_" ${infile%.*}.head | \
+                            cut -d "/" -f1 | tr "'" ' ' | \
+                            sed -e 's|[ ]*=[ ]*|=|' | tr '\n' ' ')
+                        test "$keys" && sethead $tfits $keys
+                    fi
                     cx=$(identify $infile | cut -d " " -f3 | awk -F x '{print $1/2}')
                     cy=$(identify $infile | cut -d " " -f3 | awk -F x '{print $2/2}')
                     if [ "$wcshead" ]
@@ -8185,39 +8232,35 @@ AIexamine () {
 #
 # default airtools parameter file
 #
-set,s,l,$set,$slist,,"Name of image set:"
-img,s,l,$firstimage,,,"First image:"
+image,s,l,$firstimage,,,"First image"
 EOF
 
         cat <<EOF > $pardir/regstat.par
 #
 # regstat parameter file
 #
-set,s,l,$set,$slist,,"Name of image set:"
-img,s,l,$firstimage,,,"Image file name:"
+image,s,l,,,,"Image file name (default: current image)"
 EOF
 
-        # default is using residual image created by AIcomet
-        par=("x.resid.${firstimage##*.}")
         cat <<EOF > $pardir/regphot.par
 #
 # regphot parameter file
 #
-set,s,l,$set,$slist,,"Name of image set:"
-image,s,l,${par[0]},,,"Image to be measured:"
-photcat,s,l,comet/$set.newphot.dat,,,"Photometry data file"
+image,s,l,,,,"Image to be measured (default: current)"
 bgrgb,s,l,2000,,,"Background rgb (comma separated)"
-ddiff,r,l,,,,"Approx. mag difference in case of double star"
 EOF
+#photcat,s,l,,,,"Photometry data file (default: comet/\$set.newphot.dat)"
+#ddiff,r,l,,,,"Approx. mag difference in case of double star"
 
         cat <<EOF > $pardir/wcscalib.par
 #
 # wcscalib parameter file
 #
-set,s,l,$set,$slist,,"Name of image set:"
-catalog,s,l,ucac-4,ucac-4|ucac-3|ppmx,,"Astrometric reference catalog:"
-maglim,r,l,14.5,,,"Limiting magnitude:"
-thres,r,l,10,,,"Detection threshold for stars in image:"
+set,s,l,$set,$slist,,"Name of image set"
+catalog,s,l,ucac-4,ucac-4|ucac-3|ppmx,,"Astrometric reference catalog"
+maglim,r,l,14.5,,,"Limiting magnitude"
+thres,r,l,10,,,"Detection threshold for stars in image"
+opts,s,l,,,,"Options passed to AIwcs"
 EOF
 
         par=(bgcorr/$set.badbg.reg)
@@ -8225,10 +8268,8 @@ EOF
 #
 # bggradient parameter file
 #
-set,s,l,$set,$slist,,"Name of image set:"
-starstack,s,l,$firstimage,,,"Image stacked on stars:"
-cometstack,s,l,$lastimage,,,"Image stacked on comet:"
-bgmult,r,l,10,,,"Multiplier for intensity stretching:"
+starstack,s,l,,,,"Image stacked on stars (default: current)"
+bgmult,r,l,10,,,"Multiplier for intensity stretching"
 EOF
 
         par=("")     # id's of skipped stars (flagged by leading '#')
@@ -8239,9 +8280,9 @@ EOF
 #
 # psfextract parameter file
 #
-set,s,l,$set,$slist,,"Name of image set:"
-starstack,s,l,$firstimage,,,"Image stacked on stars:"
-cometstack,s,l,$lastimage,,,"Image stacked on comet:"
+set,s,l,$set,$slist,,"Name of image set"
+starstack,s,l,$firstimage,,,"Image stacked on stars"
+cometstack,s,l,$lastimage,,,"Image stacked on comet"
 rlim,r,l,10,,,"Max distance of stars from comet (in % of image size)"
 merrlim,r,l,0.2,,,"Max error of background star mag"
 psfsize,r,l,128,,,"Width of psf (in pix)"
@@ -8262,9 +8303,9 @@ EOF
 #
 # cometphot parameter file
 #
-set,s,l,$set,$slist,,"Name of image set:"
-starstack,s,l,$firstimage,,,"Image stacked on stars:"
-cometstack,s,l,$lastimage,,,"Image stacked on comet:"
+set,s,l,$set,$slist,,"Name of image set"
+starstack,s,l,$firstimage,,,"Image stacked on stars"
+cometstack,s,l,$lastimage,,,"Image stacked on comet"
 bgfit10,s,l,${par[0]},,,"Background correction image (10x)"
 comult,r,l,10,,,"Multiplier for stretching contrast before photometry"
 EOF
@@ -8285,22 +8326,22 @@ EOF
 #
 # manual measurements parameter file
 #
-set,s,l,$set,$slist,,"Name of image set:"
-idx,s,l,${par[0]},${par[1]},,"Image plane (or extension):"
-ccorr,s,l,${par[2]},,,"Manual correction of comets measured ADU:"
-stlim,s,l,${par[3]},,,"Limiting star total ADU:"
-dtlen,s,l,${par[4]},,,"Dust tail length in pixel:"
-dtang,s,l,${par[5]},,,"Dust tail angle in image (right=0):"
-ptlen,s,l,${par[6]},,,"Plasma tail length in pixel:"
-ptang,s,l,${par[7]},,,"Plasma tail angle in image (right=0):"
+set,s,l,$set,$slist,,"Name of image set"
+idx,s,l,${par[0]},${par[1]},,"Image plane (or extension)"
+ccorr,s,l,${par[2]},,,"Manual correction of comets measured ADU"
+stlim,s,l,${par[3]},,,"Limiting star total ADU"
+dtlen,s,l,${par[4]},,,"Dust tail length in pixel"
+dtang,s,l,${par[5]},,,"Dust tail angle in image (right=0)"
+ptlen,s,l,${par[6]},,,"Plasma tail length in pixel"
+ptang,s,l,${par[7]},,,"Plasma tail angle in image (right=0)"
 EOF
 
         cat <<EOF > $pardir/photcal.par
 #
 # photometry parameter file
 #
-set,s,l,$set,$slist,,"Name of image set:"
-catalog,s,l,tycho2,tycho2|apass,,"Photometric reference catalog:"
+set,s,l,$set,$slist,,"Name of image set"
+catalog,s,l,tycho2,tycho2|apass,,"Photometric reference catalog"
 aprad,r,l,"",,,"Aperture radius (empty=automatic)"
 topts,s,l,"",,,"Options applied for Tycho2 stars"
 aopts,s,l,"-bv -n 200",,,"Options applied for APASS stars"
@@ -11047,6 +11088,9 @@ AIbgmap () {
     #test "$day" && test "$day" != "." && out="$day.$b.bg$bsize.ppm"
 
     # convert pnm to fits
+    # note: if noise in $img is low (<~3) then background image from sex and
+    #   the residual image will show staircase structure, independant of $mult
+    #   maybe we should add some random noise proportional to $mult
     case $inext in
         ppm)    clist="red grn blu"
                 cat $img | (cd $tdir; ppmtorgb3)
@@ -11155,7 +11199,7 @@ AIbgmap () {
 #       currently only green channel is fitted, how about color dependant fits
 AIwcs () {
     local showhelp
-    local nocheckplots
+    local plotdev="PNG" # checkplot_dev parameter of scamp (e.g. SVG, NULL)
     local nosex         # if set use $set.src.dat
     local nocatquery    # if set use $set.<refcat>.cat
     local maxoff        # max position offset in degrees
@@ -11164,7 +11208,7 @@ AIwcs () {
     for i in $(seq 1 6)
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
-        test "$1" == "-n" && nocheckplots=1  && shift 1
+        test "$1" == "-p" && plotdev=$2 && shift 2
         test "$1" == "-s" && nosex=1 && shift 1
         test "$1" == "-r" && nocatquery=1 && shift 1
         test "$1" == "-f" && noescapes=1 && shift 1
@@ -11213,7 +11257,7 @@ AIwcs () {
     local cmd
     
     test "$showhelp" &&
-        echo "usage: AIwcs [-s] [-r] [-n] [-f] [-o maxoff] [set|img] [refcat] [maglim|$maglim]" \
+        echo "usage: AIwcs [-s] [-r] [-f] [-p plotdev|$plotdev [-o maxoff] [set|img] [refcat] [maglim|$maglim]" \
             "[ra] [de] [north|$north] [thres|$threshold] [bgsize|$bgsize]" \
             "[fwhm|$fwhm] [fitdegrees|$fitdegrees] [sopts|$sopts]" >&2 &&
         return 1
@@ -11421,16 +11465,17 @@ END     " >> wcs/$b.src.ahead
         cp wcs/$b.src.ahead ${tmpcat%.*}.ahead
 
         # compute wcs
-        plotparams="-checkplot_dev PNG \
+        plotparams="-checkplot_dev $plotdev \
             -checkplot_type fgroups,distortion,astr_referror1d \
             -checkplot_name fgroups,distortion,astr_referror1d"
-        test "$nocheckplots" && plotparams=""
         photparams="" # "-solve_photom N -magzero_out 25.5"
         posparams="-position_maxerr $posmaxerr -posangle_maxerr 30"
         test "$maxoff" &&
             posparams="-position_maxerr $posmaxerr -posangle_maxerr 60"
         cmd="cat"
         test "$noescapes" && cmd="sed -r s/\x1b\[[0-9;]*[mAM]?//g"
+
+        rm -f scamp.xml
         if [ "$nocatquery" ]
         then
             scamp -astref_catalog file -astrefcat_name $refcatfile \
@@ -11439,6 +11484,15 @@ END     " >> wcs/$b.src.ahead
                 -sn_thresholds 10,40 -match_resol $mres \
                 -mergedoutcat_type FITS_LDAC -mergedoutcat_name wcs/$b.match.dat \
                 $sopts $tmpcat 2>&1 | $cmd | grep -v "tmp.*reference pair.*processed'"
+            test ! -f scamp.xml &&
+                echo "ERROR: scamp failed:" >&2 &&
+                echo scamp -astref_catalog file -astrefcat_name $refcatfile \
+                $plotparams $photparams $posparams \
+                -astrefmag_limits -99,$maglim -distort_degrees $fitdegrees \
+                -sn_thresholds 10,40 -match_resol $mres \
+                -mergedoutcat_type FITS_LDAC -mergedoutcat_name wcs/$b.match.dat \
+                $sopts $tmpcat >&2 &&
+                return 255
         else
             # requires aclient and online access to vizier database
             scamp -astref_catalog  $refcat -save_refcatalog Y \
@@ -11447,6 +11501,15 @@ END     " >> wcs/$b.src.ahead
                 -sn_thresholds 10,40 -match_resol $mres \
                 -mergedoutcat_type FITS_LDAC -mergedoutcat_name wcs/$b.match.dat \
                 $sopts $tmpcat 2>&1 | $cmd | grep -v "tmp.*reference pair.*processed'"
+            test ! -f scamp.xml &&
+                echo "ERROR: scamp failed." >&2 &&
+                echo scamp -astref_catalog  $refcat -save_refcatalog Y \
+                $plotparams $photparams $posparams \
+                -astrefmag_limits -99,$maglim -distort_degrees $fitdegrees \
+                -sn_thresholds 10,40 -match_resol $mres \
+                -mergedoutcat_type FITS_LDAC -mergedoutcat_name wcs/$b.match.dat \
+                $sopts $tmpcat >&2 &&
+                return 255
             vizcat=$(ls -tr *cat | grep -i "^$refcat" | tail -1)
             test ! "$vizcat" &&
                 echo "ERROR: download of reference catalog failed" >&2 &&
@@ -11455,8 +11518,25 @@ END     " >> wcs/$b.src.ahead
         fi
         
         mv ${tmpcat%.*}.head $b.wcs.head
-        test "$nocheckplots" || for p in {fgroups,distort,astr_referror}*png
-        do mv $p wcs/$b.$p; done
+        case $plotdev in
+            NULL)   ;;
+            SVG)    for p in {fgroups,distort,astr_referror}*svg
+                    do
+                        rsvg-convert $p > wcs/$b.${p%.*}.png && rm $p
+                    done
+                    ;;
+            PNG)    for p in {fgroups,distort,astr_referror}*png
+                    do
+                        mv $p wcs/$b.$p
+                    done
+                    ;;
+            *)      for p in {fgroups,distort,astr_referror}*
+                    do
+                        mv $p wcs/$b.$p
+                    done
+                    echo "WARNING: not converting checkplots ($plotdev)." >&2
+                    ;;
+        esac
 
         # TODO: propagate some header keywords to $b.wcs.head, e.g.
         #   EXPTIME,NEXP,MJD_REF,MJD_OBS,MAGZERO,GAIN,SATURATE
@@ -13563,8 +13643,8 @@ physical" > $tmpreg
                     $1, $2, $3, $6, $6, $6, 0, 0, 0, 0, $7)
             }' > $compphot
         fi
-        echo "# removing $(cat $compphot | wc -l) field stars" >&2
     fi
+    echo "# removing $(cat $compphot | wc -l) field stars" >&2
     
     
     # ----------------------------------
@@ -13576,6 +13656,7 @@ physical" > $tmpreg
         echo "reusing existing $outpsf" >&2
     else
         # create first approx of psf
+        echo "$(date +'%H:%M:%S') first iteration"
         test "$AI_DEBUG" &&
             echo "AIstarcombine $resampopts $img $psfphot $tmppsf $psfsize $scale" >&2
         AIstarcombine $resampopts $img $psfphot $tmppsf $psfsize $scale
@@ -13606,6 +13687,7 @@ physical" > $tmpreg
             return 255
 
         # create new psf
+        echo "$(date +'%H:%M:%S') second iteration"
         pnmccdred -d $tmpim1 $img $tmpim2
         AIstarcombine $resampopts $tmpim2 $psfphot $tmppsf $psfsize $scale
         cp -p $tmppsf $outpsf
@@ -13626,7 +13708,7 @@ physical" > $tmpreg
 
     # TODO: measure residuals for each psf star
     pnmccdred -a $((bgres-psfoff)) -d $tmpim1 $img $outresid
-    echo "residual image: $outresid" >&2
+    echo "# residual image: $outresid" >&2
 
     # reject most deviating psf stars
     # rebuild psf
@@ -14715,9 +14797,16 @@ ds9cmd () {
                     *)      ;;
                 esac
                 ;;
-        regstat) set=$1
-                img=$2
-                echo "running regstat $set $img"
+        regstat) img=$2
+                echo "running regstat \"$img\""
+                
+                if [ -z "$img" ]
+                then
+                    img=$(xpaget $ds9name fits header keyword AI_IMAGE)
+                    test "$img" && echo "# img=$img"
+                fi
+                test ! -e "$img" && echo "ERROR: missing image $img" >&2 &&
+                    echo >&2 && return 255
                 
                 # measure stats for every single region
                 printf "%6s %-5s  %-6s %-7s %-6s\n" \
@@ -14739,7 +14828,8 @@ ds9cmd () {
                 catalog=$2
                 maglim=$3
                 thres=$4
-                echo "running wcscalib $set $catalog $maglim $thres"
+                opts=$5
+                echo "running wcscalib $set $catalog $maglim $thres \"$opts\""
                 
                 # get approximate north position angle
                 angle=$(get_header -q $set.head AI_NPA)
@@ -14761,23 +14851,52 @@ ds9cmd () {
                 mzero=$(get_header -q $set.head MAGZERO)
                 test -z "$mzero" && mzero=$(get_param camera.dat magzero $set AI_MAGZERO)
                 
-                AI_MAGZERO=$mzero AIwcs -f $set $catalog $maglim "" "" $angle $thres
+                AI_MAGZERO=$mzero AIwcs $opts -f $set $catalog $maglim "" "" $angle $thres
                 test $? -eq 0 && test -s $set.wcs.head &&
-                    xdg-open $(ls wcs/$set*.png | head -1) &
+                    ls wcs/$set*.png > /dev/null 2>&1 &&
+                    display wcs/$set*.png &
                 echo "$cmd finished"
                 echo ""
                 ;;
-        bggradient) set=$1
-                starstack=$2
-                cometstack=$3
-                bgmult=$4
-                badbg=bgcorr/$set.badbg.reg
-                echo "running bggradient $set $starstack \"$cometstack\" $bgmult"
-                
+        bggradient) img=$1
+                bgmult=$2
+                echo "running bggradient \"$img\" $bgmult"
+
+                # get image name
+                if [ -z "$img" ]
+                then
+                    img=$(xpaget $ds9name fits header keyword AI_IMAGE)
+                    test "$img" && echo "# img=$img"
+                fi
+                test ! -e "$img" && echo "ERROR: missing image $img" >&2 &&
+                    echo >&2 && return 255
+
                 # determine input image type
                 ext=""
-                is_pgm $starstack && ext="pgm"
-                is_ppm $starstack && ext="ppm"
+                is_pgm $img && ext="pgm"
+                is_ppm $img && ext="ppm"
+                
+                # determine set name and badbg region file
+                set=$(basename ${img%%.*})
+                badbg=bgcorr/$set.badbg.reg
+                
+                # check for cometstack
+                cometstack=$(xpaget $ds9name fits header keyword AI_COMST)
+                # fallback for older airfun versions
+                test -z "$cometstack" && test -e ${set}_m.$ext &&
+                    cometstack=${set}_m.$ext
+                test -z "$cometstack" && test -e ${set}_cs.$ext &&
+                    cometstack=${set}_cs.$ext
+                test "$cometstack" && test ! -e "$cometstack" &&
+                    echo "ERROR: missing comet stack $cometstack" >&2 &&
+                    echo >&2 && return 255
+                
+                # info
+                test -z "$cometstack" &&
+                    echo "WARNING: no comet stack" >&2 &&
+                    echo "# using badbg=$badbg"
+                test "$cometstack" &&
+                    echo "# using badbg=$badbg cometstack=$cometstack"
                 
                 bgimg=""
                 test -f bgcorr/$set.bgm${bgmult}.$ext    && bgimg=bgcorr/$set.bgm${bgmult}.$ext
@@ -14808,10 +14927,10 @@ ds9cmd () {
                 if [ "$bgimg" ]
                 then
                     echo "creating bg corrected images ..."
-                    imbgsub $starstack   $bgimg "" $bgmult > ${starstack%.*}.bgs.$ext
+                    imbgsub $img   $bgimg "" $bgmult > ${img%.*}.bgs.$ext
                     test "$cometstack" &&
                         imbgsub $cometstack  $bgimg "" $bgmult > ${cometstack%.*}.bgs.$ext
-                    AIexamine ${starstack%.*}.bgs.$ext
+                    #AIexamine ${starstack%.*}.bgs.$ext
                 fi
                 echo "displaying check images ..."
                 #AIexamine $set.bgs.$ext &
@@ -14991,18 +15110,38 @@ ds9cmd () {
                 echo "$cmd finished"
                 echo ""
                 ;;
-        regphot) set=$1
-                img=$2
-                photcat=$3
-                bgrgb=${4:-400}
-                ddiff=${5:-""}   # double star with given mag diff
-                echo "running: regphot $set $img $photcat $bgrgb $ddiff"
+        regphot) img=$1
+                bgrgb=${2:-400}
+                #ddiff=${5:-""}   # double star with given mag diff
+                echo "running: regphot \"$img\" $photcat $bgrgb"
+                
+                # get image name
+                if [ -z "$img" ]
+                then
+                    img=$(xpaget $ds9name fits header keyword AI_IMAGE)
+                    test "$img" && echo "# img=$img"
+                fi
+                test ! -e "$img" && echo "ERROR: missing image $img" >&2 &&
+                    echo >&2 && return 255
+
+                # derive set name from header file name
+                str=$(basename $(readlink -f ${img%.*}.head))
+                set=${str%%.*}
+                photcat=comet/$set.newphot.dat
+                test ! -e $photcat &&
+                    echo "ERROR: missing photcat=$photcat" >&2 &&
+                    return 255
+                echo "# set=$set photcat=$photcat"
+                
                 npix=$(identify $img | cut -d ' ' -f3 | awk -F 'x' '{print $1*$2}')
                 xpaset -p $ds9name regions color red
                 xpaset -p $ds9name regions save $tmp1
                 xpaset -p $ds9name regions save x.empty.reg
                 xpaset -p $ds9name regions color green
-
+                ! grep -q "color=red" $tmp1 &&
+                    echo "ERROR: no region selected." >&2 &&
+                    echo && return 255
+                
                 echo -e "# Region file format: DS9 version 4.1
 global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" \
 select=1 highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 include=1 source=1
@@ -15020,12 +15159,7 @@ physical" > $tmpreg
                         if(NR>1) printf(","); printf("%.1f", $2*n/a)
                     }')
                 echo "id=\""$id"\"  narea=$narea  cnt=$cnt"
-                if [ "$ddiff" ]
-                then
-                    newmag -d $ddiff $set $photcat "$id" $narea $cnt 1 $bgrgb
-                else
-                    newmag $set $photcat "$id" $narea $cnt 1 $bgrgb
-                fi
+                newmag $set $photcat "$id" $narea $cnt 1 $bgrgb
                 test $? -ne 0 &&
                     echo "ERROR: in newmag $set $photcat \"$id\" $narea $cnt 1 $bgrgb"
                 echo ""
@@ -15409,6 +15543,6 @@ then
         echo "WARNING: day in not defined." >&2
     test "$day"    &&
         aiddir=$(echo $(pwd) | tr '/' '\n' | grep $day | tail -1)
-    test "${aiddir%[a-z]}" != "$day" &&
+    test "${aiddir/%[a-z]*/}" != "$day" &&
         echo "WARNING: day '$day' does not belong to working dir." >&2
 fi

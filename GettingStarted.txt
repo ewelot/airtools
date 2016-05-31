@@ -67,21 +67,28 @@ been decided on to best suit programs from ImageMagick and Netpbm toolkits and
 to handle DSLR images in first place.
 
 The conversion of a single color FITS image is done by using the command line
-program meftopnm. In addition, FITS header data are extracted to an ASCII
-header file (for star stack only):
+program meftopnm:
 
-    meftopnm <star_stack_fits>   >  <set>.pgm
-    listhead <star_stack_fits>   >  <set>.head
-    meftopnm <comet_stack_fits>  >  <set>_cs.pgm
+    meftopnm <star_stack_fits>     >  <set>.pgm
+
+In addition, FITS header data are extracted to an ASCII header file (required
+for star stack only):
+
+    meftopnm -a <star_stack_fits>  >  <set>.head
 
 Currently, the file name of the star stack PGM/PPM image and associated ASCII
 header file must start with the image set name as defined in set.dat.
+
+Typically, a comet observation will result in a second image stack centered on
+the comet. This image is converted similarly:
+
+    meftopnm <comet_stack_fits>    >  <set>_cs.pgm
 
 
 5. Image metadata
 -------------------
 
-The created ASCII header files should be checked for required keywords. There
+The created ASCII header file should be checked for required keywords. There
 is a template file /usr/local/share/airtools/example.head which can be used as
 reference.
 
@@ -90,7 +97,12 @@ Additional information must be supplied:
 - approximate position angle of true celestial north (from top over left),
   if north is not at top of stacked images
 
+Example command:
+
+    set_header <set>.head AI_TELID=P300 AI_NPA=20
+
 Comet observations must also include
+- the file name of the related comet stack
 - approximate length of star trails on comet stack in pixels (note: a more
   accurate modelling of the comet trail can be achieved by providing a text
   file containing dates of individual exposures)
@@ -98,7 +110,7 @@ Comet observations must also include
 
 Example commands:
 
-    set_header <set>.head AI_TELID=P300 AI_NPA=20 AI_TRAIL=5
+    set_header <set>.head AI_COMST=<set>_cs.pgm AI_TRAIL=5
     get_mpcephem -w <set>
 
 

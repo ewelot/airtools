@@ -80,25 +80,25 @@ aircmd.sh regswitch |& $text
 Statistics in image regions (s)
 *
 menu
-$param(regstat); aircmd.sh regstat $set $img |& $text
+$param(regstat); aircmd.sh regstat "$image" |& $text
  
 
 Region Photometry (r)
 *
 menu
-$param(regphot); aircmd.sh regphot $set $image $photcat $bgrgb $ddiff |& $text
+$param(regphot); aircmd.sh regphot "$image" $bgrgb |& $text
 ---
 
 Astrometric calibration (w)
 *
 menu
-$param(wcscalib); aircmd.sh wcscalib $set $catalog $maglim $thres |& $text
+$param(wcscalib); aircmd.sh wcscalib $set $catalog $maglim $thres "$opts" |& $text
 
 
 Remove background gradient (b)
 *
 menu
-$param(bggradient); aircmd.sh bggradient $set $starstack "$cometstack" $bgmult |& $text
+$param(bggradient); aircmd.sh bggradient "$starstack" $bgmult |& $text
 
 
 PSF Extraction (e)
@@ -130,7 +130,7 @@ $param(photcal); aircmd.sh photcal $set $catalog "$aprad" "$topts" "$aopts" "$sk
 Show info about current image set
 *
 bind i
-$param(airtools); aircmd.sh setinfo $set |& $text
+$param(airtools); aircmd.sh setinfo "$image" |& $text
 
 Set display contrast
 *
@@ -140,7 +140,7 @@ aircmd.sh dcontrast |& $text
 Test parameter handling
 *
 bind t
-$param(airtools); aircmd.sh test $set $img |& $text
+$param(airtools); aircmd.sh test "$image" |& $text
 
 Switch Region Marker On/Off
 *
@@ -151,22 +151,22 @@ aircmd.sh regswitch |& $text
 Statistics in image regions
 *
 bind s
-$param(regstat); aircmd.sh regstat $set $img |& $text
+$param(regstat); aircmd.sh regstat "$image" |& $text
  
 Region photometry
 *
 bind r
-$param(regphot); aircmd.sh regphot $set $image $photcat $bgrgb $ddiff |& $text
+$param(regphot); aircmd.sh regphot "$image" $bgrgb |& $text
 
 Astrometric calibration
 *
 bind w
-$param(wcscalib); aircmd.sh wcscalib $set $catalog $maglim $thres |& $text
+$param(wcscalib); aircmd.sh wcscalib $set $catalog $maglim $thres "$opts" |& $text
 
 Remove background gradient
 *
 bind b
-$param(bggradient); aircmd.sh bggradient $set $starstack "$cometstack" $bgmult |& $text
+$param(bggradient); aircmd.sh bggradient "$starstack" $bgmult |& $text
 
 PSF extraction
 *

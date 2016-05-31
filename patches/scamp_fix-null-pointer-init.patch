@@ -1,0 +1,13 @@
+--- scamp-2.0.4-orig/src/astrefcat.c	2014-07-09 11:04:30.000000000 +0200
++++ scamp-2.0.4/src/astrefcat.c	2015-08-14 11:58:17.183022630 +0200
+@@ -1190,8 +1190,8 @@
+    int			n, nsample,nsamplemax, nobj, objflags, maglimflag;
+ 
+ /* One needs 2 angular coordinates here! */
+-  dxm = dym = dmag = derra = derrb = NULL;
+-  xm = ym = mag = erra = errb = NULL;
++  dxm = dym = dmag = dmagerr = derra = derrb = NULL;
++  xm = ym = mag = magerr = erra = errb = NULL;
+   maxradius2 = maxradius*maxradius;
+   dfac = (lng!=lat)? cos(wcspos[lat]*DEG) : 1.0;
+ 

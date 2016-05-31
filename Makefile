@@ -7,6 +7,7 @@ PACKAGE = airtools
 BINDIR = $(prefix)/bin
 DATADIR = $(prefix)/share/$(PACKAGE)
 EXTDIR = extern
+PATCHDIR = patches
 PKGDIR = ..
 DATA = data/*
 DOCS = README GettingStarted.txt
@@ -112,8 +113,13 @@ extract_astromatic:
 		test -d $(EXTDIR)/$$prog* && continue; \
 		echo "extracting $$prog"; \
 		tar -C $(EXTDIR) -xf $(PKGDIR)/$$prog*tar*; \
+		for pfile in $(PATCHDIR)/*; do \
+			basename $$pfile | grep -q "^$$prog"_ || continue; \
+			echo "applying patch $$pfile"; \
+			(cd $(EXTDIR); patch -p0 < ../$$pfile); \
+		done \
 	done
-
+		
 sextractor scamp:
 	test ! -d $(EXTDIR)/$@* || \
 	(cd $(EXTDIR)/$@*; \
