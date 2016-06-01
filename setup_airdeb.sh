@@ -13,7 +13,7 @@
 #   linuxmint 17.3 (cinnamon, xfce)
 ################################################################
 VERSION="1.0"
-VINFO="T. Lehmann, May. 2016"
+VINFO="T. Lehmann, Jun. 2016"
 PINFO="\
     options:
       h         show this help text
@@ -23,18 +23,23 @@ PINFO="\
       -
 "
 CHANGELOG="
-    1.0  - 31 May 2016
-         * initial release
+    1.0  - 01 Jun 2016
+         * free additional space by removing development packages
+         * determine latest release by using github api
 
-    0.9  - 21 May 2016
-         * test release
+    0.9  - 31 May 2016
+         * added support for wide range of debian/ubuntu based distributions
+         * move install and build files to /tmp
+
+    0.8  - 21 May 2016
+         * initial version for xubuntu 14.04 and debian 8.4
 "
 
 
 #--------------------
 #   user definitions
 #--------------------
-sources=https://github.com/ewelot/airtools/archive/1.0.1.tar.gz
+repo=https://github.com/ewelot/airtools
 extdir=https://github.com/ewelot/temp/raw/master
 vboxdir=http://download.virtualbox.org/virtualbox
 
@@ -58,6 +63,7 @@ shorthelp ()
 #--------------------
 luser=""        # local user on vm host
 opts=""
+sources=""
 while getopts hp:l: c
 do
     case $c in
@@ -110,6 +116,7 @@ fi
 #tmp1=$(mktemp "/tmp/tmp_txt1_$$.XXXXXX")
 
 # get release name (e.g. xenial)
+lsb_release -a | tee -a $log
 release=$(lsb_release -s -c)
 
 
@@ -141,6 +148,12 @@ installation."
 fi
 
 
+# check if we run ubuntu-mate desktop (requires some tweaks)
+ubuntu_mate=""
+dpkg -l | grep -q "ii[ ]*ubuntu-mate-core" &&
+    ubuntu_mate=1
+
+
 # ubuntu 16.04 requires additional repositories
 case $release in
     xenial) sudo apt-add-repository universe
@@ -160,10 +173,34 @@ then
     sudo apt-get update -q
 fi
 
-# install build-essential (required for ubuntu-mate 16.04) zenity vim
-sudo apt-get -y install build-essential
-sudo apt-get -y install zenity vim
+# install zenity, wget, curl
+(dpkg -l | grep -q "ii[ ]*zenity " &&
+dpkg -l | grep -q "ii[ ]*wget " && 
+dpkg -l | grep -q "ii[ ]*curl ") ||
+    sudo apt-get -y install zenity wget curl
 sudo apt-get clean
+type -p zenity > /dev/null && zen=1
+
+# find latest airtools release
+if [ -z "$sources" ]
+then
+    url=$(curl -s ${repo/github.com/api.github.com\/repos}/releases | \
+        grep tarball_url | head -n 1 | cut -d '"' -f 4)
+    test -z "$url" &&
+        echo "ERROR: cannot determine latest release tag." >&2 &&
+        read && exit -1
+    tag=$(basename $url)
+    sources=https://github.com/ewelot/airtools/archive/$tag.tar.gz
+    echo "sources=$sources" | tee -a $log
+fi
+
+
+# install build-essential (required on ubuntu-mate 16.04)
+if [ "$ubuntu_mate" ]
+then
+    dpkg -l | grep -q "ii[ ]*build-essential" ||
+        sudo apt-get -y install build-essential
+fi
 
 
 # disable some autostart applications
@@ -280,12 +317,23 @@ EOF
 
         # add autostart script
         test -d ~/.config/autostart/ || mkdir ~/.config/autostart/
+        if [ "$ubuntu_mate" ]
+        then
         cat <<EOF > ~/.config/autostart/continue.desktop
 [Desktop Entry]
 Type=Application
 Name=Continue Install
 Exec=x-terminal-emulator -e /tmp/continue.sh
 EOF
+        else
+        cat <<EOF > ~/.config/autostart/continue.desktop
+[Desktop Entry]
+Type=Application
+Name=Continue Install
+Exec=/tmp/continue.sh
+Terminal=true
+EOF
+        fi
 
         # restart X11 to initialize new vbox guest modules
         cat <<EOF > /tmp/restart-x11.sh
@@ -320,15 +368,16 @@ fi
 # killall VBoxClient
 # rm -f .vboxclient*
 # VBoxClient-all
-ps uxaw | grep -v grep | grep -q -i "vboxclient --clipboard" || \
+type -p VBoxClient > /dev/null &&
+    ! pgrep -l -f "vboxclient --clipboard" > /dev/null &&
     VBoxClient --clipboard
 # remove iso
 rm -f VBoxGuestAdditions_*.iso
 
 
 # airtools
-text="The AIRTOOLS software and sample data
-can be downloaded and installed now."
+text="The AIRTOOLS software ($(basename $sources))
+and sample data can be downloaded and installed now."
 if ! answer=$(zenity --question --title "Install AIRTOOLS" \
     --text "$text\n\nContinue?" 2>/dev/null); then
     exit -1;
@@ -338,6 +387,8 @@ fi
 test ! -d $builddir && mkdir -p $builddir || true
 test ! -d ~/astro && mkdir ~/astro || true
 cd $builddir
+(
+echo
 echo "Download airtools package ..."
 wget --content-disposition $sources
 test $? -ne 0 &&
@@ -363,6 +414,8 @@ test $? -ne 0 &&
 tar -C ~/astro -xf sample_160224.tar.gz
 test $? -ne 0 &&
     echo "ERROR: unpacking of sample data failed" >&2 && read && exit -1
+) 2>&1 | tee -a $log
+
 
 (
 echo
@@ -407,6 +460,21 @@ sudo make install_stilts
 cd
 
 (
+echo
+echo "Remove software packages which are not required anymore ..."
+sleep 4
+sudo apt-get -y remove libnetpbm10-dev libjasper-dev libjpeg-dev libcfitsio3-dev \
+    libtiff5-dev libfftw3-dev libblas-dev libatlas-base-dev libplplot-dev libshp-dev
+plist=$(apt-get -q -q -s autoremove | awk '{print $2}' | \
+    grep -E -- "-dev$|^libqt|^libplplot")
+sudo apt-get -y remove $plist
+plist=$(apt-get -q -q -s autoremove | awk '{print $2}' | \
+    grep -E "cmake|mysql-common|libcfitsio-doc|libtiffxx|libmng")
+test "$plist" && sudo apt-get -y remove $plist
+) 2>&1 | tee -a $log
+
+
+(
 echo "Remove buggy plplot12-driver-qt ..."
 sleep 4
 dpkg -l | grep -q "ii[ ]*plplot12-driver-qt" &&
@@ -426,8 +494,13 @@ language,name English bg white xpa 1 text,font,msg Courier tcl 0 \
 dialog,center 0 font,size 9 text,font,slant roman text,font,size 9 }" > ~/.ds9.prf
             ;;
 esac
+echo "# free" >> $log
+free >> $log
+echo "# df" >> $log
+df >> $log
 
 
+echo
 echo
 echo "#############################"
 echo "    Installation finished"
@@ -443,12 +516,12 @@ if answer=$(zenity --question --title "Temp files" \
     rm -rf $builddir
     rm -f ~/.config/autostart/continue.desktop
 fi
-clear
-free=$(echo $(df --output=avail -h / | tail -1))
 
+clear
+free=$(echo $(df --output=avail -h ~/$sdir | tail -1))
 text="We are now ready to start the AIRTOOLS
 software using sample data located in the
-folder $sdir.
+folder $sdir. T
 (Note: free disk space is $free)"
 if answer=$(zenity --question --title "Sample data" \
     --text "$text\n\nStart airtools using sample data?" 2>/dev/null); then
