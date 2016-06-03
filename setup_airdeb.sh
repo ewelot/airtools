@@ -12,7 +12,7 @@
 #   xubuntu 16.04 15.10 14.04
 #   linuxmint 17.3 (cinnamon, xfce)
 ################################################################
-VERSION="1.0"
+VERSION="1.0.1"
 VINFO="T. Lehmann, Jun. 2016"
 PINFO="\
     options:
@@ -23,6 +23,10 @@ PINFO="\
       -
 "
 CHANGELOG="
+    1.0.1 - 03 Jun 2016
+         * fixed typo and improved some text messages
+         * added --no-wrap option to zenity commands (question dialogs)
+
     1.0  - 01 Jun 2016
          * free additional space by removing development packages
          * determine latest release by using github api
@@ -42,11 +46,12 @@ CHANGELOG="
 repo=https://github.com/ewelot/airtools
 extdir=https://github.com/ewelot/temp/raw/master
 vboxdir=http://download.virtualbox.org/virtualbox
+demo=http://youtu.be/sK9D_M06ovA
 
 prog=$(readlink -e $0)
 builddir=/tmp/build-airtools
-sdir=astro/160224
-log=~/install.log
+sdir=astro/160224   # relative to $HOME
+log=$HOME/install.log
 
 
 #--------------------
@@ -54,7 +59,7 @@ log=~/install.log
 #--------------------
 shorthelp ()
 {
-    echo "usage: $(basename $0) [-h] [-p http://proxyhost:port] [-l localuser]"
+    echo "usage: $(basename $0) [-h] [-p http://proxyhost:port] [-l localuser] [-s]"
 }
 
 
@@ -63,8 +68,8 @@ shorthelp ()
 #--------------------
 luser=""        # local user on vm host
 opts=""
-sources=""
-while getopts hp:l: c
+use_local_sources=""
+while getopts hp:l:s c
 do
     case $c in
         h)  shorthelp
@@ -84,10 +89,12 @@ do
             opts="$opts -p $http_proxy"
             ;;
         l)  luser=$OPTARG
-            sources="10.0.2.2/~"$luser/airtools.tar.gz
             extdir="10.0.2.2/~"$luser
             vboxdir="10.0.2.2/~"$luser
             opts="$opts -l $luser"
+            ;;
+        s)  use_local_sources=1
+            opts="$opts -s"
             ;;
         \?) exit -1
             ;;
@@ -134,7 +141,7 @@ installation."
 
     if [ "$zen" ]
     then
-        if answer=$(zenity --question --title "Install AIRTOOLS" \
+        if answer=$(zenity --no-wrap --question --title "Install AIRTOOLS" \
             --text "$text\n\nAbort?" 2>/dev/null); then
             exit -1;
         fi
@@ -181,9 +188,14 @@ dpkg -l | grep -q "ii[ ]*curl ") ||
 sudo apt-get clean
 type -p zenity > /dev/null && zen=1
 
-# find latest airtools release
-if [ -z "$sources" ]
+# find airtools sources
+if [ "$use_local_sources" ] && [ "$luser" ]
 then
+    url=""
+    tag=""
+    sources="10.0.2.2/~"$luser/airtools.tar.gz
+else
+    # grab latest release
     url=$(curl -s ${repo/github.com/api.github.com\/repos}/releases | \
         grep tarball_url | head -n 1 | cut -d '"' -f 4)
     test -z "$url" &&
@@ -191,8 +203,8 @@ then
         read && exit -1
     tag=$(basename $url)
     sources=https://github.com/ewelot/airtools/archive/$tag.tar.gz
-    echo "sources=$sources" | tee -a $log
 fi
+echo "sources=$sources" | tee -a $log
 
 
 # install build-essential (required on ubuntu-mate 16.04)
@@ -233,7 +245,7 @@ size manually (see documentation of your VM software)."
 
         if [ "$zen" ]
         then
-            if ! answer=$(zenity --question --title "No VirtualBox" \
+            if ! answer=$(zenity --no-wrap --question --title "No VirtualBox" \
                 --text "$text\n\nContinue anyway?" 2>/dev/null); then
                 exit -1;
             fi
@@ -369,16 +381,24 @@ fi
 # rm -f .vboxclient*
 # VBoxClient-all
 type -p VBoxClient > /dev/null &&
-    ! pgrep -l -f "vboxclient --clipboard" > /dev/null &&
+    ! pgrep -l -f "VBoxClient --clipboard" > /dev/null &&
     VBoxClient --clipboard
 # remove iso
 rm -f VBoxGuestAdditions_*.iso
 
 
 # airtools
-text="The AIRTOOLS software ($(basename $sources))
-and sample data can be downloaded and installed now."
-if ! answer=$(zenity --question --title "Install AIRTOOLS" \
+version=$(basename $sources)
+test "$tag" && version="Version $tag"
+text="The AIRTOOLS software ($version)
+can be installed now.
+
+This includes download of all required
+software components and sample data
+(~200MB) and the full compilation and
+installation procedure.
+"
+if ! answer=$(zenity --no-wrap --question --title "Install AIRTOOLS" \
     --text "$text\n\nContinue?" 2>/dev/null); then
     exit -1;
 fi
@@ -511,23 +531,30 @@ sleep 3
 text="There are temporary files from the
 download/installation process which can
 be deleted now to free some disk space."
-if answer=$(zenity --question --title "Temp files" \
+if answer=$(zenity --no-wrap --question --title "Temp files" \
     --text "$text\n\nDelete temp files?" 2>/dev/null); then
     rm -rf $builddir
     rm -f ~/.config/autostart/continue.desktop
 fi
 
 clear
-free=$(echo $(df --output=avail -h ~/$sdir | tail -1))
-text="We are now ready to start the AIRTOOLS
-software using sample data located in the
-folder $sdir. T
-(Note: free disk space is $free)"
-if answer=$(zenity --question --title "Sample data" \
+free=$(echo $(df --output=avail -h $HOME/$sdir | tail -1))
+text="We are ready to start the AIRTOOLS
+software using sample data.
+
+You could now follow the steps from the screencast
+demo at   <i>$demo</i>
+If you intent to walk through all analysis tasks
+you will need about 200MB of free disk space.
+
+Current free disk space: $free
+Location of sample data: \$HOME/$sdir
+"
+if answer=$(zenity --no-wrap --question --title "Start AIRTOOLS" \
     --text "$text\n\nStart airtools using sample data?" 2>/dev/null); then
     echo
     echo "Starting airtools ..."
-    cd ~/$sdir
+    cd $sdir
     nohup ./startup.sh > startup.log 2>&1
 fi
 
