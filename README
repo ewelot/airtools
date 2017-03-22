@@ -1,48 +1,34 @@
 
 AIRTOOLS is a collection of programs to aim at astronomical image reduction
 of both CCD and DSLR observations on Linux. The main tasks are implemented as
-shell functions (bash) in a single file airfun.sh. These functions are build
+shell functions (bash) in a file airfun.sh. These functions are build
 around many tools readily available for most Linux desktops, including
 - ImageMagick
+- GraphicsMagick
 - Netpbm
 - WCSTools
 - Gnuplot
-- XPA messaging tools
 
-The primary intention of the airtools software is the analysis of comet
-observations. New procedures were developed to measure the total coma
-brightness. Those image reduction steps are easily accessible as analysis
-tasks from the SAOImage display GUI.
+The primary intention of the airtools software is the photometric analysis
+of comet observations. New procedures were developed to measure the total coma
+brightness. Those image processing steps are easily accessible by means of
+analysis tasks in the SAOImage display GUI.
 
 
-The shell functions also involve powerful third party software used in
-professional astronomy, which is freely available but not (yet) packaged by
-most Linux distributions and therefore must be installed separately:
+The underlying shell functions make use of powerful third party software
+commonly used in professional astronomy:
 
+- SAOImage DS9 - image display and GUI (http://ds9.si.edu/site/Home.html)
 - Astromatic software: sextractor, scamp, skymaker, stiff, swarp
   (by E. Bertin, http://www.astromatic.net)
-- stilts - table processing (by M. Taylor, http://www.starlink.ac.uk/stilts/)
-- SAOImage DS9 - image display and GUI (http://ds9.si.edu/site/Home.html)
-
-In addition, subsets of some smaller tools are used:
-
-- cdsclient for fast access to astronomical databases at CDS
-  (http://cdsweb.u-strasbg.fr/doc/cdsclient.html)
-- cexamples FITS routines
+- Stilts - table processing (by M. Taylor, http://www.starlink.ac.uk/stilts/)
+- Cexamples FITS routines
   (http://heasarc.gsfc.nasa.gov/docs/software/fitsio/cexamples.html)
 
 
-For your convenience, sources of all external programs have been bundled in
-a single archive which can be downloaded via
-    https://github.com/ewelot/temp/raw/master/bundle3rd.tar
-
-Instructions on compilation/installation of all required software components
+Instructions for compilation/installation of all required software components
 can be found in the INSTALL file.
 
-In addition the software can be tested on any operating system without altering
-the current system by running a Linux Live-CD/DVD in a virtual machine (e.g.
-VirtualBox). The script
-    https://github.com/ewelot/airtools/raw/master/setup_airdeb.sh
-can be used on a live CD from a Debian/Ubuntu based Linux distribution to
-have an almost automatic download/compile/install procedure and finally starts
-the software using some sample data.
+Additional documentation is provided under the doc directory, e.g. there is
+a guide on howto setup the AIRTOOLS software on computers without a Linux
+installation: https://github.com/ewelot/airtools/doc/README.Windows

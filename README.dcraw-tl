@@ -1,0 +1,25 @@
+
+# README.dcraw-tl
+
+The original source of dcraw is http://www.cybercom.net/~dcoffin/dcraw/.
+I modified the source in several ways, most notably aiming the following
+goals:
+
+- Allow for late dark frame subtraction:
+Originally the dark frame is at the same bit depth as the camera. It is
+subtracted before scaling the intensities to full 16bit range. This is not
+optimal if you intend to average many low-noise images to create a master
+dark which is applied to a set of multiple exposures of your target (e.g.
+deep sky objects).
+Late dark subraction means that the dark subraction is performed after
+stretching intensities to the 16bit range. The master dark itself must be
+scaled to 16bit - with the benefit of a higher dynamic range.
+
+- Allow for flat field correction:
+Originally the flat field division is performed on the dark subtracted
+debayered images which is the result of some color interpolation by dcraw.
+This way it is not possible to correct for a per-pixel variation of
+detector sensitivity.
+I added flat field correction into dcraw before color interpolation.
+Therefore a (gray) flatfield is applied on the raw (gray) Bayer matrix
+image.

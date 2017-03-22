@@ -1,60 +1,55 @@
 
 
-Software Requirements:
------------------------
+Installation of binary packages
+--------------------------------
 
-The AIRTOOLS software relies on a number of other programs to be present on
-runtime. Many of those are available in the form of software packages from
-your Linux distribution. Installation on a Debian/Ubuntu-based distribution
-is done via the following command (run as root):
+Binary packages are provided for two Linux distributions:
+- Ubuntu 16.04 (Xenial) and variants like XUbuntu
+- Debian 8 (Jessie)
 
-    apt-get update
-    apt-get install imagemagick xpa-tools wcstools gnuplot-x11 \
-        librsvg2-bin potrace exiftool curl wget gawk default-jre
+Installation from public package repository:
+Not yet available.
+
+Alternative installation from GitHub repository:
+- Download install script from
+    https://github.com/ewelot/airtools/raw/master/install_deb.sh
+- Open terminal window in your download folder
+- Run the install script by the command:
+    sudo bash install_deb.sh
 
 
-Build dependencies:
---------------------
+Compiling and Installation from source code
+--------------------------------------------
 
-Building the included C programs and those from third party software depends
-on a number of libraries which can be installed via:
+If there is no binary package repository for your distribution then you
+have to compile the software and install it afterwards. The compilation depends
+on a number of libraries. On a Debian/Ubuntu based distribution they can be
+installed via:
 
     apt-get install libnetpbm10-dev libjasper-dev libjpeg-dev libcfitsio3-dev \
         libtiff5-dev libfftw3-dev libblas-dev libatlas-base-dev \
-        libplplot-dev plplot12-driver-xwin plplot12-driver-cairo libshp-dev
+        libplplot-dev plplot12-driver-xwin plplot12-driver-cairo libshp-dev \
+        libcurl4-gnutls-dev
+
+If you are compiling from source packages you must also install the
+required build tools:
+
+    apt-get install build-essential fakeroot devscripts debhelper \
+        javahelper dh-autoreconf
+
+Example compilation:
+    ...
+
+Example installation:
+    ...
 
 
-Installation:
---------------
+Known Bugs
+-----------
 
-Default installation prefix is /usr/local, which means binaries are installed
-in /usr/local/bin. While the compilation is done as a regular user, the
-installation into system directories requires root privileges. Many systems
-use 'sudo' to achive this.
-
-Installation consists of several steps.
-
-Unpacking archives (in any temporary directory):
-    tar xf airtools-*tar.gz
-    tar xf bundle3rd.tar
-
-Compiling and installing AIRTOOLS:
-    cd airtools-*
-    make
-    sudo make install
-
-Compiling and installing external software packages (from bundle3rd.tar):
-    make externc
-    sudo make install_externc
-    make astromatic
-    sudo make install_astromatic
-    sudo make install_ds9
-    sudo make install_stilts
-
-
-Troubleshooting plotting in scamp
-----------------------------------
-
-To prevent problems with buggy plplot drivers on some new linux systems
-it is advised to remove those drivers after successful compilation:
+Troubleshooting of plotting in scamp
+If you encounter problems when running the "Astrometric calibration" task
+and there is no check plots displayed then this might be caused by a buggy
+plplot driver on some Linux systems.
+In this case you should remove the package:
     sudo apt-get remove plplot12-driver-qt

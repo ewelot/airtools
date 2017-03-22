@@ -1,5 +1,3 @@
-# tel  flen  aperture  fratio   camera rawbits  satur   gain pixscale magzero ttype ctype
-GSO     800     200     4.0     K5IIs       14  55000   0.54    1.22    21.0    L   DSLR
-P300    300      75     4.0     K5IIs       14  55000   0.54    3.38    19.0    A   DSLR
-# remote telescopes (iTelescope)
-T12     530     106     5.0     STL11000M   16  30000   0.79    3.5     18.7    R   CCD
+# tel  flen  aperture  fratio   camera  rot rawbits satur   gain pixscale magzero ttype ctype
+GSO     800     200     4.0     K5IIs       -   14  55000   0.54    1.22    21.0    L   DSLR
+T14     530     106     5.0     STL11000M  -90  16  30000   0.79    3.5     18.7    R   CCD

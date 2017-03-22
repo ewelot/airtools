@@ -1,0 +1,166 @@
+
+
+1. Preparation
+----------------
+
+All basic astronomical image processing from raw uncalibrated CCD or DSLR
+images to final stacked images could be done by AIRTOOLS commands. But this is
+not covered in this guide because most users do already have their own pipeline
+using other - more commonly used - software to achieve the same results.
+
+It is required that the resulting stacked images have a linear response between
+collected photons and measured counts (ADU). Ideally the counts should be at
+approximately the same level as in a single raw (unprocessed) image optionally
+stretched to the 16bit range if the detector has lower bit depth.
+Moreover it is strongly advised to not subtract any background (e.g. gradients)
+at this stage.
+
+At the end of your comet image processing you should have created two stacked
+images: one centered on stars (hereafter referred to as star stack) and another
+one centered on the comet (called comet stack).
+
+
+
+2. Metadata files
+-------------------
+
+The following metadata files must be present in the working directory:
+set.dat    - observations data file
+camera.dat - telescope and camera data file
+sites.dat  - observatory sites data file
+refcat.dat - reference catalog meta data
+
+Templates of those files are provided under the directory
+/usr/share/airtools/
+
+
+2.1 The observations data file
+--------------------------------
+
+Usually an observation of a single target consists of multiple bracketed
+exposures - called an image set. Each set is represented by a line in the
+observations data text file set.dat. It consits of the following fields
+(separated by spaces):
+- approx start time
+- a short set name
+- the target
+- an image type letter: o=object d=dark/bias f=flat
+- exposure time in seconds
+- first image number (individual images have 4-digit numbers)
+- last image number
+- reference image number
+- name of dark image (without extension)
+- name of flat field image (without extension)
+- telescope identifier (as defined in camera.dat)
+- optional notes
+
+
+2.2 Supplemental metadata files
+---------------------------------
+
+Because of the widely spread sets of keywords used in FITS image headers
+as created by different image acquisition and data reduction software
+we need to define a common set of additional user provided data.
+
+At first you are required to add some information about your telescope/camera
+setup to the file camera.dat. It is text file containing tabular data
+and each setup is later referenced by its unique telescope identifier (the
+first field).
+
+In addition, basic data describing the location of your observatory site
+must be added to the file sites.dat. Either the site identifier (first field)
+or the location (second field) can be used when setting the AI_SITE variable
+(see below).
+
+There is no need to edit the refcat.dat text file.
+
+
+
+3. Application initialization and GUI startup
+-----------------------------------------------
+
+3.1 Initialization
+--------------------
+
+Start a new terminal emulator window which should come up with a BASH shell
+prompt. You must define a minimal set of environment variables:
+    day       ... the local date for start of night in the format yymmdd
+    AI_RAWDIR ... directory of raw data files
+    AI_TMPDIR ... directory to store temporary files
+    AI_SITE   ... your site as defined in sites.dat
+
+Example commands:
+    export day=160224
+    export AI_RAWDIR=./
+    export AI_TMPDIR=/tmp
+    export AI_SITE=MyLocation
+
+Load AIRTOOLS shell functions:
+
+    . airfun.sh
+
+
+3.2 Converting images
+-----------------------
+
+Most likely your stacked images are in FITS format. The AIRTOOLS software
+natively operates on Netpbm image file formats (PGM for monochrome, PPM for
+RGB images). This has originally been decided on to best suit programs like
+ImageMagick and Netpbm toolkits and to handle DSLR images in first place.
+
+The conversion of your FITS images and a check of basic header information
+is done by using the command line program AIstart:
+
+    AIstart <setname> <star_stack>.fits <comet_stack>.fits
+
+It creates three files in the current directory
+    star stack PNM image:   <setname>.pgm or <setname>.ppm
+    comet stack PNM image:  <setname>_m.pgm or <setname>_m.ppm
+    ASCII header file:      <setname>.head
+
+The new image file extension is "pgm" for monochrome input FITS images and
+"ppm" in case of RGB images.
+
+The program AIstart checks some basic image header keywords. It might report
+some errors which should be fixed by running the command
+
+    set_header <setname>.head <keyword>=<value>
+
+
+3.3 GUI startup
+-----------------
+
+All tasks required for large aperture photometry of comets are implemented
+as analysis tasks in the SAOImage display GUI which is started by the command
+
+    AIexamine <setname>.pgm <setname>_m.pgm &
+
+(note: for RGB images change image file extensions to ppm).
+
+The AIRTOOLS tasks are now available from the "Analysis" menu (bottom entries).
+
+
+
+4. Comet photometry
+---------------------
+
+The usual processing pipeline involves the following steps:
+- Astrometric calibration
+- Background gradient removal
+- PSF extraction
+- Comet extraction
+- Photometrc calibration
+
+After finishing your image reduction, you may savely remove some temporary
+files (name prefix x) from your working directory.
+
+
+
+5. Sample data
+----------------
+
+Sample images of a comet observation are provided by the following archive file
+    https://github.com/ewelot/temp/raw/master/sample_160224.tar.gz
+Download the file and unpack (double click starts archiver program) into a new
+directory.
+

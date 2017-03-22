@@ -7,6 +7,24 @@
 #   - any command is passed to aircmd.sh which in turn executes function
 #     ds9cmd from airfun.sh
 #
+# ChangeLog:
+#   2.1   25 Nov 2016
+#       * psfextract, cometphot: removed cometstack parameter
+#       * quote all optional parameters to allow empty settings
+#
+#   2.0   27 Sep 2016
+#       * wcscalib: first parameter changed from set to image name
+#         (airfun v2.8a2)
+#       * psfextract: bugfix to correctly deal with empty cometstack
+#
+#   1.2   16 Sep 2016
+#       * cometphot: bugfix to correctly deal with empty bgfit10 (airfun v2.7.4)
+#
+#   1.1   23 May 2016
+#       * updated to correspond with airfun v2.7.2
+#
+#   1.0   30 Apr 2016
+#       * first public release together with airfun 2.7.1
 
 
 # parameter files
@@ -86,31 +104,31 @@ $param(regstat); aircmd.sh regstat "$image" |& $text
 Region Photometry (r)
 *
 menu
-$param(regphot); aircmd.sh regphot "$image" $bgrgb |& $text
+$param(regphot); aircmd.sh regphot "$image" "$bgrgb" |& $text
 ---
 
 Astrometric calibration (w)
 *
 menu
-$param(wcscalib); aircmd.sh wcscalib $set $catalog $maglim $thres "$opts" |& $text
+$param(wcscalib); aircmd.sh wcscalib "$image" $catalog "$maglim" "$thres" "$opts" |& $text
 
 
 Remove background gradient (b)
 *
 menu
-$param(bggradient); aircmd.sh bggradient "$starstack" $bgmult |& $text
+$param(bggradient); aircmd.sh bggradient "$starstack" "$bgmult" |& $text
 
 
 PSF Extraction (e)
 *
 menu
-$param(psfextract); aircmd.sh psfextract $set $starstack $cometstack $rlim $merrlim $psfsize "$skip" |& $text
+$param(psfextract); aircmd.sh psfextract $set $starstack "$rlim" "$merrlim" "$psfsize" "$skip" |& $text
 
 
 Comet Extraction and Large Aperture Photometry (l)
 *
 menu
-$param(cometphot); aircmd.sh cometphot $set $starstack $cometstack $bgfit10 $comult |& $text
+$param(cometphot); aircmd.sh cometphot $set $starstack "$bgfit10" "$comult" |& $text
 
 
 Add data from manual measurements (m)
@@ -123,6 +141,7 @@ Photometric Calibration using Reference Catalog (p)
 *
 menu
 $param(photcal); aircmd.sh photcal $set $catalog "$aprad" "$topts" "$aopts" "$skip" |& $text
+
 
 
 # bind commands (keyboard shortcuts)
@@ -156,27 +175,27 @@ $param(regstat); aircmd.sh regstat "$image" |& $text
 Region photometry
 *
 bind r
-$param(regphot); aircmd.sh regphot "$image" $bgrgb |& $text
+$param(regphot); aircmd.sh regphot "$image" "$bgrgb" |& $text
 
 Astrometric calibration
 *
 bind w
-$param(wcscalib); aircmd.sh wcscalib $set $catalog $maglim $thres "$opts" |& $text
+$param(wcscalib); aircmd.sh wcscalib "$image" $catalog "$maglim" "$thres" "$opts" |& $text
 
 Remove background gradient
 *
 bind b
-$param(bggradient); aircmd.sh bggradient "$starstack" $bgmult |& $text
+$param(bggradient); aircmd.sh bggradient "$starstack" "$bgmult" |& $text
 
 PSF extraction
 *
 bind e
-$param(psfextract); aircmd.sh psfextract $set $starstack $cometstack $rlim $merrlim $psfsize "$skip" |& $text
+$param(psfextract); aircmd.sh psfextract $set $starstack "$rlim" "$merrlim" "$psfsize" "$skip" |& $text
 
 Comet Extraction and Large Aperture Photometry
 *
 bind l
-$param(cometphot); aircmd.sh cometphot $set $starstack $cometstack $bgfit10 $comult |& $text
+$param(cometphot); aircmd.sh cometphot $set $starstack "$bgfit10" "$comult" |& $text
 
 Add data from manual measurements
 *
