@@ -31,4 +31,4 @@ can be found in the INSTALL file.
 
 Additional documentation is provided under the doc directory, e.g. there is
 a guide on howto setup the AIRTOOLS software on computers without a Linux
-installation: https://github.com/ewelot/airtools/doc/README.Windows
+installation: https://github.com/ewelot/airtools/raw/master/doc/README.Windows

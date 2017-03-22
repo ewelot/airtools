@@ -3,7 +3,7 @@
 # download and install airtools packages from github
 echo "Starting $0 at $(date) ..."
 test "$DEBUG" && set -x
-trap 'echo ERROR: program aborted on line $LINENO.; exit -1' ERR
+#trap 'echo ERROR: program aborted on line $LINENO.; exit -1' ERR
 
 # process command line options
 package=airtools
@@ -24,7 +24,7 @@ test $? -ne 0 && (
 
 # download packages
 echo "
-Starting download ..."
+Starting download ($dist) ..."
 sleep 2
 test "$http_proxy" && set - ${http_proxy//:/ } && ph=${2#//} && pp=${3%/} &&
    svnopts="--config-option servers:global:http-proxy-host=$ph" &&
@@ -32,13 +32,19 @@ test "$http_proxy" && set - ${http_proxy//:/ } && ph=${2#//} && pp=${3%/} &&
 (cd $ddir && svn $svnopts checkout $url/trunk/$dist/main)
 
 # add local package repository
-aptsrc=/etc/apt/sources.list.d/$repo.list
+aptsrc=/etc/apt/sources.list.d/airtools-deb.list
 test ! -e $aptsrc && echo "deb file://$ddir main/" > $aptsrc
 apt-get update
 
 # install airtools
+test "$do_not_install" &&
+    echo "" && echo "Script $0 finished (without installation)." &&
+    exit 0
 echo "
 Installing $package ..."
 sleep 2
 apt-get -y --allow-unauthenticated install $package
+echo ""
 echo "Script $0 finished."
+
+exit 0
