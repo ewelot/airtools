@@ -10,7 +10,7 @@ BINDIR  = $(DESTDIR)/$(prefix)/bin
 DATADIR = $(DESTDIR)/$(prefix)/share/$(PACKAGE)
 DOCDIR  = $(DESTDIR)/$(prefix)/share/doc/$(PACKAGE)
 DATA	= data/*
-DOCS	= README README.dcraw-tl doc/*
+DOCS	= README* doc/*
 
 BIN 	= dcraw-tl pnmtomef pnmccdred pnmcombine
 BINSH 	= airfun.sh aircmd.sh
