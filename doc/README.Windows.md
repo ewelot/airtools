@@ -48,15 +48,17 @@ Other tweakings:
 ## 4. Boot Linux from Live-DVD
 Start booting your VM. You can choose your prefered language und start the
 live system (do not install it).
-Note on XUbuntu Linux: the application menu is activated by the top-left
+
+Notes on XUbuntu Linux: the application menu is activated by the top-left
 icon. The shutdown-button is located on that menu at bottom right position.
+For additional helpful documentation please visit http://docs.xubuntu.org/1604/.
 
 
-## 5. Installing airtools
+## 5. Install airtools
 Follow instructions from the [INSTALL](../INSTALL.md) file.
 
 
-## 6. Making your FITS image files available to Linux
+## 6. Make your FITS image files available to Linux
 Copy your images to an external USB disk (or pen drive). Plug-in the device
 on your host computer. Hand over the device to the VM by using the VM menu
 "Devices/USB".

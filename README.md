@@ -31,5 +31,5 @@ can be found in the file [INSTALL](INSTALL.md).
 
 Some information about how to start AIRTOOLS is given in a basic
 [GettingStarted](doc/GettingStarted.txt) file. Users who wish to setup the
-AIRTOOLS software on computers running a Windows or MacOS X should consult
-[README.Windows](doc/README.Windows.md).
+AIRTOOLS software on computers running a Windows operating system or MacOS X
+should consult the [README.Windows](doc/README.Windows.md) file.
