@@ -45,7 +45,8 @@ Example installation:
 
 Documentation is available under the `/usr/share/doc/airtools-doc/` directory
 after successful installation of the binary packages. The same content is
-visible on GitHub's [doc directory](https://github.com/ewelot/airtools/doc/).
+visible on GitHub's
+[doc directory](doc/).
 
 
 ## Known Problems

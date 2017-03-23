@@ -27,11 +27,9 @@ commonly used in professional astronomy:
 
 
 Instructions for compilation/installation of all required software components
-can be found in the file [INSTALL](https://github.com/ewelot/airtools/INSTALL.md).
+can be found in the file [INSTALL](INSTALL.md).
 
-Additional documentation is provided under the doc directory, e.g. a basic
-[GettingStarted](https://github.com/ewelot/airtools/doc/GettingStarted.txt)
-file and a guide
-[README.Windows](https://github.com/ewelot/airtools/doc/README.Windows.md).
-for users who wish to setup the AIRTOOLS software on computers without a Linux
-installation.
+Some information about how to start AIRTOOLS is given in a basic
+[GettingStarted](doc/GettingStarted.txt) file. Users who wish to setup the
+AIRTOOLS software on computers running a Windows or MacOS X should consult
+[README.Windows](doc/README.Windows.md).

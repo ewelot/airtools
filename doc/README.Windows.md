@@ -53,7 +53,7 @@ icon. The shutdown-button is located on that menu at bottom right position.
 
 
 ## 5. Installing airtools
-Follow instructions from the [INSTALL](INSTALL.md) file.
+Follow instructions from the [INSTALL](../INSTALL.md) file.
 
 
 ## 6. Making your FITS image files available to Linux
