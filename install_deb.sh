@@ -29,7 +29,7 @@ test ! -d $ddir && mkdir -p $ddir
 
 # install subversion
 str=$(dpkg -l | grep "^ii  subversion " || true)
-if [ $? -ne 0 ]
+if [ -z "$str" ]
 then
     apt-get update
     apt-get -y install subversion
