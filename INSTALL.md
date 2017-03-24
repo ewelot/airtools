@@ -11,9 +11,12 @@ are hosted on a GitHub repository instead. The installation procedure is as
 follows:
 - Download the
   [install script](https://github.com/ewelot/airtools/raw/master/install_deb.sh)
+- Open the file explorer (double-click the home icon)
 - Locate the file in your download folder
-- Open a terminal window in the download folder
-- Run the install script by the command: `sudo bash install_deb.sh`
+- Open a terminal window in the download folder (choose appropriate entry
+  from `File` menu)
+- Run the install script by executing the following command in this terminal
+  window: `sudo bash install_deb.sh`
 
 
 ## Compiling and Installation from source code
