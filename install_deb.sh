@@ -1,9 +1,20 @@
 #!/bin/bash
 
 # download and install airtools packages from github
-echo "Starting $0 at $(date) ..."
-test "$DEBUG" && set -x
-#trap 'echo ERROR: program aborted on line $LINENO.; exit -1' ERR
+
+# trap any error
+trap 'echo ERROR: program aborted on line $LINENO.; exit -1' ERR
+
+# create log file
+touch /tmp/install.log
+chmod a+r /tmp/install.log
+exec >  >(tee -ia /tmp/install.log)
+exec 2> >(tee -ia /tmp/install.log >&2)
+
+echo "
+Starting $(basename $0) at $(date) ..."
+sleep 3
+test "$DEBUG" && set -x || true
 
 # process command line options
 package=airtools
@@ -17,34 +28,47 @@ ddir=/opt/airtools-deb/$dist
 test ! -d $ddir && mkdir -p $ddir
 
 # install subversion
-dpkg -l | grep -q "^ii  subversion "
-test $? -ne 0 && (
+str=$(dpkg -l | grep "^ii  subversion " || true)
+if [ $? -ne 0 ]
+then
     apt-get update
-    apt-get -y install subversion)
+    apt-get -y install subversion
+fi
 
 # download packages
 echo "
 Starting download ($dist) ..."
-sleep 2
-test "$http_proxy" && set - ${http_proxy//:/ } && ph=${2#//} && pp=${3%/} &&
-   svnopts="--config-option servers:global:http-proxy-host=$ph" &&
+sleep 3
+svnopts=""
+if [ "$http_proxy" ]
+then
+   set - ${http_proxy//:/ } && ph=${2#//} && pp=${3%/}
+   svnopts="--config-option servers:global:http-proxy-host=$ph"
    svnopts="$svnopts --config-option servers:global:http-proxy-port=$pp"
+fi
 (cd $ddir && svn $svnopts checkout $url/trunk/$dist/main)
 
 # add local package repository
 aptsrc=/etc/apt/sources.list.d/airtools-deb.list
-test ! -e $aptsrc && echo "deb file://$ddir main/" > $aptsrc
+if [ ! -e $aptsrc ]
+then
+    echo "deb file://$ddir main/" > $aptsrc
+fi
 apt-get update
 
 # install airtools
-test "$do_not_install" &&
-    echo "" && echo "Script $0 finished (without installation)." &&
+if [ "$do_not_install" ]
+then
+    echo "" && echo "Script $0 finished (without installation)."
     exit 0
+fi
 echo "
 Installing $package ..."
-sleep 2
+sleep 3
 apt-get -y --allow-unauthenticated install $package
+apt-get clean
 echo ""
-echo "Script $0 finished."
+echo "Installation finished."
+echo "For AIRTOOLS documentation see /usr/share/doc/airtools-doc/"
 
 exit 0
