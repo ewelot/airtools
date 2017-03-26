@@ -24,7 +24,7 @@ CHANGELOG
           - rework trail parameter defaults using nref and optionally jddata
           - speedup "measure bg" in AIcomet
           - maybe remove need for refcat.dat
-
+          
     2.8.2 16 Mar 2017
         * get_mpcephem: bugfix: deal with sexagesimal lat/long in image header
         * is_pnm, is_ppm, is_pgm, is_pbm: bugfix: dereference symbolic links
@@ -11859,10 +11859,9 @@ END     " > $ahead
                 # reformat EXPTIME
                 x=$(get_header -q ${acat%.*}.head EXPTIME)
                 test "$x" && set_header ${acat%.*}.head EXPTIME=$(echo $x | awk '{printf("%.2f", 1*$1)}')
-                #if [ ! "$rot180" ]
-                #then
-                    cat ${inldac/.fits/.head} >> ${acat%.*}.head
-                #fi
+                # combine headers
+                sed -i '/^END$/d' ${acat%.*}.head
+                cat ${inldac/.fits/.head} >> ${acat%.*}.head
                 rm -f ${inldac/.fits/.head} ${inldac/.fits/.ahead}
             fi
 
@@ -13558,7 +13557,7 @@ AIstack () {
     else
         param="$param -subtract_back N"
     fi
-    if [ $verbose -gt 1 ]
+    if [ $verbose -gt 1 ] || [ "$AI_DEBUG" ]
     then
         param="$param -verbose_type NORMAL"
     else
@@ -13994,11 +13993,17 @@ CD2_2   =      0.0003   / Linear projection matrix
                     *)  flist="$wdir/[0-9]*.$c.fits";;
                 esac
                     
+                test "$AI_DEBUG" &&
+                    echo "swarp -c $conf $sopts $wopts $param $setparam $sparam $flist" >&2
                 swarp -c $conf $sopts $wopts $param $setparam $sparam $flist
-                test $? -ne 0 &&
-                    echo "ERROR: failed command: swarp -c $conf $sopts $wopts" \
+                if [ $? -ne 0 ]
+                then
+                    echo "ERROR: swarp failed" >&2
+                    test -z "$AI_DEBUG" &&
+                    echo "failed command: swarp -c $conf $sopts $wopts" \
                         "$param $setparam $sparam $flist" >&2 &&
                     return 255
+                fi
                 (test "$c" == "grn" || test "$c" == "gray") &&
                     imhead -z coadd.fits > $out.head &&
                     cp coadd.weight.fits $out.weight.fits &&
