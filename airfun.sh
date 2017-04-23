@@ -17,7 +17,7 @@
 AI_VERSION="2.9"
 : << '----'
 CHANGELOG
-    2.9   22 Apr 2017
+    2.9   23 Apr 2017
         * regstat, _regstat:
             - bugfix when processing polygon regions which results in much
               improved speed
@@ -2359,7 +2359,7 @@ mkcotrail () {
     # deal with empty obsdata file (no info about individual exposures)
     x=$(grep -v "^#" $obsdata | wc -l)
     test $x -eq 0 &&
-        cp $coimg $outimg &&
+        pnmccdred -a -$bgval $coimg $outimg &&
         rm -f $tmp1 && return
 
     
@@ -9535,9 +9535,10 @@ AIexamine () {
     test $h -gt 1200 && h=1200
     case "$small" in
         0)  w=$((h-150));;
-        1)  h=$((h*75/100)); w=$((h-120));;
-        *)  h=$((h*55/100)); w=$((h-60));;
+        1)  h=$((h*75/100)); w=$((h-100));;
+        *)  h=$((h*58/100)); w=$((h-50));;
     esac
+    test $w -lt 480 && w=480
     geom="${w}x${h}"
     test "$AI_DEBUG" && echo "screen=${sw}x${sh}  geom=$geom" >&2
     opts="-title $ds9name -geometry $geom -regions system physical"
@@ -17942,7 +17943,7 @@ AIcheck_ok () {
         lsb_release -a
         echo
         
-        str="imagemagick|graphicsmagick|gnuplot|saods9|xpa-tools|wcstools"
+        str="imagemagick|graphicsmagick|gnuplot|plplot|saods9|xpa-tools|wcstools"
         str="$str|missfits|scamp|sextractor|skymaker|stiff|swarp|cfitsio|stilts|airtools"
         echo "# installed packages:"
         dpkg -l | grep -E "$str" | awk '{printf("%-4s %-32s %s\n", $1, $2, $3)}'

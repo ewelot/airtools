@@ -19,6 +19,20 @@ At the end of your comet image processing you should have created two stacked
 images: one centered on stars (hereafter referred to as star stack) and another
 one centered on the comet (called comet stack).
 
+Now, those images must be handed over to the AIRTOOLS programs which are
+running on Linux - most likely in a virtual machine. You can think of having
+two different computers: one to process your original images and creating the
+star stack and comet stack (your "real" computer, e.g. running a Windows OS)
+and a second computer which further processes those stacks using the AIRTOOLS
+programs (your "virtual" computer, running a Linux OS).
+
+One way to make the stacked images available to the second system is by saving
+a copy to an USB disk or USB pen drive which then can be connected to the Linux
+computer running the AIRTOOLS. In case of running this Linux OS in a VirtualBox
+VM you connect new drives by using the VirtualBox VM menu "Drives". Choose
+the appropriate drive under the USB submenu. Once connected, the USB drive
+appears in form of a new icon on the Linux desktop (inside the virtual machine
+window).
 
 
 2. Metadata files
