@@ -26,10 +26,13 @@ commonly used in professional astronomy:
   basic FITS routines
 
 
-Instructions for compilation/installation of all required software components
+Instructions for installation of all required software components on Linux
 can be found in the file [INSTALL](INSTALL.md).
 
-Some information about how to start AIRTOOLS is given in a basic
-[GettingStarted](doc/GettingStarted.txt) file. Users who wish to setup the
+Users who wish to setup the
 AIRTOOLS software on computers running a Windows operating system or MacOS X
-should consult the [README.Windows](doc/README.Windows.md) file.
+should consult the [README.Windows](doc/README.Windows.md) file first.
+
+For basic information about how to start AIRTOOLS after successful installation
+please consult the [GettingStarted](doc/GettingStarted.txt) text file.
+

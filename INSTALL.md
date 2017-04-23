@@ -10,7 +10,7 @@ Currently there is no public apt package repository. The binary package files
 are hosted on a GitHub repository instead. The installation procedure is as
 follows:
 - Download the
-  [install script](https://github.com/ewelot/airtools/raw/master/install_deb.sh)
+  [install script](https://github.com/ewelot/airtools/raw/master/install_deb.sh) (e.g. right-click the link and choose `Save Link As`)
 - Open the file explorer (double-click the home icon)
 - Locate the file in your download folder
 - Open a terminal window in the download folder (choose appropriate entry
@@ -19,7 +19,7 @@ follows:
   window: `sudo bash install_deb.sh`
 
 
-## Compiling and Installation from source code
+## Compiling and Installing from source code
 
 If there is no binary package repository for your distribution then you
 have to compile the software and install it afterwards. The compilation depends
