@@ -6,7 +6,7 @@
 #   launcher GUI to help startup of airtools
 #
 ########################################################################
-VERSION="0.3"
+VERSION="0.4"
 VINFO="T. Lehmann, Jun. 2017"
 PINFO="\
     options:
@@ -14,6 +14,8 @@ PINFO="\
 "
 CHANGELOG="
     TODO: match image numbers to rawfiles.dat
+    0.4  - 16 Jun 2017
+        * added option -p projectdir
 
     0.3  - 04 Jun 2017
         * add mapping of rawfiles to rawfiles.dat
@@ -41,8 +43,7 @@ rc=.airtoolsrc
 #--------------------
 shorthelp ()
 {
-    echo "usage: $(basename $0) [-h] [-d|-f] [-v] [-a astrodir] [-m dtemp]" \
-        "<tel> [exptime] [sensortemp]"
+    echo "usage: $(basename $0) [-h] [-v] [-p projectdir]"
 }
 
 longhelp ()
@@ -170,9 +171,12 @@ lastcamera=\"$lastcamera\"" >> $tmp1
 #--------------------
 cmdline="$(basename $0) $@"  # preserve command line
 verbose=0
-while getopts hv c
+projectdir=""
+has_arg_pdir=""
+while getopts hvp: c
 do
   case $c in
+    p)  projectdir=$(realpath "$OPTARG"); has_arg_pdir=1;;
     h)  longhelp; exit -1;;
     v)  verbose=$((verbose + 1));;
     \?) shorthelp; exit -1;;
@@ -198,6 +202,12 @@ exec > >(tee -a $log)
 exec 2>&1
 echo "
 #### starting $(basename $0) v$VERSION at $(date +'%Y-%m-%d %H:%M')"
+
+# check projectdir
+test "$projectdir" && test ! -d "$projectdir" &&
+    echo "ERROR: projectdir $projectdir does not exist." >&2 && exit 1
+test "$projectdir" && test ! -e "$projectdir/$rc" &&
+    echo "ERROR: invalid projectdir $projectdir" >&2 && exit 1
 
 # prepend PATH to include local bin directories
 for p in $HOME/bin/home $HOME/bin
@@ -228,8 +238,12 @@ lastcamera=""   # last camera
 
 
 test -e "$ini" && eval $(parse_ini $ini global)
+if [ "$projectdir" ]
+then
+    basedir=$(dirname $projectdir)
+    source $projectdir/$rc
+fi
 test "$basedir" && echo "# basedir=$basedir"
-
 
 # general options for yad
 yadopts="--center --skip-taskbar --width 450 --borders=10 --wrap"
@@ -256,6 +270,7 @@ errmsg=""
 tmpdir=$lasttmpdir
 test -z "$tmpdir" && tmpdir="/tmp"
 site=""
+test "$has_arg_pdir" && formOK=1
 while [ ! "$formOK" ]
 do
     # get list of existing projects
@@ -361,7 +376,7 @@ create a new project by filling in the lower entries of this form\n"
 done
 
 # save global settings to ini file
-save_ini $ini
+test "$has_arg_pdir" || save_ini $ini
 
 
 # copy metadata files to basedir
@@ -395,7 +410,7 @@ done
 #   new site definitions
 #-------------------------
 # form 2
-if [ "$site" == "$newsite" ]
+test "$has_arg_pdir" || if [ "$site" == "$newsite" ]
 then
     title="AIRTOOLS - New Site"
     echo "# form: $title"
@@ -482,7 +497,7 @@ export AI_SITE=$site
 export AI_TMPDIR=$tmpdir" > $projectdir/$rc
 fi
 
-echo "# projectdir=$projectdir"
+test "$has_arg_pdir" || echo "# projectdir=$projectdir"
 
 # prepare environment for loading airfun.sh
 cd $projectdir
@@ -645,7 +660,7 @@ define a new image set by filling in the lower entries of this form\n"
         test $x -eq 6 && formOK=1
 
         # save ini file (in case new camera has been selected)
-        save_ini $ini
+        test "$has_arg_pdir" || save_ini $ini
     fi
 done
 
@@ -791,7 +806,7 @@ three values for focal length, aperture and f-ratio must be specified):\n"
     # save ini
     lastcamera=$(echo $line | awk '{
         printf("%s (d=%s, f/%s, %s)", $1, $3, $4, $5)}')
-    save_ini $ini
+    test "$has_arg_pdir" || save_ini $ini
 fi
 
 
@@ -924,8 +939,8 @@ do
                             yad --text-info --tail --width 600 --height 300 \
                                 --title "AIRTOOLS - ERROR" < $errfile
                             adderr "AIstart failed."
+                            rm -f $errfile
                         fi
-                        rm $errfile
                     fi
                     ;;
         *)          adderr "Unknown action $action";;
