@@ -14,9 +14,20 @@
 # - in order to use SAOImage DS9 analysis tasks (via AIexamine) you must
 #   provide corresponding files airds9.ana and aircmd.sh
 ########################################################################
-AI_VERSION="2.9"
+AI_VERSION="2.9.1"
 : << '----'
 CHANGELOG
+    2.9.1 - 03 Aug 2017
+        * AIcomet: skip regions having area<3pix from comet and background
+        * AIphotcal: compute faint star limit (mlim) if not provided
+        * is_wcs: show possible error message only if in debug mode
+        * wcscalib: set mag limit on catalog stars only if magzero entry in
+            camera.dat is below 19
+        * AIfocus: automatically set AI_DCRAWPARAM according to rlim
+        * AIsetinfo: added telid to output
+        * focas: center coordinates are now in fits coordinate system
+        * new function: regskip
+
     2.9   - 29 Jun 2017
         * AIcomet: sort data in comet/<set>.newphot.dat by star identifier
         * AIregister: propagate FITS header keyword OBJECT
@@ -1372,13 +1383,16 @@ is_ahead () {
 }
 
 is_wcs () {
-    # check whether the provided header file describes a valid wcs calibration
+    # check whether the given image or header file contains a valid wcs calibration
     local f=$1
     local x
     
     # check input file type
-    ! (is_ahead $f || is_fits $f || is_fitzip $f) &&
-        echo "ERROR in is_wcs: $f has unsupported file type." >&2 && return 255
+    if ! (is_ahead $f || is_fits $f || is_fitzip $f)
+    then
+        test "$AI_DEBUG" && echo "ERROR in is_wcs: $f has unsupported file type." >&2
+        return 255
+    fi
     
     x=$(get_header -q $f CTYPE1,CTYPE2,CRVAL1,CRVAL2,CRPIX1,CRPIX2 | wc -l)
     test $x -ne 6 && return 255
@@ -3460,7 +3474,7 @@ kappasigma () {
     local tmp2=$(mktemp "/tmp/tmp_dat2_$$.XXXXXX")
 
     (test "$showhelp" || test $# -lt 1) &&
-        echo "usage: kappasigme [-p(ositiv)] [-n(umber)] <dat> [col|$col] [kappa|$kappa] [iter|$iter]" >&2 &&
+        echo "usage: kappasigma [-p(ositiv)] [-n(umber)] <dat> [col|$col] [kappa|$kappa] [iter|$iter]" >&2 &&
         return 1
     
     grep -v "^#" $fname | awk -v c=$col -v z=${do_nonzero:-0} '{
@@ -5917,7 +5931,7 @@ focas () {
     # 160421m co01 252P     1725+069 2457500.954  60  8  9.5 1073 3.4  f=530,f/5.0 Mayhill
     local showhelp
     local bgval
-    local center    # xc,yc object center image coordinates
+    local center    # xf,yf object center in fits coordinates
     local i
     for i in 1 2 3
     do
@@ -5957,7 +5971,7 @@ focas () {
     local shrink
     local mbox
     local cfwhm
-    local center
+    local c
     local dmag
     local dasec # aperture diameter in arcsec
     local rpix  # aperture radius in pix
@@ -5965,18 +5979,17 @@ focas () {
     local aidx
     local xlist
     local x
+    local h
     
     (test "$showhelp" || test $# -lt 3) &&
-        echo "usage: focas [-c xc,yc] [-b bgval] <dir> <set> <apert_dia_asec>" >&2 &&
+        echo "usage: focas [-c xfits,yfits] [-b bgval] <dir> <set> <apert_dia_asec>" >&2 &&
         return 1
 
     hdr=$dir/$set.head
     test ! -f $hdr && echo "ERROR: missing $hdr." >&2 && return 255
     
-    #printf "# day   set  utday          center  apdia  mag rpix  bg magzero\n"
-    #echo "# $hdr" >&2
-    b=$(basename $hdr)
     # get image extension
+    b=$(basename $hdr)
     ext=""
     test -f $(dirname $hdr)/${b%.*}.pgm && ext=pgm
     test -f $(dirname $hdr)/${b%.*}.ppm && ext=ppm
@@ -6073,123 +6086,80 @@ focas () {
         reg2pbm $cosub $cobad | pnminvert | pnmarith -m $tmpim1 - 2>/dev/null > $tmpim2 &&
         mv $tmpim2 $tmpim1
 
-    # determine inner comet region
-    #   get rid of star trails by median smooth using ${mbox}x${mbox}
-    #   threshold image at bg+6*sd*mult/shrink/mbox, dilate mbox erode mbox
-    mbox=3
-    test $dia -gt  40 && mbox=5;   test $dia -gt  150 && mbox=7
-    erode=2.5
-    test $dia -gt 100 && erode=3.5; test $dia -gt 150 && erode=$((3+(dia-40)/80))
-    threshold=$(echo $bgval $rmsg $mult $mbox | \
-        awk '{x=$1+6*$2*$3/$4; printf("%.0f", x)}')
-    echo "# mbox=$mbox erode=$erode threshold=$threshold" >&2
-    convert $tmpim1 -median ${mbox}x${mbox} $tmpim2
-    convert $tmpim2 -threshold $threshold \
-        -morphology Erode Disk:$erode -morphology Dilate Disk:1.5 \
-        -morphology Erode Disk:2.5 -morphology Dilate Disk:$mbox $tmpmask
-    echo $tmpim1 $tmpim2 $tmpmask
-    
-    # determine comets fwhm
-    #   get max in masked median smoothed image
-    #   count high signal pixels (above 50%) and "deconvolve" by mbox
-    pnmarith -m $tmpim2 $tmpmask 2>/dev/null | AIval -c -a - | grep -v " 0$" > $tmpdat1
-    max=$(sort -n -k3,3 $tmpdat1 | tail -1 | awk '{print $3}')
-    threshold=$(echo $bgval $max | awk '{printf("%.0f", ($1+$2)/2)}')
-    cat $tmpdat1 | awk -v t=$threshold '{if($3>=t){print $0}}' > $tmpdat2
-    echo "# max=$max  i50=$threshold  n50=$(cat $tmpdat2 | wc -l)"
-    cfwhm=$(cat $tmpdat2 | wc -l | awk -v m=$mbox '{x=sqrt(($1-m*m*0.4)/3.1416); printf("%.1f", x)}')
-    echo "# psf fwhm=$fwhm  comet fwhm=$cfwhm" >&2
-    echo $tmpdat1 $tmpdat2
-    
-    # determine comet center by fitting parabolic surface to high signal pixels
-    echo "# initial guess
-        xm=$(mean $tmpdat2 1)
-        ym=$(mean $tmpdat2 2)
-        a=$(mean $tmpdat2 3)
-        b=0.1
-        
-        set fit quiet
-        f(x,y) = a + b*(x-xm)*(x-xm) + b*(y-ym)*(y-ym)
-        fit f(x,y) '$dat' using 1:2:3:(1) via a, b, xm, ym
-        out=sprintf(\"%d %6.3f %7.1f %7.3f %7.1f %7.1f\", \
-            FIT_NDF, FIT_STDFIT, a, b, xm, ym)
-        print out
-        #show variables all
-    " > $tmpgp
-    x=$(gnuplot -p $tmpgp 2>&1)
-    # result is in image pixel indexes
-    #   conversion to image pixel coordinates x+0.5, y+0.5
-    center=$(echo $x | awk '{printf("%.1f,%.1f", $5+0.5, $6+0.5)}')
-    echo $center $x $tmpgp
-    
-    # do aperture photometry
-    for dasec in ${aplist//,/ }
-    do
-        rpix=$(echo $dasec $pscale | awk '{printf("%.2f", $1/2/$2)}')
-        set - $(aphot -b $bgval -t $texp -m $magzero $tmpim1 $center $rpix)
-        mag=$4
-        LANG=C printf "%-7s %4s %s %9s %3d %5.2f %3.0f %s %s\n" \
-            $(dirname $hdr) ${b%.*} $ut $center $dasec $mag $rpix $bgval $magzero
-    done
-    return
 
-    # old
-    # determine comet position
-    # TODO: check with ppm images
-    if [ -z "$center" ] || true
+    # aperture center
+    if [ -z "$center" ]
     then
-        if [ $dia -gt 30 ]
-        then
-            # determine inner comet region first
-            # heavyly smooth comet region (median)
-            x=$(echo $dia | awk '{x=sqrt($1*$1/200+50); printf("%.0f", int(x/2)*2+1)}')
-            test $x -gt 17 && x=17
-            reg2pbm $cosub $coreg | pnmarith -m $cosub - 2>/dev/null | \
-                convert - -median $x $tmpim
-            # find pixels in smoothed image within coreg above threshold
-            x=$(echo 0.3 30 $dia | awk '{printf("%.2f", $1-0.15*$2/$3)}')
-            threshold=$(AIstat $tmpim | awk -v x=$x -v b=$bgval '{printf("%.0f", b+x*($4-b))}')
-            convert $tmpim -threshold $threshold \
-                -morphology Erode Disk:2.5 -morphology Dilate Disk:2.5 $tmpmask
-            x=$(imcount $tmpmask | awk '{printf("%.0f", 2*sqrt($1/3.14))}')
-            echo "# inner comet region d=$x" >&2
-        else
-            reg2pbm $cosub10 $coreg > $tmpmask
-        fi
-        # determine comet's fwhm
-        x=$(echo $fwhm | awk '{printf("%.1f", sqrt($1+2))}')
-        reg2pbm $cosub $coreg | pnmarith -m $cosub - 2>/dev/null | \
-            convert - -define convolve:scale=! -morphology Convolve Gaussian:0x$x $tmpim
-        threshold=$(AIstat $tmpim | awk -v b=$bgval '{printf("%.0f", 0.5*($4+b))}')
-        cfwhm=$(convert $tmpim -threshold $threshold pbm: | imcount | \
-            awk '{printf("%.1f", 2*sqrt($1/3.14))}')
+        # determine inner comet region
+        #   get rid of star trails by median smooth using ${mbox}x${mbox}
+        #   threshold image at bg+6*sd*mult/shrink/mbox, dilate mbox erode mbox
+        mbox=3
+        test $dia -gt  40 && mbox=5;   test $dia -gt  150 && mbox=7
+        erode=2.5
+        test $dia -gt 100 && erode=3.5; test $dia -gt 150 && erode=$((3+(dia-40)/80))
+        threshold=$(echo $bgval $rmsg $mult $mbox | \
+            awk '{x=$1+6*$2*$3/$4; printf("%.0f", x)}')
+        test "$AI_DEBUG" && echo "# mbox=$mbox erode=$erode threshold=$threshold" >&2
+        convert $tmpim1 -median ${mbox}x${mbox} $tmpim2
+        convert $tmpim2 -threshold $threshold \
+            -morphology Erode Disk:$erode -morphology Dilate Disk:1.5 \
+            -morphology Erode Disk:2.5 -morphology Dilate Disk:$mbox $tmpmask
+        test "$AI_DEBUG" && echo $tmpim1 $tmpim2 $tmpmask >&2
+        
+        # determine comets fwhm
+        #   get max in masked median smoothed image
+        #   count high signal pixels (above 50%) and "deconvolve" by mbox
+        pnmarith -m $tmpim2 $tmpmask 2>/dev/null | AIval -c -a - | grep -v " 0$" > $tmpdat1
+        max=$(sort -n -k3,3 $tmpdat1 | tail -1 | awk '{print $3}')
+        threshold=$(echo $bgval $max | awk '{printf("%.0f", ($1+$2)/2)}')
+        cat $tmpdat1 | awk -v t=$threshold '{if($3>=t){print $0}}' > $tmpdat2
+        echo "# max=$max  i50=$threshold  n50=$(cat $tmpdat2 | wc -l)"
+        cfwhm=$(cat $tmpdat2 | wc -l | awk -v m=$mbox '{x=sqrt(($1-m*m*0.4)/3.1416); printf("%.1f", x)}')
         echo "# psf fwhm=$fwhm  comet fwhm=$cfwhm" >&2
-        # smooth (average) comet image using fwhm dependant radius
-        x=$(echo $fwhm $cfwhm | awk '{printf("%.1f", sqrt(($1+$2)/2))}')
-        convert $cosub -define convolve:scale=! -morphology Convolve Gaussian:0x$x - | \
-            pnmarith -m - $tmpmask 2>/dev/null > $tmpim
-        # find highest pixel
-        # TODO: parabolic fit of 5x5 area
-        set - $(AIval -c -a $tmpim | grep -v " 0$" | sort -n -k3,3 | tail -1)
-        center="$1,$2"
-        #echo "# center=$center" >&2
+        test "$AI_DEBUG" && echo $tmpdat1 $tmpdat2 $tmpgp >&2
+        
+        # determine comet center by fitting parabolic surface to high signal pixels
+        echo "# initial guess
+            xm=$(mean $tmpdat2 1)
+            ym=$(mean $tmpdat2 2)
+            a=$(mean $tmpdat2 3)
+            b=0.1
+            
+            set fit quiet
+            f(x,y) = a + b*(x-xm)*(x-xm) + b*(y-ym)*(y-ym)
+            fit f(x,y) '$tmpdat2' using 1:2:3:(1) via a, b, xm, ym
+            out=sprintf(\"%d %6.3f %7.1f %7.3f %7.1f %7.1f\", \
+                FIT_NDF, FIT_STDFIT, a, b, xm, ym)
+            print out
+            #show variables all
+        " > $tmpgp
+        x=$(gnuplot -p $tmpgp 2>&1)
+        echo "# gpfit: $x"  # result is in image pixel indexes
+        # show fits coord
+        h=$(identify $cosub | cut -d " " -f3 | cut -d "x" -f2)
+        center=$(echo $h $x | awk '{printf("%.1f,%.1f", $6+1, $1-$7)}')
+        echo "# object center (fits): $center" 
     fi
-    
-    # TODO: if requested check center position using AIexamine
+
     
     # do aperture photometry
-    # TODO: limit to coreg (exclude saturated stars)
+    #echo ".       co01   2017-07-22.94 2868.9,1800.4  14 16.22   6 2009.00 23.57"
+    echo "# dir   set    utday         fcenter       d/\" mag   npx bg      mzero"
+    # conversion to image pixel coordinates
+    xycenter=$(echo "circle($center,5)" | reg2xy $cosub - | \
+        awk '{printf("%.1f,%.1f", $2, $3)}') 
     for dasec in ${aplist//,/ }
     do
         rpix=$(echo $dasec $pscale | awk '{printf("%.2f", $1/2/$2)}')
-        set - $(aphot -b $bgval -t $texp -m $magzero $cosub $center $rpix)
-        mag=$4
-        LANG=C printf "%-7s %4s %s %9s %3d %5.2f %3.0f %s %s\n" \
-            $(dirname $hdr) ${b%.*} $ut $center $dasec $mag $rpix $bgval $magzero
+        set - $(aphot -b $bgval -t $texp -m $magzero $tmpim1 $xycenter $rpix)
+        mag=$4; npx=$6
+        LANG=C printf "%-7s %-6s %s %9s %3d %5.2f %3.0f %s %s\n" \
+            $(dirname $hdr) ${b%.*} $ut $center $dasec $mag $npx $bgval $magzero
     done
 
-    echo $tmpim $tmpmask >&2
-    #rm -f $tmpim $tmpmask
+
+    test -z "$AI_DEBUG" && rm -f $tmpim1 $tmpim2 $tmpmask
+    test -z "$AI_DEBUG" && rm -f $tmpdat1 $tmpdat2 $tmpgp
     return
 }
 
@@ -6448,6 +6418,66 @@ reg2reg () {
         dy=$((h2-h1-$4))
         regshift $reg $dx $dy
     fi
+}
+
+regskip () {
+    # skip small regions below given size
+    # it uses region extent to approximate size
+    local showhelp
+    local i
+    for i in 1
+    do
+        (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
+    done
+    local reg=$1
+    local minsize=${2:-"3"}
+    local x
+    local rtype
+    
+    (test "$showhelp" || test $# -lt 1) &&
+        echo "usage: regskip <regfile> [minsize|$minsize]" >&2 &&
+        return 1
+
+    ! is_reg $reg &&
+        echo "ERROR: file $reg is not a ds9 region file." >&2 && return 255
+    
+    grep "^[a-z][a-z]*(.*)" $reg | while read
+    do
+        rtype=${REPLY%%(*}
+        # check region extent
+        x=""
+        case "$rtype" in
+            circle) x=$(echo $REPLY | tr '(,)' ' ' | awk '{
+                        x=3.1416*$4*$4
+                        printf("%.1f", x)}')
+                    ;;
+            box)    x=$(echo $REPLY | tr '(,)' ' ' | awk '{
+                        x=$4*$5
+                        printf("%.1f", x)}')
+                    ;;
+            polygon) x=$(echo $REPLY | cut -d ')' -f1 | cut -d '(' -f2 | \
+                        tr ',' '\n' | awk '{
+                        if (NR%2 == 1) {
+                            if (NR==1 || $1<x1) x1=$1
+                            if (NR==1 || $1>x2) x2=$1
+                        } else {
+                            if (NR==2 || $1<y1) y1=$1
+                            if (NR==2 || $1>y2) y2=$1
+                        }} END {
+                        x=(x2-x1)*(y2-y1)
+                        printf("%.1f", x)}')
+                    ;;
+        esac
+        test -z "$x" && echo "$REPLY" && continue
+        test "$AI_DEBUG" && echo $x ${REPLY%%,*} >&2
+        if [ "$(echo $x $minsize | awk '{if($1>=$2) {print "ok"}}')" ]
+        then
+            echo "$REPLY"
+        else
+            echo "# size=$x $REPLY"
+        fi
+    done < $reg
+    return
 }
 
 
@@ -10067,10 +10097,11 @@ EOF
 
         # determine mag limit for astrometric ref catalog stars
         # depending on magzero
-        par=15
+        par=""
         str=$(get_header -q $firstimage AI_TELID 2>/dev/null)
         test "$str" && str=$(get_param camera.dat magzero $sname "" 15)
-        test $str && par=$(echo $str | awk '{x=2*$1-7.2; printf("%.1f", int(x)/2)}')
+        test $str && test "$(echo $str 19 | awk '{if($1<$2)print 1}')" &&
+            par=$(echo $str | awk '{x=$1-3.6; printf("%.1f", int(2*x)/2)}')
         cat <<EOF > $pardir/wcscalib.par
 #
 # wcscalib parameter file
@@ -12605,12 +12636,13 @@ AIfocus () {
     local nmin=$1
     local nmax=$2
     local threshold=${3:-5}     # detection threshold (sextractor)
-    local rlim=${4:-1500}       # limit stars to center distance < rlim
+    local rlim=${4:-1200}       # limit stars to center distance < rlim
     local ex=${AI_EXCLUDE:-""}  # space separated list of image numbers
     local magzero=${AI_MAGZERO:-"25.5"}
     local tdir="/tmp"
     local raw
     local hdr
+    local xy
     local dlim=""
     local magerrlim=0.03
     local i
@@ -12620,7 +12652,7 @@ AIfocus () {
     local tmp2=$(mktemp "/tmp/tmp_ptsrc_$$.XXXXXX")
 
     (test "$showhelp" || test $# -lt 2) &&
-        echo "usage: AIfocus <nmin> <nmax> [thres|$thres] [rlim|$rlim]" >&2 &&
+        echo "usage: AIfocus <nmin> <nmax> [thres|$threshold] [rlim|$rlim]" >&2 &&
         return 1
 
     rm -f focus.dat
@@ -12635,10 +12667,17 @@ AIfocus () {
         # get image width and height, determine dlim
         if [ -z "$dlim" ]
         then
-            w=$(dcraw-tl -i -v $AI_DCRAWPARAM $raw | grep "Output size:" | awk '{print $3}')
-            h=$(dcraw-tl -i -v $AI_DCRAWPARAM $raw | grep "Output size:" | awk '{print $5}')
+            w=$(dcraw-tl -i -v $raw | grep "Output size:" | awk '{print $3}')
+            h=$(dcraw-tl -i -v $raw | grep "Output size:" | awk '{print $5}')
             dlim=$(echo $w $h $rlim | awk '{printf("%.2f", 2*$3/sqrt($1*$1+$2*$2))}')
-            echo "$w $h dlim=$dlim" >&2
+            echo "# image ${w}x${h}, using dlim=$dlim" >&2
+        fi
+        
+        # get xy offset for use in AI_DCRAWPARAM
+        if [ $((2*rlim)) -lt $w ] && [ $((2*rlim)) -lt $h ]
+        then
+            xy=$(echo $w $h $rlim | awk '{x=$1/2-$3; y=$2/2-$3; printf("%d %d", x, y)}')
+            AI_DCRAWPARAM="-R $((2*rlim)) $((2*rlim)) $xy"
         fi
 
         # source extraction
@@ -12659,11 +12698,13 @@ AIfocus () {
                 printf("%.2f\n", $1+2.5/log(10)*log($2/$3))}')
             
             # source extraction
-            AI_MAGZERO=$mag0 AIsource -q $tdir/$num.fits "" $threshold
+            AI_MAGZERO=$mag0 AIsource -q $tdir/$num.fits "" $threshold 2>/dev/null
+            test $? -ne 0 &&
+                echo "ERROR: AIsource failed." >&2 && return 255
         fi
     
         # get stats from point sources in center region
-        set - $(sexselect -s $num.src.dat "" $magerrlim $rlim $((w/2)),$((h/2)) \
+        set - $(sexselect -s $num.src.dat "" $magerrlim \
             2>/dev/null | awk '{
                 if($1~/^#/) next
                 if($1~/^AWIN/) a=$2
@@ -12687,15 +12728,15 @@ AIfocus () {
 
         # get focus value from comment in hdr file
         test "$hdr" &&
-            f=$(grep "^comment" $hdr | tr '=,;/' '\n' | \
-                grep -E "^f[0-9]+$" | cut -c 2-)
+            f=$(grep "^comment" $hdr | cut -d '=' -f2- | tr -d '=' | \
+                tr ' ,;/' '\n' | grep -E "^f[0-9]+$" | cut -c 2-)
         test -z "$f" && f=$num
         echo $f $n $fwhm $e $m >&2
         echo $num $f $n $fwhm $e $m >> focus.dat
     done
     rm -f $tmp1 $tmp2
     # TODO: handle 100
-    echo "plot 'focus.dat' u 2:4 title 'fwhm(f)'" | gnuplot -p
+    AIplot -p -t "fwhm(f)" focus.dat 2 4
 }
 
 
@@ -14994,7 +15035,7 @@ AIphotcal () {
     local rlim          # max. distance (in pix) from object
     local nlim=100      # max. number of stars in sextractor source cat (starting
                         #   at brightest)
-    local mlim=99       # aphot mag limit used for final curve fit
+    local mlim          # aphot mag limit used for final curve fit
     local magerrlim=0.05
     local fittype=0     # 0-normal, 1-color, 2-ext, 3-color+ext
     local zangle        # position angle of zenith with respect to N
@@ -15079,6 +15120,9 @@ AIphotcal () {
     local clist
     local rot
     local tel
+    local nlow
+    local nskip
+    local sd
     
     (test "$showhelp" || test $# -lt 2) &&
         echo "usage: AIphotcal [-B|-R] [-bv] [-t] [-e] [-z zangle] [-s skip] [-l maglim] [-d maxdist]" \
@@ -15382,10 +15426,30 @@ AIphotcal () {
             -g "set xlabel 'mag'; set ylabel 'dmag'; set grid" $tmp2 1 2 "" "" "[][$yrange]" 
     fi
     
-    # skip stars
-    grep -v "^#"  phot/$setname.$catalog.xphot.dat | head -$nlim | \
-        awk -v ca=$apcolumn -v cr=$refcolumn '{if($cr!="-") printf("%.2f\n", $ca-$cr)}' > $tmp1
-
+    # if mlim is not set, use reasonable limit on faint end based
+    # on number statistics of stars
+    if [ ! "$mlim" ]
+    then
+        nstars=$(grep -v "^#"  phot/$setname.$catalog.xphot.dat | wc -l)
+        if [ $nstars -gt 20 ]
+        then
+            nlow=$((6+nstars/5))    # includes nskip
+            nskip=$((1+nstars/35))
+            test $nstars -gt 50 &&
+                nlow=$((13+nstars/15)) &&
+                nskip=$((2+nstars/80))
+            grep -v "^#" phot/$setname.$catalog.xphot.dat | \
+                awk -v ca=$apcolumn '{printf("%s\n", $ca)}' | \
+                LANG=C sort -n | tail -$nlow | head -$((nlow-nskip)) > $tmp1
+            sd=$(stddev $tmp1)
+            mlim=$(tail -1 $tmp1 | awk -v s=$sd '{printf("%.2f", $1+s+0.1)}')
+            str=$(LANG=C printf "sd=%.2f" $sd)
+            echo "# setting mlim=$mlim  (stats: unused=$nskip, n=$((nlow-nskip)), $str)" >&2
+        else
+            mlim=99
+        fi
+    fi
+     
     # remove stars with missing ref mags
     if [ $fittype -eq 1 ] || [ $fittype -eq 3 ]
     then
@@ -16141,6 +16205,7 @@ AIcomet () {
     local tmpdat2=$(mktemp "$tdir/tmp_tmp2_XXXXXX.dat")
     local tmpphot=$(mktemp "$tdir/tmp_phot_XXXXXX.dat")
     local tmpbgcorr=$(mktemp "$tdir/tmp_bgcorr_XXXXXX.pnm")
+    local tmpreg=$(mktemp "$tdir/tmp_reg_XXXXXX.reg")
     local sname
     local coreg
     local bgreg
@@ -16399,9 +16464,16 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
         AIexamine -n CometRegion -p "-pan to $copos -regions shape polygon" \
             x.coblur.$ext $coreg $ststack
 
+    # skip regions smaller than 3 pix
+    for f in $coreg $bgreg $badreg
+    do
+        test -s "$f" && regskip $f > $tmpreg &&
+            ! diff -q $tmpreg $f > /dev/null && cp $tmpreg $f
+    done
+    
     # TODO: allow for ellipse regions, needs some tweeks in reg2pbm
     ! grep -q -iwE "^polygon" $coreg &&
-        echo "ERROR: no region in $coreg." >&2 && return 255
+        echo "ERROR: no polygon region in $coreg." >&2 && return 255
     ! grep -q -iwE "^circle|^polygon|^box" $bgreg &&
         echo "ERROR: no region in $bgreg." >&2 && return 255
     if [ -f $badreg ]
@@ -16411,7 +16483,6 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
     else
         badreg=""
     fi
-
     
     
     # ---------------------
@@ -16812,7 +16883,8 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
 
     echo "$(date +'%H:%M:%S') finished" >&2
 
-    rm -f $tmpim1 $tmpim2 $tmpmask $tmpbadmask $tmpkernel $tmpdat1 $tmpdat2 $tmpbgcorr $tmpphot
+    rm -f $tmpim1 $tmpim2 $tmpmask $tmpbadmask $tmpkernel $tmpdat1 $tmpdat2
+    rm -f $tmpbgcorr $tmpreg $tmpphot
     return
 }
 
@@ -18082,14 +18154,15 @@ AIsetinfo () {
     then
         if [ ! "$baseinfo" ] && [ ! "$longinfo" ]
         then
-            echo "#set target type nref flen fr   iso  texp  n ts black"
+            echo "#set target type nref flen fr   iso  texp  n  ts black tel"
+            #     dk01 bias     d  0011  530 5.0    -   0.0 10 -15    -  T14
         else
             if [ "$baseinfo" ]
             then
                 echo "# LT  set  target type texp n1 n2   nref dark flat tel"
             else
-                echo "# date set  object   ra+de    jd_ref      texp n  rms  bg" \
-                    "fwhm tel_id  site"
+                echo "# date  set   object   ra+de     jd_ref     texp n  rms   bg fwhm tel site"
+                #     170802m co01  2017O1   0000+000       0.000 120  5  0.0    0 0.0  T14 Mayhill
             fi
         fi
     fi
@@ -18261,11 +18334,11 @@ AIsetinfo () {
             test -z "$inst" && test "$flength" && test "$fratio" && inst="f=$flength,f/$fratio"
             test "$inst $AI_SITE" == "f=0.0,f/0 Weimar" && inst="GSO"
             test -z "$inst" && inst="-"
-            LANG=C printf "%-7s %s %-8s %s %s %3s %2s %4.1f %4d %3.1f  %s %s\n" \
+            LANG=C printf "%-7s %-5s %-8s %s %011.3f %3s %2s %4.1f %4d %3.1f  %s %s\n" \
             $(basename $(pwd)) $sname $target $pos $jdref $texp $nexp $rms $bg $fwhm $inst $AI_SITE
         else
-            LANG=C printf "%s %-8s %s  %-4s %4.0f %3.1f %4s %5.1f %2d %2s %4s\n" \
-                $sname $target $type $nref "$flength" "$fratio" $iso $texp $nexp $tsens $black
+            LANG=C printf "%s %-8s %s  %-4s %4.0f %3.1f %4s %5.1f %2d %2s %4s  %s\n" \
+                $sname $target $type $nref "$flength" "$fratio" $iso $texp $nexp $tsens $black $telid
         fi
     done < $sdat
     rm -f $tmp1
