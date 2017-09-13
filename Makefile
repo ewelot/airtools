@@ -1,6 +1,6 @@
 
 PACKAGE = airtools
-VERSION = 1.2
+VERSION = 2.0
 
 # installation prefix
 prefix	= /usr/local
@@ -13,7 +13,7 @@ DATA	= data/*
 DOCS	= README* doc/*
 
 BIN 	= dcraw-tl pnmtomef pnmccdred pnmcombine
-BINSH 	= airfun.sh aircmd.sh
+BINSH 	= airfun.sh aircmd.sh airtools_launcher.sh
 ANALYSIS = airds9.ana
 
 # compiler/linker definitions
@@ -55,6 +55,8 @@ install: all
 
 tarball:
 	make clean
-	(cd ..; tar czf $(PACKAGE)_$(VERSION).orig.tar.gz --exclude="*/.git" \
+	(cd ..; \
+	test ! -e $(PACKAGE)-$(VERSION) && ln -s $(PACKAGE) $(PACKAGE)-$(VERSION); \
+	tar czf $(PACKAGE)_$(VERSION).orig.tar.gz -h --exclude="*/.git" \
 		$(PACKAGE)-$(VERSION))
 

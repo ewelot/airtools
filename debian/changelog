@@ -1,3 +1,11 @@
+airtools (2.0-0) unstable; urgency=low
+
+  * New package structure (split into multiple sub-packages)
+  * New mayor release of airfun.sh, airds9.ana
+  * New airtools-launcher.sh
+
+ -- Thomas Lehmann <t_lehmann@freenet.de>  Wed, 06 Sep 2017 15:31:47 +0200
+
 airtools (1.2-1) unstable; urgency=low
 
   * Initial release

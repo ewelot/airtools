@@ -6,14 +6,18 @@
 #   launcher GUI to help startup of airtools
 #
 ########################################################################
-VERSION="0.4"
-VINFO="T. Lehmann, Jun. 2017"
+VERSION="1.0"
+VINFO="T. Lehmann, Aug. 2017"
 PINFO="\
     options:
       h          show this help text
 "
 CHANGELOG="
-    TODO: match image numbers to rawfiles.dat
+    1.0  - 13 Aug 2017
+        * added check for target name to better match a valid comet
+          designation
+        * added check for some basic FITS header keywords
+
     0.4  - 16 Jun 2017
         * added option -p projectdir
 
@@ -164,6 +168,71 @@ lastcamera=\"$lastcamera\"" >> $tmp1
     return
 }
 
+
+old_check_base_headers () {
+    # check if following keywords exist: JD or DATE-OBS, RA, DEC
+    # returns error string on stdout
+    local ststack=$1
+    local rawfiles=$2
+    local jd
+    local jdraw
+    local ra
+    local dec
+    local x
+    local nerr=0
+    local e=""
+    
+    echo "# checking headers in $ststack ..." >&2
+    
+    ! is_fits $ststack &&
+        echo "ERROR: $ststack is not a valid FITS image." &&
+        return 255
+    
+    # check mean JD (middle of exposures)
+    jd=$(get_header -q $ststack JD)
+    if [ -z "$jd" ]
+    then
+        x=$(get_header -q $ststack DATE-OBS)
+        if [ "$x" ]
+        then
+            echo "# converting DATE-OBS to JD" >&2
+            jd=$(ut2jd $(echo $x | tr -d '-' | awk -F "T" '{print $2" "substr($1,3)}'))
+        else
+            # try to get mean JD from rawfiles
+            test $rawfiles &&
+                x=$(map_rawfiles ${rawfiles//;/ } | grep -v "^#" | \
+                    awk '{x=x+$5} END {printf("%.3f", x/NR)}}')
+            test "${x%.*}" && test ${x%.*} -gt 2000000 &&
+                echo "# average JD from rawfiles: $x" >&2 &&
+                jdraw=$x
+        fi
+    fi
+    
+    # check image coordinates
+    ra=$(get_header -q $ststack RA)
+    test -z "$ra" && ra=$(get_header -q $ststack OBJCTRA)
+    test -z "$ra" && ra=$(get_header -q $ststack AI_CORA)
+    dec=$(get_header -q $ststack DEC)
+    test -z "$dec" && dec=$(get_header -q $ststack OBJCTDEC)
+    test -z "$dec" && dec=$(get_header -q $ststack AI_CODEC)
+
+    # create error message
+    echo "# jd=$jd  ra=$ra  dec=$dec" >&2
+    test -z "$jd" && e="JD" && nerr=$((nerr+1))
+    test -z "$ra" &&
+        (test "$e" && e="${e}," || true) && e="$e RA" && nerr=$((nerr+1))
+    test -z "$dec" &&
+        (test "$e" && e="${e}," || true) && e="$e DEC" && nerr=$((nerr+1))
+
+    test $nerr -eq 0 && return 0
+    test $nerr -eq 1 &&
+        echo "ERROR: missing FITS header keyword $e." && return 255
+    test $nerr -gt 1 &&
+        echo "ERROR: missing FITS header keywords $e." && return 255
+        
+    # everything ok
+    return
+}
 
 
 #--------------------
@@ -559,7 +628,8 @@ do
     txt="Choose an existing image set or \
 define a new image set by filling in the lower entries of this form\n"
 
-    values=$(yad $yadopts --title="$title" \
+    values=$(test -d $AI_RAWDIR && cd $AI_RAWDIR
+        yad $yadopts --title="$title" \
         --text="$txt<span foreground='red'>$errmsg</span>" \
         --form \
         --date-format="%Y-%m-%d" --separator="|" --item-separator=";" \
@@ -605,8 +675,10 @@ define a new image set by filling in the lower entries of this form\n"
         x=1
         }END{print x}')" && adderr "setname $x exists" && x=""
         test "$x" && setname=$x
-        # target
-        x=$(echo $values | cut -d '|' -f6 | tr ' ' '_')
+        # target must match a valid comet designation
+        x=$(echo $values | cut -d '|' -f6)
+        test "$x" && (! is_number ${x:0:1} || test "$(echo $x | tr -d '[0-9][A-Z]')") &&
+            adderr "target $x is not a valid comet name" && x=""
         test "$x" && target=$x
         # start, TODO format to hh:mm
         x=$(echo $values | cut -d '|' -f7)
@@ -642,23 +714,26 @@ define a new image set by filling in the lower entries of this form\n"
         cameralist=$(select_item "$cameralist" "$x")
         
         echo "# setname=$setname target=$target start=$start texp=$texp nimg=$nimg nref=$nref telid=$telid"
-        if [ "$rawfiles" ]
-        then
-            echo "# rawfiles=$rawfiles"
-            x=$(echo $rawfiles | cut -d ';' -f1)
-            rawdir=$(realpath $(dirname $x))
-            if [ -e $projectdir/$rc ]
-            then
-                # append/replace AI_RAWDIR
-                sed -i '/^export AI_RAWDIR/d' $projectdir/$rc
-                echo "export AI_RAWDIR=$rawdir" >> $projectdir/$rc
-            fi
-            map_rawfiles ${rawfiles//;/ } >> rawfiles.dat
-        fi
         echo "# errmsg=$errmsg"
         x=$(echo $setname $target $start $texp $nimg $nref | wc -w)
-        test $x -eq 6 && formOK=1
-
+        if [ $x -eq 6 ]
+        then
+            formOK=1
+            if [ "$rawfiles" ]
+            then
+                echo "# rawfiles=$rawfiles"
+                x=$(echo $rawfiles | cut -d ';' -f1)
+                rawdir=$(realpath $(dirname $x))
+                if [ -e $projectdir/$rc ]
+                then
+                    # append/replace AI_RAWDIR
+                    sed -i '/^export AI_RAWDIR/d' $projectdir/$rc
+                    echo "export AI_RAWDIR=$rawdir" >> $projectdir/$rc
+                fi
+                map_rawfiles ${rawfiles//;/ } >> rawfiles.dat
+            fi
+        fi
+        
         # save ini file (in case new camera has been selected)
         test "$has_arg_pdir" || save_ini $ini
     fi
@@ -880,7 +955,9 @@ while [ ! "$formOK" ]
 do
     txt="Launch AIRTOOLS or choose any of the other actions\n"
 
-    values=$(yad $yadopts --title="$title" \
+    values=$(test $sttype == "SFL" && test $cotype == "SFL" && test -d $AI_RAWDIR && \
+        cd $AI_RAWDIR
+        yad $yadopts --title="$title" \
         --text="$txt<span foreground='red'>$errmsg</span>" \
         --date-format="%Y-%m-%d" --separator="|" --item-separator=";" \
         --form \
@@ -921,7 +998,7 @@ do
         airtools)   if [ ! "$errmsg" ]
                     then
                         echo "# launch airtools"
-                        AIstart -n $setname $starstack $cometstack
+                        str=$(AIstart -c -n $setname $starstack $cometstack)
                         if [ $? -eq 0 ]
                         then
                             formOK=1
@@ -932,20 +1009,27 @@ do
                                 starstack=$setname.pgm && cometstack=${setname}_m.pgm
                             AIexamine $starstack $cometstack &
                         else
-                            errfile=$(mktemp /tmp/tmp_err_XXXXXX.txt)
-                            x=$(grep -n "^####" $log | tail -1 | cut -d ":" -f1)
-                            x=$((x-1))
-                            sed -e "1,${x}d" $log > $errfile
-                            yad --text-info --tail --width 600 --height 300 \
-                                --title "AIRTOOLS - ERROR" < $errfile
-                            adderr "AIstart failed."
-                            rm -f $errfile
+                            # create error message
+                            if [ "$(echo $str | tr ' ' '\n' | grep -vE "^$|^JD$|^RA$|^DEC$")" ]
+                            then
+                                # unusual error
+                                errfile=$(mktemp /tmp/tmp_err_XXXXXX.txt)
+                                x=$(grep -n "^####" $log | tail -1 | cut -d ":" -f1)
+                                x=$((x-1))
+                                sed -e "1,${x}d" $log > $errfile
+                                yad --text-info --tail --width 600 --height 300 \
+                                    --title "AIRTOOLS - ERROR" < $errfile
+                                errmsg="ERROR: AIstart failed."
+                                rm -f $errfile
+                            else
+                                errmsg=$(echo "ERROR: missing FITS header keywords" $str)
+                            fi
                         fi
                     fi
                     ;;
         *)          adderr "Unknown action $action";;
     esac
-    test "$errmsg" && echo "$errmsg"
+    test "$errmsg" && echo "$errmsg" && echo ""
 done
 
 echo "# launcher finished"

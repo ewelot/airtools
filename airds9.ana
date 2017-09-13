@@ -8,6 +8,19 @@
 #     ds9cmd from airfun.sh
 #
 # ChangeLog:
+#   3.0.2 06 Sep 2017
+#       * new tasks projectstatus, usermanual, shorthelp
+#       * renamed tasks cometphot to cometextract, manualkeys to manualdata
+#       * switched cometextract key from l to c
+#
+#   3.0.1 20 Aug 2017
+#       * photcal: added parameter to provide color band and index
+#       * disable keyboard shortcut Ctrl-a
+#
+#   3.0   12 Aug 2017
+#       * wcscalib: added parameter to set north position angle
+#       * new task imflip
+#
 #   2.1   25 Nov 2016
 #       * psfextract, cometphot: removed cometstack parameter
 #       * quote all optional parameters to allow empty settings
@@ -29,12 +42,9 @@
 
 # parameter files
 #-----------------
+# default parameter file used by tasks test, regstat, imflip
 param airtools
 @airtools.par
-end
-
-param regstat
-@regstat.par
 end
 
 param regphot
@@ -53,12 +63,12 @@ param bggradient
 @bggradient.par
 end 
 
-param cometphot
-@cometphot.par
+param cometextract
+@cometextract.par
 end 
 
-param manualkeys
-@manualkeys.par
+param manualdata
+@manualdata.par
 end 
 
 param photcal
@@ -69,22 +79,28 @@ end
 # menu entries
 #---------------
 
-# Main Help
-# note: do not use keys a,c,v,x
-# hidden: Show info about current image set (i)
+# Main Help menu entry
+#-----------------------
+# note: do not use keys h,j,k,l
 
 help Help on AIRTOOLS tasks
-dcontrast (d)   - Set display contract from local noise statistics
-regswitch (o)   - Switch region marker on/off
-regstat (s)     - Statistics in image regions
-regphot (r)     - Photometry in selected regions
+shorthelp (F1)   - Show this help page
+usermanual (u)   - Show user manual (in web browser)
+dcontrast (d)    - Set display contract from local noise statistics
+regswitch (o)    - Switch region marker on/off
+regstat (s)      - Statistics in image regions
+regphot (r)      - Photometry in selected regions
+imflip (i)       - Flip images top-bottom
+aladindss (a)    - Show DSS image using Aladin sky atlas (in web browser)
+project (q)      - Query or modify project status
 
-wcscalib (w)    - Astrometric calibration
-bggradient (b)  - Remove background gradient
-psfextract (e)  - PSF extraction
-cometphot (l)   - Comet extraction and Large aperture photometry
-manualkeys (m)  - Add data from manual measurements
-photcal (p)     - Photometric calibration
+
+wcscalib (w)     - Astrometric calibration
+bggradient (b)   - Remove background gradient
+psfextract (e)   - PSF extraction
+cometextract (c) - Comet extraction and large aperture measurements
+manualdata (m)   - Add data from manual measurements
+photcal (p)      - Photometric calibration
 endhelp
 ---
 
@@ -95,25 +111,25 @@ menu
 aircmd.sh regswitch |& $text
 
 
-Statistics in image regions (s)
+Statistics in Image Regions (s)
 *
 menu
-$param(regstat); aircmd.sh regstat "$image" |& $text
+$param(airtools); aircmd.sh regstat "$image" |& $text
  
 
-Region Photometry (r)
+Flip Image Top-Bottom (i)
 *
 menu
-$param(regphot); aircmd.sh regphot "$image" "$bgrgb" |& $text
+$param(airtools); aircmd.sh imflip "$image" |& $text
 ---
 
-Astrometric calibration (w)
+Astrometric Calibration (w)
 *
 menu
-$param(wcscalib); aircmd.sh wcscalib "$image" $catalog "$maglim" "$thres" "$opts" |& $text
+$param(wcscalib); aircmd.sh wcscalib "$image" $catalog "$maglim" "$thres" "$north" "$opts" |& $text
 
 
-Remove background gradient (b)
+Remove Background Gradient (b)
 *
 menu
 $param(bggradient); aircmd.sh bggradient "$starstack" "$bgmult" |& $text
@@ -125,31 +141,60 @@ menu
 $param(psfextract); aircmd.sh psfextract $set $starstack "$rlim" "$merrlim" "$psfsize" "$skip" |& $text
 
 
-Comet Extraction and Large Aperture Photometry (l)
+Comet Extraction and Large Aperture Measurements (c)
 *
 menu
-$param(cometphot); aircmd.sh cometphot $set $starstack "$bgfit10" "$comult" |& $text
+$param(cometextract); aircmd.sh cometextract $set $starstack "$bgfit10" "$comult" |& $text
 
 
-Add data from manual measurements (m)
+Add Data from Manual Measurements (m)
 *
 menu
-$param(manualkeys); aircmd.sh manualkeys $set $idx "$ccorr" "$stlim" "$dtlen" "$dtang" "$ptlen" "$ptang" |& $text
+$param(manualdata); aircmd.sh manualdata $set $idx "$ccorr" "$stlim" "$dtlen" "$dtang" "$ptlen" "$ptang" |& $text
 
 
 Photometric Calibration using Reference Catalog (p)
 *
 menu
-$param(photcal); aircmd.sh photcal $set $catalog "$aprad" "$topts" "$aopts" "$skip" |& $text
+$param(photcal); aircmd.sh photcal $set $catalog "$color" "$aprad" "$topts" "$aopts" "$skip" |& $text
+
+
+
+# delete existing bindings
+#---------------------------
+Disable binding
+*
+bind "Control a"
+true |& $text
+
+Disable binding
+*
+bind "Control c"
+true |& $text
 
 
 
 # bind commands (keyboard shortcuts)
 #-------------------------------------
-Show info about current image set
+Show short help on tasks
 *
-bind i
-$param(airtools); aircmd.sh setinfo "$image" |& $text
+bind h
+aircmd.sh shorthelp |& $text
+
+Show short help on tasks
+*
+bind F1
+aircmd.sh shorthelp |& $text
+
+Show user manual
+*
+bind u
+aircmd.sh usermanual |& $text
+
+Query or Modify Project Status
+*
+bind q
+aircmd.sh project |& $text
 
 Set display contrast
 *
@@ -170,17 +215,28 @@ aircmd.sh regswitch |& $text
 Statistics in image regions
 *
 bind s
-$param(regstat); aircmd.sh regstat "$image" |& $text
+$param(airtools); aircmd.sh regstat "$image" |& $text
  
 Region photometry
 *
 bind r
 $param(regphot); aircmd.sh regphot "$image" "$bgrgb" |& $text
 
+Flip Images Top-Bottom
+*
+bind i
+$param(airtools); aircmd.sh imflip "$image" |& $text
+
+Show DSS image using Aladin sky atlas web interface
+*
+bind a
+aircmd.sh aladindss |& $text
+
+
 Astrometric calibration
 *
 bind w
-$param(wcscalib); aircmd.sh wcscalib "$image" $catalog "$maglim" "$thres" "$opts" |& $text
+$param(wcscalib); aircmd.sh wcscalib "$image" $catalog "$maglim" "$thres" "$north" "$opts" |& $text
 
 Remove background gradient
 *
@@ -192,17 +248,17 @@ PSF extraction
 bind e
 $param(psfextract); aircmd.sh psfextract $set $starstack "$rlim" "$merrlim" "$psfsize" "$skip" |& $text
 
-Comet Extraction and Large Aperture Photometry
+Comet Extraction and Large Aperture Measurements
 *
-bind l
-$param(cometphot); aircmd.sh cometphot $set $starstack "$bgfit10" "$comult" |& $text
+bind c
+$param(cometextract); aircmd.sh cometextract $set $starstack "$bgfit10" "$comult" |& $text
 
 Add data from manual measurements
 *
 bind m
-$param(manualkeys); aircmd.sh manualkeys $set $idx "$ccorr" "$stlim" "$dtlen" "$dtang" "$ptlen" "$ptang" |& $text
+$param(manualdata); aircmd.sh manualdata $set $idx "$ccorr" "$stlim" "$dtlen" "$dtang" "$ptlen" "$ptang" |& $text
 
 Photometric Calibration using Reference Catalog
 *
 bind p
-$param(photcal); aircmd.sh photcal $set $catalog "$aprad" "$topts" "$aopts" "$skip" |& $text
+$param(photcal); aircmd.sh photcal $set $catalog "$color" "$aprad" "$topts" "$aopts" "$skip" |& $text
