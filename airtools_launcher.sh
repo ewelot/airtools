@@ -6,13 +6,21 @@
 #   launcher GUI to help startup of airtools
 #
 ########################################################################
-VERSION="1.0"
-VINFO="T. Lehmann, Aug. 2017"
+VERSION="1.2"
+VINFO="T. Lehmann, Sep. 2017"
 PINFO="\
     options:
       h          show this help text
 "
 CHANGELOG="
+    1.2  - 25 Sep 2017
+        * added field 'binning' to form 'image set' and set appropriate
+          header keyword after image conversion (in AIstart)
+        * show progress window during image conversion and loading
+          
+    1.1  - 13 Sep 2017
+        * added button to access help docs
+
     1.0  - 13 Aug 2017
         * added check for target name to better match a valid comet
           designation
@@ -169,70 +177,20 @@ lastcamera=\"$lastcamera\"" >> $tmp1
 }
 
 
-old_check_base_headers () {
-    # check if following keywords exist: JD or DATE-OBS, RA, DEC
-    # returns error string on stdout
-    local ststack=$1
-    local rawfiles=$2
-    local jd
-    local jdraw
-    local ra
-    local dec
-    local x
-    local nerr=0
-    local e=""
-    
-    echo "# checking headers in $ststack ..." >&2
-    
-    ! is_fits $ststack &&
-        echo "ERROR: $ststack is not a valid FITS image." &&
-        return 255
-    
-    # check mean JD (middle of exposures)
-    jd=$(get_header -q $ststack JD)
-    if [ -z "$jd" ]
-    then
-        x=$(get_header -q $ststack DATE-OBS)
-        if [ "$x" ]
-        then
-            echo "# converting DATE-OBS to JD" >&2
-            jd=$(ut2jd $(echo $x | tr -d '-' | awk -F "T" '{print $2" "substr($1,3)}'))
-        else
-            # try to get mean JD from rawfiles
-            test $rawfiles &&
-                x=$(map_rawfiles ${rawfiles//;/ } | grep -v "^#" | \
-                    awk '{x=x+$5} END {printf("%.3f", x/NR)}}')
-            test "${x%.*}" && test ${x%.*} -gt 2000000 &&
-                echo "# average JD from rawfiles: $x" >&2 &&
-                jdraw=$x
-        fi
-    fi
-    
-    # check image coordinates
-    ra=$(get_header -q $ststack RA)
-    test -z "$ra" && ra=$(get_header -q $ststack OBJCTRA)
-    test -z "$ra" && ra=$(get_header -q $ststack AI_CORA)
-    dec=$(get_header -q $ststack DEC)
-    test -z "$dec" && dec=$(get_header -q $ststack OBJCTDEC)
-    test -z "$dec" && dec=$(get_header -q $ststack AI_CODEC)
-
-    # create error message
-    echo "# jd=$jd  ra=$ra  dec=$dec" >&2
-    test -z "$jd" && e="JD" && nerr=$((nerr+1))
-    test -z "$ra" &&
-        (test "$e" && e="${e}," || true) && e="$e RA" && nerr=$((nerr+1))
-    test -z "$dec" &&
-        (test "$e" && e="${e}," || true) && e="$e DEC" && nerr=$((nerr+1))
-
-    test $nerr -eq 0 && return 0
-    test $nerr -eq 1 &&
-        echo "ERROR: missing FITS header keyword $e." && return 255
-    test $nerr -gt 1 &&
-        echo "ERROR: missing FITS header keywords $e." && return 255
-        
-    # everything ok
-    return
+show_progresswindow () {
+    local title="$1"
+    local text="$2"
+    yad --width 300 --center --skip-taskbar --borders=20 --no-buttons --title="$title" \
+        --progress --pulsate --progress-text="" --text="\n\n$text\n" &
+    SPLASH_PID=$!
 }
+
+
+stop_progresswindow () {
+    kill $SPLASH_PID
+    wait $SPLASH_PID 2>/dev/null
+}
+
 
 
 #--------------------
@@ -317,6 +275,14 @@ test "$basedir" && echo "# basedir=$basedir"
 # general options for yad
 yadopts="--center --skip-taskbar --width 450 --borders=10 --wrap"
 
+# find documentation
+x=/usr/share/doc/airtools-doc
+y="manual-"${LANG%_*}".html"
+test ! -e $x/$y && y="manual-en.html"
+test ! -e $x/$y && y=""
+test ! -e $x/$y && x=/usr/share/doc/airtools-core
+docu=$x/$y
+
 
 #---------------------
 #   project settings
@@ -386,7 +352,10 @@ create a new project by filling in the lower entries of this form\n"
         --field="Date of observation::DT"           "" \
         --field="Temporary Directory::MDIR"         "$tmpdir" \
         --field="Observatory Site::CB"              "$siteslist" \
-        --field="\n:LBL" ""
+        --field="\n:LBL" "" \
+        --button=gtk-help:"xdg-open $docu" \
+        --button=gtk-cancel:1 \
+        --button=gtk-ok:0 \
         )
 
     errmsg=""
@@ -473,13 +442,20 @@ do
     cp -p $basedir/$f $projectdir/$f
 done
 
+# check if current site exists
+test -z "$site" && test "$AI_SITE" && site=$AI_SITE &&
+    echo "# site=$site (using AI_SITE)"
+test "$site" && ! grep -q " $site " $projectdir/sites.dat && site="" &&
+    echo "# WARNING: site $site not in sites.dat"
+test -z "$site" && site="$newsite"
+
 
 
 #-------------------------
 #   new site definitions
 #-------------------------
 # form 2
-test "$has_arg_pdir" || if [ "$site" == "$newsite" ]
+if [ "$site" == "$newsite" ]
 then
     title="AIRTOOLS - New Site"
     echo "# form: $title"
@@ -521,19 +497,19 @@ then
         xexists=$(grep -v "^#" $sitesdat | awk -v x="$x" -v i=2 '{if(x==$i) {print 1}}')
         test ! "$xexists" && site=$x || adderr "Location $x exists"
         # tdiff must be number
-        x=$(echo $values | cut -d '|' -f3)
+        x=$(echo $values | cut -d '|' -f3 | tr ',' '.')
         is_number "$x" && tdiff=$x && x=""
         test "$x" && adderr "TZ-UT $x is not a number"
         # long must be number
-        x=$(echo $values | cut -d '|' -f4)
+        x=$(echo $values | cut -d '|' -f4 | tr ',' '.')
         is_number "$x" && long=$x && x=""
         test "$x" && adderr "Long $x is not a number"
         # lat must be number
-        x=$(echo $values | cut -d '|' -f5)
+        x=$(echo $values | cut -d '|' -f5 | tr ',' '.')
         is_number "$x" && lat=$x && x=""
         test "$x" && adderr "Lat $x is not a number"
         # alt must be number
-        x=$(echo $values | cut -d '|' -f6)
+        x=$(echo $values | cut -d '|' -f6 | tr ',' '.')
         is_number "$x" && alt=$x && x=""
         test "$x" && adderr "Alt $x is not a number"
         
@@ -620,6 +596,7 @@ start=""
 texp=""
 nimg=""
 nref=""
+binning=""  # note: values is added to header after image conversion
 telid=""
 comm=""
 rawfiles=""
@@ -637,14 +614,15 @@ define a new image set by filling in the lower entries of this form\n"
         --field="Existing set (and target)::CB"         "$setlist" \
         --field="\n:LBL" "" \
         --field="<b>Define a new image set</b>:LBL"     "" \
-        --field="Set Name (e.g. co01):"                 "$setname" \
+        --field="Set name (e.g. co01):"                 "$setname" \
         --field="Target comet (e.g. 2P or 2015V2):"     "$target" \
-        --field="Local Start Time / hh:mm :"            "$start" \
+        --field="Local start time / hh:mm :"            "$start" \
         --field="Average exposure time per image / sec :" "$texp" \
         --field="Number of exposures:"                  "$nimg" \
+        --field="Reference image number for stacking:"  "$nref" \
+        --field="Pixel binning:"                        "$binning" \
         --field="Instrument (telescope/camera)::CB"     "$cameralist" \
         --field="----   Optional fields:LBL"            "" \
-        --field="Reference image number for stacking:"  "$nref" \
         --field="Comments (e.g. filter):"               "$comm" \
         --field="Image files of individual exposures::MFL" "$rawfiles" \
         --field="\n:LBL" ""
@@ -681,42 +659,46 @@ define a new image set by filling in the lower entries of this form\n"
             adderr "target $x is not a valid comet name" && x=""
         test "$x" && target=$x
         # start, TODO format to hh:mm
-        x=$(echo $values | cut -d '|' -f7)
+        x=$(echo $values | cut -d '|' -f7 | tr -d ' ')
         is_time "$x" && start=$x && x=""
         test "$x" && adderr "Start time $x is not valid"
         # texp
-        x=$(echo $values | cut -d '|' -f8)
+        x=$(echo $values | cut -d '|' -f8 | tr -d ' ' | tr ',' '.')
         is_number "$x" && texp=$x && x=""
         test "$x" && adderr "Exposure time $x is not a number"
         # nimg
-        x=$(echo $values | cut -d '|' -f9)
+        x=$(echo $values | cut -d '|' -f9 | tr -d ' ')
         is_number "$x" && nimg=$x && x=""
         test "$x" && adderr "Number of images $x is not a number"
+        # nref
+        x=$(echo $values | cut -d '|' -f10 | tr -d ' ')
+        is_number "$x" && nref=$x && x=""
+        test "$x" && adderr "Ref. image number $x is not a number"
+        # binning
+        x=$(echo $values | cut -d '|' -f11 | tr -d ' ')
+        is_number "$x" && binning=$x && x=""
+        test "$x" && adderr "Binning $x is not a number"
         # telid
-        x=$(echo $values | cut -d '|' -f10)
+        x=$(echo $values | cut -d '|' -f12)
         test "$x" == "$newcamera" && telid="$newcamera"
         test "$x" != "$newcamera" && lastcamera="$x" && telid=${x%% *}
         
-        # nref
-        x=$(echo $values | cut -d '|' -f12)
-        test -z "$x" && x=1
-        is_number "$x" && nref=$x && x=""
-        test "$x" && adderr "Ref. image number $x is not a number"
         # comm
-        x=$(echo $values | cut -d '|' -f13)
-        test "$x" && comm="$x"
-        # rawfiles
         x=$(echo $values | cut -d '|' -f14)
+        test "$x" && comm="$x"
+        test "$binning" && test "$binning" != 1 && comm=$(echo $comm "bin"$binning)
+        # rawfiles
+        x=$(echo $values | cut -d '|' -f15)
         test "$x" && rawfiles="$x"
         
         # keep selected items of lists
-        x=$(echo $values | cut -d '|' -f10)
+        x=$(echo $values | cut -d '|' -f12)
         cameralist=$(select_item "$cameralist" "$x")
         
-        echo "# setname=$setname target=$target start=$start texp=$texp nimg=$nimg nref=$nref telid=$telid"
+        echo "# setname=$setname target=$target start=$start texp=$texp nimg=$nimg nref=$nref bin=$binning telid=$telid"
         echo "# errmsg=$errmsg"
-        x=$(echo $setname $target $start $texp $nimg $nref | wc -w)
-        if [ $x -eq 6 ]
+        x=$(echo $setname $target $start $texp $nimg $nref $binning | wc -w)
+        if [ $x -eq 7 ]
         then
             formOK=1
             if [ "$rawfiles" ]
@@ -730,7 +712,9 @@ define a new image set by filling in the lower entries of this form\n"
                     sed -i '/^export AI_RAWDIR/d' $projectdir/$rc
                     echo "export AI_RAWDIR=$rawdir" >> $projectdir/$rc
                 fi
+                show_progresswindow "$title" "Analyzing rawfiles ..."
                 map_rawfiles ${rawfiles//;/ } >> rawfiles.dat
+                stop_progresswindow
             fi
         fi
         
@@ -738,6 +722,15 @@ define a new image set by filling in the lower entries of this form\n"
         test "$has_arg_pdir" || save_ini $ini
     fi
 done
+
+# check if camera of the current set exists
+echo "# telid=$telid"
+if [ -z "$telid" ]
+then
+    x=$(AIsetinfo -b $setname | head -1 | awk '{printf("%s", $11)}')
+    test "$x" && ! grep -q "^$x " $projectdir/camera.dat && telid="$newcamera" &&
+        echo "# WARNING: telid $x not in camera.dat"
+fi
 
 
 #---------------------------
@@ -801,11 +794,11 @@ three values for focal length, aperture and f-ratio must be specified):\n"
         is_number "$x" && flen=$x && x=""
         test "$x" && adderr "Focal length $x is not a number"
         # aperture must be number
-        x=$(echo $values | cut -d '|' -f3)
+        x=$(echo $values | cut -d '|' -f3 | tr ',' '.')
         is_number "$x" && aperture=$x && x=""
         test "$x" && adderr "Aperture $x is not a number"
         # fratio must be number
-        x=$(echo $values | cut -d '|' -f4)
+        x=$(echo $values | cut -d '|' -f4 | tr ',' '.')
         is_number "$x" && fratio=$x && x=""
         test "$x" && adderr "F-ratio $x is not a number"
         
@@ -820,7 +813,7 @@ three values for focal length, aperture and f-ratio must be specified):\n"
         # camera
         camera=$(echo $values | cut -d '|' -f5 | tr ' ' '_')
         # rot must be number
-        x=$(echo $values | cut -d '|' -f6)
+        x=$(echo $values | cut -d '|' -f6 | tr ',' '.')
         is_number "$x" && rot=$x && x=""
         test "$x" && adderr "Rotation $x is not a number"
         # rawbits must be number
@@ -832,15 +825,15 @@ three values for focal length, aperture and f-ratio must be specified):\n"
         is_number "$x" && satur=$x && x=""
         test "$x" && adderr "Saturation $x is not a number"
         # gain must be number
-        x=$(echo $values | cut -d '|' -f9)
+        x=$(echo $values | cut -d '|' -f9 | tr ',' '.')
         is_number "$x" && gain=$x && x=""
         test "$x" && adderr "Gain $x is not a number"
         # pixscale must be number
-        x=$(echo $values | cut -d '|' -f10)
+        x=$(echo $values | cut -d '|' -f10 | tr ',' '.')
         is_number "$x" && pixscale=$x && x=""
         test "$x" && adderr "Pixel scale $x is not a number"
         # magzero must be number
-        x=$(echo $values | cut -d '|' -f11)
+        x=$(echo $values | cut -d '|' -f11 | tr ',' '.')
         is_number "$x" && magzero=$x && x=""
         test "$x" && adderr "Mag zero point $x is not a number"
         
@@ -920,6 +913,13 @@ then
     }' >> $sdat
 fi
 
+# if target is not set but telid is set then modify telid in $sdat
+if [ "$target" ] && [ "$telid" ]
+then
+    x=$(AIsetinfo -b $setname | head -1 | awk '{printf("%s", $11)}')
+    echo "# TODO: replace x by $telid"
+fi
+
 
 
 #---------------------------
@@ -944,12 +944,22 @@ test -z "$starstack" && test -e $projectdir/$setname.pgm && ext=pgm &&
     starstack=$setname.$ext && sttype="RO"
 if [ "$starstack" ] && [ -e $projectdir/$setname.head ]
 then
-    x=$(grep "^AI_COMST" $projectdir/$setname.head | cut -d '=' -f2 | tr -d " '")
+    x=$(get_header $projectdir/$setname.head AI_COMST)
     test "$x" && cometstack=$x && cotype="RO"
 fi
 test -z "$cometstack" && test -e $projectdir/${setname}_m.$ext &&
     cometstack=${setname}_m.$ext && cotype="RO"
 echo "# starstack=$starstack  cometstack=$cometstack"
+
+# read binning from comment in $sdat if there was no previous conversion via AIstart
+if [ -z "$binning" ] && [ -e $sdat ] && [ ! -e $projectdir/$setname.head ]
+then
+    comm=$(grep -v "^#" $sdat | awk -v s=$setname '{if($2==s){print $0}}' | \
+        head -1 | sed -e 's|[^#]*#||')
+    x=$(echo $comm | tr ' ' '\n' | grep -w "bin[2-9]" | head -1)
+    binning=${x:3:1}
+    echo "# binning=$binning"
+fi
 
 while [ ! "$formOK" ]
 do
@@ -997,26 +1007,36 @@ do
                     (cd $projectdir; x-terminal-emulator);;
         airtools)   if [ ! "$errmsg" ]
                     then
-                        echo "# launch airtools"
-                        str=$(AIstart -c -n $setname $starstack $cometstack)
+                        x=""
+                        test "$binning" && x="-k BINNING=$binning"
+                        echo "# AIstart -c -n $x $setname $starstack $cometstack"
+                        show_progresswindow "$title" "Loading images ..."
+                        str=$(AIstart -c -n $x $setname $starstack $cometstack)
                         if [ $? -eq 0 ]
                         then
                             formOK=1
-                            rm -f x.*
+                            echo "# open airtools user interface"
                             test -e $setname.ppm &&
                                 starstack=$setname.ppm && cometstack=${setname}_m.ppm
                             test -e $setname.pgm &&
                                 starstack=$setname.pgm && cometstack=${setname}_m.pgm
                             AIexamine $starstack $cometstack &
+                            while [ $(xpaaccess -n -t "2,2" AIRTOOLS) -eq 0 ]
+                            do
+                                sleep 0.2
+                            done
+                            stop_progresswindow
                         else
+                            stop_progresswindow
                             # create error message
-                            if [ "$(echo $str | tr ' ' '\n' | grep -vE "^$|^JD$|^RA$|^DEC$")" ]
+                            #echo "# result=$str"
+                            if [ -z "$str" ] || [ "$(echo $str | tr ' ' '\n' | grep -vE "^$|^JD$|^RA$|^DEC$")" ]
                             then
                                 # unusual error
                                 errfile=$(mktemp /tmp/tmp_err_XXXXXX.txt)
                                 x=$(grep -n "^####" $log | tail -1 | cut -d ":" -f1)
                                 x=$((x-1))
-                                sed -e "1,${x}d" $log > $errfile
+                                cat $log | sed -e "1,${x}d" > $errfile
                                 yad --text-info --tail --width 600 --height 300 \
                                     --title "AIRTOOLS - ERROR" < $errfile
                                 errmsg="ERROR: AIstart failed."

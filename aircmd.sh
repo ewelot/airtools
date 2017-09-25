@@ -10,5 +10,5 @@ test $? -ne 0 &&
 . $prog > /dev/null
 
 # execute commands
-test -z "$AI_LOG" && AI_LOG=ds9cmd.log
+test -z "$AI_LOG" && AI_LOG=airtask.log
 ds9cmd "$@" 2>&1 | tee -a $AI_LOG

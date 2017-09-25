@@ -20,7 +20,7 @@ Description: Astronomical Image Reduction TOOLSet
 Package: airtools-core
 Architecture: any
 Depends: imagemagick, graphicsmagick, gnuplot-x11, librsvg2-bin, potrace,
-	exiftool, curl, wget, gawk, yad, xpa-tools, wcstools,
+	plplot12-driver-cairo, exiftool, curl, wget, gawk, yad, xpa-tools, wcstools,
     ${shlibs:Depends}, ${misc:Depends}
 Suggests: airtools
 Description: Astronomical Image Reduction TOOLSet - Core components
@@ -33,7 +33,8 @@ Description: Astronomical Image Reduction TOOLSet - Core components
  third-party software packages.
 
 Package: airtools-doc
-Architecture: any
+Section: doc
+Architecture: all
 Depends: ${misc:Depends}
 Description: Astronomical Image Reduction TOOLSet - Documentation
  AIRTOOLS is a collection of programs to aim at astronomical image reduction

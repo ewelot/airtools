@@ -9,12 +9,14 @@ prefix	= /usr/local
 BINDIR  = $(DESTDIR)/$(prefix)/bin
 DATADIR = $(DESTDIR)/$(prefix)/share/$(PACKAGE)
 DOCDIR  = $(DESTDIR)/$(prefix)/share/doc/$(PACKAGE)
+APPDIR  = $(DESTDIR)/$(prefix)/share/applications
 DATA	= data/*
 DOCS	= README* doc/*
 
 BIN 	= dcraw-tl pnmtomef pnmccdred pnmcombine
 BINSH 	= airfun.sh aircmd.sh airtools_launcher.sh
 ANALYSIS = airds9.ana
+DESKTOP	= airtools.desktop
 
 # compiler/linker definitions
 CC = gcc
@@ -50,6 +52,8 @@ install: all
 	install -m 0755 -d $(DATADIR)
 	install -m 0644 -p $(DATA) $(DATADIR)
 	install -m 0644 -p $(ANALYSIS) $(DATADIR)
+	install -m 0755 -d $(APPDIR)
+	install -m 0644 -p $(DESKTOP) $(APPDIR)
 	install -m 0755 -d $(DOCDIR)
 	install -m 0644 -p $(DOCS) $(DOCDIR)
 
