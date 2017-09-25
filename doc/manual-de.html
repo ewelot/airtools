@@ -1,0 +1,580 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta http-equiv="Content-Style-Type" content="text/css" />
+  <meta name="generator" content="pandoc" />
+  <meta name="author" content="Thomas Lehmann" />
+  <title>Anleitung zur Kometen-Fotometrie mit AIRTOOLS</title>
+  <style type="text/css">code{white-space: pre;}</style>
+</head>
+<body>
+<div id="header">
+<h1 class="title">Anleitung zur Kometen-Fotometrie mit AIRTOOLS</h1>
+<h2 class="author">Thomas Lehmann</h2>
+<h3 class="date">September 2017</h3>
+</div>
+<div id="TOC">
+<ul>
+<li><a href="#einführung"><span class="toc-section-number">1</span> Einführung</a></li>
+<li><a href="#Aufnahmen"><span class="toc-section-number">2</span> Kometen-Aufnahmen</a></li>
+<li><a href="#installation"><span class="toc-section-number">3</span> Installation</a><ul>
+<li><a href="#vorbereitung-eines-rechners-mit-windows-oder-macos-betriebssystem"><span class="toc-section-number">3.1</span> Vorbereitung eines Rechners mit Windows oder MacOS Betriebssystem</a><ul>
+<li><a href="#virtualbox"><span class="toc-section-number">3.1.1</span> VirtualBox</a></li>
+<li><a href="#linux-installations-medium"><span class="toc-section-number">3.1.2</span> Linux Installations-Medium</a></li>
+<li><a href="#linux-live-system-als-virtualbox-vm"><span class="toc-section-number">3.1.3</span> Linux Live-System als VirtualBox VM</a></li>
+<li><a href="#Datenaustausch"><span class="toc-section-number">3.1.4</span> Austausch von Dateien zwischen Host und virtualisiertem Linux PC</a></li>
+</ul></li>
+<li><a href="#installation-der-airtools-software"><span class="toc-section-number">3.2</span> Installation der AIRTOOLS Software</a></li>
+</ul></li>
+<li><a href="#der-airtools---launcher"><span class="toc-section-number">4</span> Der Airtools - Launcher</a><ul>
+<li><a href="#FormProjekt"><span class="toc-section-number">4.1</span> Formular “Project”</a></li>
+<li><a href="#FormSite"><span class="toc-section-number">4.2</span> Formular “New Site”</a></li>
+<li><a href="#FormSet"><span class="toc-section-number">4.3</span> Formular “Image Set”</a></li>
+<li><a href="#FormInstrument"><span class="toc-section-number">4.4</span> Formular “New Instrument”</a></li>
+<li><a href="#formular-launch"><span class="toc-section-number">4.5</span> Formular “Launch”</a></li>
+</ul></li>
+<li><a href="#airtools-tasks"><span class="toc-section-number">5</span> AIRTOOLS Tasks</a><ul>
+<li><a href="#saoimage-als-grafische-oberfläche"><span class="toc-section-number">5.1</span> SAOImage als grafische Oberfläche</a></li>
+<li><a href="#airtools-tasks-im-überblick"><span class="toc-section-number">5.2</span> AIRTOOLS Tasks im Überblick</a></li>
+<li><a href="#astrometrie"><span class="toc-section-number">5.3</span> Astrometrie</a></li>
+<li><a href="#bild-hintergrund"><span class="toc-section-number">5.4</span> Bild-Hintergrund</a></li>
+<li><a href="#ermittlung-der-psf"><span class="toc-section-number">5.5</span> Ermittlung der PSF</a></li>
+<li><a href="#kometen-extraktion"><span class="toc-section-number">5.6</span> Kometen-Extraktion</a></li>
+<li><a href="#manuelle-messungen"><span class="toc-section-number">5.7</span> Manuelle Messungen</a></li>
+<li><a href="#fotometrie"><span class="toc-section-number">5.8</span> Fotometrie</a></li>
+</ul></li>
+<li><a href="#abschlußarbeiten"><span class="toc-section-number">6</span> Abschlußarbeiten</a><ul>
+<li><a href="#projektübersicht"><span class="toc-section-number">6.1</span> Projektübersicht</a></li>
+<li><a href="#datensicherung"><span class="toc-section-number">6.2</span> Datensicherung</a></li>
+</ul></li>
+<li><a href="#anhang"><span class="toc-section-number">7</span> Anhang</a><ul>
+<li><a href="#dateien-im-projektordner"><span class="toc-section-number">7.1</span> Dateien im Projektordner</a></li>
+<li><a href="#XUbuntuDesktop"><span class="toc-section-number">7.2</span> XUbuntu Linux - Erste Hilfe</a></li>
+<li><a href="#XUbuntuInstall"><span class="toc-section-number">7.3</span> Installation von XUbuntu Linux in VirtualBox VM</a></li>
+</ul></li>
+</ul>
+</div>
+<p></p>
+<h1 id="einführung"><span class="header-section-number">1</span> Einführung</h1>
+<p>AIRTOOLS ist ein Akronym für “Astronomical Image Reduction TOOLSet” und steht für eine Sammlung von Programmen zur Verarbeitung von astronomischen Bilddaten, die mit CCD oder Digitalkamera aufgenommen wurden. Die Software bietet Funktionen zur grundlegenden Bildbearbeitung (z.B. RAW-Entwicklung, Bias-, Dark-, Flat-Korrektion), zur automatischen Objekterkennung und zum Registrieren und Stacken von Bildserien sowie zur Astrometrie und Fotometrie unter Verwendung verschiedener Referenzkataloge.</p>
+<p>Darüber hinaus existieren spezialisierte Tools zur Auswertung von Kometen-Aufnahmen. Diese haben das Ziel, eine zur visuellen Gesamthelligkeitsbestimmung adäquate Fotometrie zu ermöglichen - mit den Vorteilen von Reproduzierbarkeit, hoher Reichweite und unter Ausschluß von subjektiven Fehlern und Differenzen zwischen Beobachtern.</p>
+<p>Die AIRTOOLS Software benötigt ein Linux-Betriebssystem. Dies muß aber nicht zwingend auf dem Rechner des Anwenders installiert sein, sondern kann entweder in einer virtuellen Umgebung laufen oder von einem Linux Live-System (d.h. von einem bootbaren DVD- bzw. USB-Medium oder einer ISO-Imagedatei) gestartet werden.</p>
+<p>Die einzelnen Programme sind vollständig als Kommandozeilen-Programme einsetzbar und somit in Skripten gut kombinierbar. Die wesentlichen Werkzeuge zur Kometen-Fotometrie sind zur leichteren Handhabung über ein grafisches Nutzerinterface bedienbar. Die Erläuterung ausschließlich jener Werkzeuge ist Gegenstand dieser Anleitung.</p>
+<p>Die AIRTOOLS Programmsammlung verwendet eine ganze Reihe von Programmen die Bestandteil der meisten Linux Distributionen sind, wie z.B. ImageMagick, GraphicsMagick, Netpbm und Gnuplot. Außerdem werden frei verfügbare, leistungsfähige Programme aus dem Umfeld der professionellen Astro-Bildverarbeitung benutzt. Das sind insbesondere</p>
+<ul>
+<li><a href="http://ds9.si.edu/site/Home.html">SAOImage DS9</a>: Image display, catalog viewer and analysis GUI</li>
+<li><a href="http://www.astromatic.net">Astromatic Software</a> by E. Bertin: Automatic source detection (sextractor), astrometric calibration (scamp), stacking (swarp), modeling (skymaker) and more</li>
+<li><a href="http://www.starlink.ac.uk/stilts/">Stilts</a> by M. Taylor: Powerful table processing</li>
+<li><a href="http://tdc-www.harvard.edu/software/wcstools/">WCSTools</a> by J. Mink: Utilities to create and manipulate the world coordinate system of images</li>
+</ul>
+<p>Die AIRTOOLS Software ist frei verfügbar. Der Quellcode ist auf der <a href="https://github.com/ewelot/airtools">Projektseite</a> zu finden. Leicht installierbare Programmpakete werden für ausgewählte Linux Distributionen zur Verfügung gestellt.</p>
+<p>Für Anregungen, Fragen oder einfach nur Feedback zu Programm oder Anleitung erreichen Sie mich unter: <script type="text/javascript">
+<!--
+h='&#102;&#114;&#x65;&#x65;&#110;&#x65;&#116;&#46;&#100;&#x65;';a='&#64;';n='&#116;&#x5f;&#108;&#x65;&#104;&#x6d;&#x61;&#110;&#110;';e=n+a+h;
+document.write('<a h'+'ref'+'="ma'+'ilto'+':'+e+'">'+e+'<\/'+'a'+'>');
+// -->
+</script><noscript>&#116;&#x5f;&#108;&#x65;&#104;&#x6d;&#x61;&#110;&#110;&#32;&#x61;&#116;&#32;&#102;&#114;&#x65;&#x65;&#110;&#x65;&#116;&#32;&#100;&#x6f;&#116;&#32;&#100;&#x65;</noscript></p>
+<p>Viel Erfolg!</p>
+<p>Thomas Lehmann</p>
+<p>Weimar, im September 2017</p>
+<h1 id="Aufnahmen"><span class="header-section-number">2</span> Kometen-Aufnahmen</h1>
+<p>Sollen Aufnahmen zur späteren Kometen-Fotometrie gewonnen werden, empfielt es sich, anstatt einer langen Belichtung mehrere kürzere Belichtungen als Serie aufzunehmen. Da die Größe der Koma zumeist weit unterschätzt wird, sollte auf ein ausreichend großes Gesichtsfeld geachtet werden. Es sollten möglichst wenige gesättigte Sterne in den Bereich der Koma fallen.</p>
+<p>Zur Trennung von Komet und Hintergrundsternen werden zwei Bilddateien benötigt: zum einen das auf den Kometen gestackte Bild, das die Sterne als Spuren enthält (im folgenden: Kometen-Stack) und zum zweiten das auf die Sterne gestackte Bild, das die Kometenspur zeigt (Sternen-Stack).</p>
+<p>Die Bildkalibration unter Verwendung von Bias, Dark, Flat mit den Mittels der AIRTOOLS wird an dieser Stelle nicht beschrieben, ebensowenig das Stacken der Einzelbilder. Dazu existieren auch unter den zumeist benutzten Betriebssystemen Windows und MacOS ausgereifte Programme, die den meisten Astrofotografen geläufig sind. Um die so entstandenen gestackten Bilder mit den AIRTOOLS weiter bearbeiten zu können, sind folgende Voraussetzungen zu erfüllen:</p>
+<ul>
+<li>Die gestackten Bilder müssen im FITS-Format vorliegen. Die Pixel haben Intensitäten (auch counts oder ADU) im Bereich 0-65535 (16bit Dynamikbereich).</li>
+<li>Die Linearität des mit dem Detektor empfangenen Signals muß bei allen bisher erfolgten Arbeitssschritten (z.B. Bias-, Dark-, Flatkalibration, Stacken) erhalten geblieben sein.</li>
+<li>Es sollte kein Abzug des Hintergrundsignals erfolgen, auch keine Ebnung, d.h. ein natürlicher Helligkeitsgradient des Himmels soll in der Aufnahme erhalten bleiben.</li>
+<li>Der Intensitäts-Nullpunkt (“Schwarzpunkt”, d.h. die counts ohne Lichteinfall) muß bekannt sein (idealerweise bei 0).</li>
+<li>Die Stacks sind aus Mittelwert-Bildung entstanden. Median-Filter o.ä. sind dabei nicht erlaubt.</li>
+<li>Die Beobachtungszeit (idealerweise Mitte) muß im FITS-Header enthalten sein, entweder als JD oder als DATE-OBS in UT.</li>
+<li>Die ungefähren Koordinaten der Bildmitte werden aus den Feldern RA (bzw. OBJCTRA) und DEC (bzw. OBJCTDEC) im FITS-Header entnommen. Sind diese nicht vorhanden werden die Koordinaten des Kometen zur Beobachtungszeit laut Ephemeriden verwendet.</li>
+</ul>
+<h1 id="installation"><span class="header-section-number">3</span> Installation</h1>
+<p>Im Folgenden wird die Installation der AIRTOOLS für Nutzer beschrieben, die einen PC mit Windows oder MacOS Betriebssystem besitzen. Im ersten Teil wird dabei ein virtualisiertes Linux-System gestartet. Nutzer, die bereits einen Linux-Rechner betreiben, können dieses Unterkapitel 3.1 überspringen. Im zweiten Teil wird die eigentliche AIRTOOLS-Installation im (eventuell virtualisierten) Linux-System beschrieben.</p>
+<p>Die Hardware-Voraussetzungen zum Arbeiten mit den AIRTOOLS sind nicht hoch. Jeder PC oder Laptop, der in den letzten ca. 7 Jahren angeschafft wurde, ist dazu geeignet. Allerdings ist ein großer Bildschirm, wie bei allen Programmen der Bildbearbeitung, von Vorteil.</p>
+<p>Ein Internet-Anschluß ist zwingend erforderlich, da diverse Daten wie Ephemeriden und astrometrische und fotometrische Referenzkataloge online abgefragt werden.</p>
+<h2 id="vorbereitung-eines-rechners-mit-windows-oder-macos-betriebssystem"><span class="header-section-number">3.1</span> Vorbereitung eines Rechners mit Windows oder MacOS Betriebssystem</h2>
+<p>Ein virtualisierter PC - auch virtuelle Machine oder kurz VM genannt - ist eine ideale Lösung, um eine von den Daten und Programmen des eigentlichen Rechners (Host) abgesetzte, isolierte Umgebung zu schaffen in der beliebige Betriebssysteme und Anwendungen laufen. Es ist auch möglich, mehrere VMs gemeinsam produktiv parallel zum Host zu benutzen - gerade so, als ob man mehrere Rechner in einem Netzwerk betreiben würde.</p>
+<p>Um die AIRTOOLS auf einem virtualisierten Linux-PC installieren zu können benötigt man eine Virtualisierungs-Software, die auf dem Host-PC installiert wird und ein Linux Installations-Medium (z.B. als DVD oder ISO-Datei).</p>
+<h3 id="virtualbox"><span class="header-section-number">3.1.1</span> VirtualBox</h3>
+<p><a href="http://www.virtualbox.org">VirtualBox</a> ist eine ausgereifte, frei erhältliche Virtualisierungs-Software. Es muß die zum (Host-) Betriebssystem passende Version von der Download-Seite heruntergeladen und installiert werden. Anschließend erfolgt die Installation des sogenannten “VirtualBox Extension Pack”:</p>
+<ul>
+<li>Herunterladen des “VirtualBox Extension Pack” von der gleichen Download-Seite</li>
+<li>Starten des “Oracle VM VirtualBox” Managers (Desktop Icon)</li>
+<li>Im Manager unter dem Menüpunkt Datei/Einstellungen zum Reiter Zusatzpakete wechseln</li>
+<li>Über das blaue Symbol am rechten Fensterrand kann das Paket hinzugefügt werden: Extension Pack Datei auswählen, offnen und installieren.</li>
+</ul>
+<h3 id="linux-installations-medium"><span class="header-section-number">3.1.2</span> Linux Installations-Medium</h3>
+<p>Linux gibt es in sehr unterschiedlichen Ausprägungen, wobei das Betriebssystem und ein großer Teil von Anwendungssoftware gebündelt als sogenannte Distribution angeboten wird. Prinzipiell lässt sich die AIRTOOLS-Software auf einer beliebigen Linux-Distribution installieren, da alle benötigten Komponenten auch im Quellcode verfügbar sind. Um jedoch den Installationsaufwand zu minimieren, empfehle ich die Verwendung einer Linux-Version, für die alle Programme als Binärpakete verfügbar sind (sie sind somit kompiliert und leicht installierbar bzw. deinstallierbar). Dies sind zur Zeit die 64bit Versionen von</p>
+<ul>
+<li>Ubuntu 16.04 (und Varianten wie XUbuntu)</li>
+<li>Debian 8</li>
+</ul>
+<p>In der weiteren Anleitung wird <a href="https://xubuntu.org/">XUbuntu Linux</a> in der Version 16.04 LTS (64bit) verwendet. Sie müssen die entsprechende ISO-Image Datei aus dem Download-Bereich herunterladen (aktuell z.B. <a href="http://ftp.uni-kl.de/pub/linux/ubuntu-dvd/xubuntu/releases/16.04/release/xubuntu-16.04.3-desktop-amd64.iso">xubuntu-16.04.3-desktop-amd64.iso</a>).</p>
+<h3 id="linux-live-system-als-virtualbox-vm"><span class="header-section-number">3.1.3</span> Linux Live-System als VirtualBox VM</h3>
+<p>Die meisten (großen) Linux-Distributionen bieten ihre Software mittlerweise als Live-System an, d.h. das Betriebssystem und die Anwendungen befinden sich auf einem bootbaren Medium. Das System kann beliebig getestet werden und bei Bedarf aus dem gebooteten Zustand heraus installiert werden.</p>
+<p>So funktioniert das auch mit der XUbuntu ISO-Datei, die in einer VirtualBox VM direkt als Bootmedium verwendet werden kann - genauso wie eine aus der ISO-Datei erstellte DVD. Dazu sind folgende Schritte notwendig:</p>
+<ul>
+<li>Oracle VM VirtualBox Manager starten</li>
+<li>Erzeugung einer neuen VM
+<ul>
+<li>Werkzeugleiste “Neu”</li>
+<li>Name: XUbuntu-16.04, Typ: Linux, Version: Ubuntu (64bit)</li>
+<li>Speicher: ca. Hälfte des RAM vom Hostsystem, mind. 2000 MB</li>
+<li>Platte: keine Festplatte</li>
+</ul></li>
+<li>Einstellungen der VM vornehmen
+<ul>
+<li>Werkzeugleiste “Ändern”</li>
+<li>unter “System” Reiter Hauptplatine: Box “Hardware-Uhr in UTC” deaktivieren</li>
+<li>unter “System” zu Reiter Prozessor: Anzahl auf Hälfte der CPUs des Hostsystems erhöhen</li>
+<li>unter “Anzeige” zu Tab Bildschirm: Grafikspeicher auf 32 MB erhöhen</li>
+<li>unter “USB”: USB-3.0-Controller aktivieren</li>
+</ul></li>
+<li>ISO-Datei als Bootmedium “einlegen”
+<ul>
+<li>unter “Massenspeicher”, Controller IDE auf CD “leer” klicken</li>
+<li>über das CD-Symbol ganz rechts am Fensterrand die Auswahlliste für das optische Laufwerk öffnen und darin den ersten Eintrag “Datei für optisches Medium auswählen …” wählen</li>
+<li>im Dateimanager die XUbuntu ISO-Datei auswählen, es erscheint schließlich der ISO-Dateiname unter Controller IDE neben dem CD Symbol</li>
+<li>Box “Live-CD/DVD” am rechten Fensterrand aktivieren</li>
+<li>das Einstellungen-Fenster mit “OK” schließen</li>
+</ul></li>
+<li>Virtuelles Linux System booten
+<ul>
+<li>Über den Knopf “Starten” in der Werkzeugleiste des Managers wird der Bootvorgang von XUbuntu Linux in der virtuellen Maschine gestartet. Diese erscheint als neues Fenter mit einer Menüleiste (oben) zum Zugriff auf Einstellungen der VM und dem darunter befindlichen “Bildschirm” des virtuellen Rechners.</li>
+<li>Eventuell erscheinende Meldungen von VirtualBox am oberen Fensterrand der VM können (nach dem Lesen) geschlossen werden.</li>
+<li>Nach einiger Zeit (ca 30-60 s) erscheint auf dem Bildschirm der VM das Fenster “Install” in dem links als Sprache “Deutsch” gewählt werden kann (2 Einträge über English).</li>
+<li>Danach “Xubuntu ausprobieren” wählen und warten bis der Bootvorgang abgeschlossen wird. Im Live-System wird dabei der Nutzer “xubuntu” automatisch angemeldet.</li>
+</ul></li>
+</ul>
+<p>Auf dem gestarteten XUbuntu Desktop befindet sich das Programm-Menü unter dem kleine blau-weißen Icon in der linken oberen Ecke. Im geöffneten Programm-Menu befindet sich rechts unten ein Symbol für den Ausschaltknopf, über den das virtuelle Linux-System heruntergefahren werden kann. Die dabei erscheinende Meldung zur Entfernung des Installationsmediums kann ignoriert werden. Nach Betätigen der Enter-Taste wird die VM geschlossen. Weitere Informationen zur Orientierung auf dem XUbuntu Desktop befindet sich im <a href="#XUbuntuDesktop">Anhang</a>.</p>
+<p>Beim ersten Start erscheint der Xubuntu Desktop in einer geringen Größe, die zum Arbeiten mit den AIRTOOLS nicht ausreichend wäre. Eine Möglichkeit der Vergrößerung des virtuellen Bildschirms ist folgende:</p>
+<ul>
+<li>Fenster der VM durch Ziehen der Ränder auf gewünschte Größe bringen</li>
+<li>Nutzer im Xubuntu Linux abmelden. Dazu im geöffneten Programm-Menü den Ausschaltknopf betätigen und Abmelden wählen.</li>
+<li>Der Bildschirm startet in neuer Größe und die Anmeldemaske erscheint.</li>
+<li>Einloggen als Nutzer “xubuntu” ohne Paßwort.</li>
+</ul>
+<p>Das Live Linux-System ist voll funktionsfähig. Es läuft komplett im RAM des Hosts, wobei die in der VM-Konfiguration angegebene Speichergröße zu gleichen Teilen als RAM für das Betriebssystem und Anwendungen und als “Plattenplatz” zur Verfügung steht. D.h. bei 2 GB zugewiesenem VM Speicher können maximal 1 GB für neue/geänderte Dateien benutzt werden. Dazu zählen neu installierte Anwendungen und Nutzerdaten in gleicher Weise.</p>
+<p>Alle Änderungen, die nun am Linux-System vorgenommen werden (inclusive aller neu angelegten Dateien) sind nur solange existent, wie das System läuft - sie befinden sich ja im RAM. Nach jedem Booten eines Live-Systems in einer VM hat man den exakt gleichen Ausgangszustand. Das hat den Vorteil, daß das Linux Live-System auf keine Weise unbrauchbar gemacht werden kann. Man hat eine ideale Testumgebung für Anwendungen und Spielwiese für eigene Experimente. Nachteile der Nutzung der AIRTOOLS in solch einem Live-System sind:</p>
+<ul>
+<li>wenig Platz für eigene Dateien</li>
+<li>alle Ergebnisse müssen auf ein externes Medium (z.B. USB-Platte) gesichert werden, bevor das virtuelle Linux-System heruntergefahren wird</li>
+<li>nach jedem Bootvorgang ist die AIRTOOLS Installation, die im folgenden Abschnitt beschrieben wird, zu wiederholen</li>
+</ul>
+<p>Abhilfe für alle genannten Punkte schafft man durch die permanente Installation des XUbuntu-Linux Systems auf eine virtuelle Festplatte innerhalb der VM (siehe <a href="#XUbuntuInstall">Anhang</a>). Für erste Schritte und Tests der AIRTOOLS Software ist die Arbeit mit dem Live-System hingegen bestens geeignet.</p>
+<h3 id="Datenaustausch"><span class="header-section-number">3.1.4</span> Austausch von Dateien zwischen Host und virtualisiertem Linux PC</h3>
+<p>Es gibt verschiedene Wege, um Dateien zwischen dem Hostrechner (Windows-PC) und einem virtualisierten Rechner (z.B. Linux in VM) auszutauschen. Eine einfache Möglichkeit besteht in der Verwendung eines USB Sticks (bzw. einer USB Festplatte) - genauso, als würde man Dateien zwischen zwei realen Computern transportieren.</p>
+<p>Auf dem Hostrechner wird der USB Stick mit Daten beschrieben. Das sind die FITS Bilder von Sternenstack, Kometenstack und im Idealfall auch die kalibrierten Einzelbilder. Es empfiehlt sich die Daten von verschiedenen Beobachtungsnächten in getrennten Ordnern abzulegen. Wenn der Schreibvorgang auf den USB Stick beendet ist, kann er an die virtuelle Maschine übergeben werden. Dazu im Fenster der laufenden VM über den Menüpunkt Geräte / USB den Geräteeintrag zum USB Stick aktivieren.</p>
+<p>Der USB Stick wird im laufenden virtualisierten Linux-System erkannt und automatisch eingebunden, genauso als würde man den Stick am USB-Port eines realen Linux-PC einstecken. Es erscheint ein entsprechendes Desktop-Symbol und Dateien können von Stick gelesen oder auf ihn kopiert werden.</p>
+<p>Das Entfernen des Sticks vom Linux-System geschieht mittels Klick mit rechter Maustaste auf das USB-Stick-Symbol und “Datenträger auswerfen”. Jetzt kann er vom virtualisierten PC “abgezogen” werden. Dazu wird im Fenster der VM über den Menüpunkt Geräte / USB der Geräteeintrag zum USB Stick deaktiviert.</p>
+<h2 id="installation-der-airtools-software"><span class="header-section-number">3.2</span> Installation der AIRTOOLS Software</h2>
+<p>Die im Folgenden beschriebene Installation von Binärpaketen erfordert ein laufendes Linux-System. Der gesamte Installationsvorgang dauert bei Vorhandensein einer DSL-Verbindung zum Internet nur wenige Minuten. Unter XUbuntu-Linux sind folgende Arbeitsschritte erforderlich:</p>
+<ul>
+<li>Das <a href="https://github.com/ewelot/airtools/raw/master/install_deb.sh">Installationsprogramms</a> aus dem GitHub Repository herunterladen:
+<ul>
+<li>Im Programm-Menü den Internetnavigator (Firefox) starten und in der Adressleiste den Link zur Projektseite https://github.com/ewelot/airtools eingeben.</li>
+<li>Dem Link zum Installationsprogramm <code>install_deb.sh</code> folgen.</li>
+<li>Die Quelldatei ist über den Knopf “Raw” am rechten Seitenrand erreichbar. Dort mit Klick der rechten Maustaste “Save Link As …” wählen und die Datei im voreingestellten Ordner “Downloads” speichern.</li>
+<li>Den Webbrowser Firefox schließen.</li>
+</ul></li>
+<li>Die Dateiverwaltung (Browser zur Navigation im Datei-System) öffnen durch Doppelklick auf Icon “Persönlicher Ordner” und in den Ordner wechseln, in dem das Installationsprogramm abgelegt wurde (standardmäßig Ordner “Downloads”)</li>
+<li>In Dateiverwaltung unter Menu “Datei” den Eintrag “Terminal hier öffnen” wählen, wodurch ein Terminal-Fenster erscheint. Das Fenster der Dateiverwaltung kann jetzt geschlossen werden.</li>
+<li><p>Installationsvorgabg starten durch Eingabe des folgenden Kommandos im Terminal:</p>
+<code>sudo bash install_deb.sh</code></li>
+<li><p>Hinweis: Eine während der Vorbereitung des Installationsvorgangs auftretende Fehlermeldung von <em>appstreamcli</em> kann ignoriert werden.</p></li>
+</ul>
+<p>Das Live-System, das aus der ISO-Datei gestartet wird, beinhaltet nur eine verhältnismäßig kleine Software-Auswahl. Daher ist das Nachladen einer Reihe von Softwarepaketen erforderlich. Dies geschieht wärend der AIRTOOLS Installation automatisch (insgesamt werden ca. 90 MB aus dem Internet heruntergeladen). Nach einer erfolgreichen Installation wird ein neuer Eintrag im Programm-Menü (in der Kategorie Bildung) und ein neues Desktop-Icon mit dem Namen “Airtools” erzeugt. Die Terminal-Fenster mit den Ausgaben des Installationsvorgangs wird nicht mehr benötigt und kann geschlossen werden.</p>
+<h1 id="der-airtools---launcher"><span class="header-section-number">4</span> Der Airtools - Launcher</h1>
+<p>Zu den für die Auswertung benötigten Daten gehören neben den FITS Bildern der Stacks diverse Informationen mit Zusatzangaben zu den Aufnahmen, zum Beobachtungsinstrument und Aufnahmeort. Zur Einrichtung eines neuen AIRTOOLS-Projektes und zur Abfrage der benötigten Metadaten wird ein Hilfsprogramm, der Airtools-Launcher verwendet. Dieser wird durch Doppelklick auf das Airtools-Icon gestartet.</p>
+<h2 id="FormProjekt"><span class="header-section-number">4.1</span> Formular “Project”</h2>
+<p>Der obere Teil des Formulars dient zum Öffnen eines schon vorhandenen Projektes. Soll ein neues Projekt angelegt werden, so sind die unteren Formularfelder auszufüllen.</p>
+<dl>
+<dt>Base Directory:</dt>
+<dd>Alle AIRTOOLS-Projekte werden unterhalb eines Basis-Ordners angelegt. Dieses Verzeichnis sollte sich daher auf einer Festplatte (bzw. Partition) mit ausreichend freiem Speicherplatz befinden.
+</dd>
+<dt>Date of observation:</dt>
+<dd>Ein Projekt kann mehrere Kometen-Beobachtungen einer Nacht enthalten, auch wenn diese mit unterschiedlichen Teleskopen aufgenommen wurden. Der Name des Projektverzeichnisses wird standardmäßig aus dem Beobachtungsdatum gebildet. Dabei wird das Datum zu Beginn der Nacht im Format “yymmdd” benutzt.
+</dd>
+<dt>Temporary Directory:</dt>
+<dd>Ordner für temporäre Dateien. Dies ist unter Linux üblicherweise /tmp.
+</dd>
+<dt>Observatory Site:</dt>
+<dd>Hier wird der Beobachtungsort aus einer Liste bekannter Orte ausgewählt. Durch Wahl von “new site” kann in einem gesonderten Formular der Eintrag für einen neuen Beobachtungsort angelegt werden.
+</dd>
+</dl>
+<p><img src="images/launcher_project.png" alt="Airtools-Launcher Formular Project" />{width=8cm}</p>
+<h2 id="FormSite"><span class="header-section-number">4.2</span> Formular “New Site”</h2>
+<p>Folgende Angaben eines Beobachtungsortes werden benötigt:</p>
+<dl>
+<dt>Site ID:</dt>
+<dd>Die ID muß ein eindeutiges Kürzel aus drei Buchstaben sein.
+</dd>
+<dt>Location:</dt>
+<dd>Name des Beobachtungsortes, bestehend aus einem Wort.
+</dd>
+<dt>TZ-UT:</dt>
+<dd>Zeitzonendifferenz zu Greenwich (ohne Sommerzeit) in Stunden.
+</dd>
+<dt>Longitude:</dt>
+<dd>Geographische Länge in Grad, negativ für Orte östlich von Greenwich.
+</dd>
+<dt>Latitude:</dt>
+<dd>Geographische Breite in Grad, positiv für Orte nördlich des Äquators.
+</dd>
+<dt>Altitude:</dt>
+<dd>Höhe des Beobachtungsortes über dem Meeresspiegel in Metern.
+</dd>
+</dl>
+<p>Jeder Beobachtungsort muß nur einmal erfaßt werden. Danach steht er für alle zukünftigen Projekte zur Verfügung (siehe <a href="#FormProjekt">oben</a>).</p>
+<p><img src="images/launcher_site.png" alt="Airtools-Launcher Formular New Site" />{width=8cm}</p>
+<h2 id="FormSet"><span class="header-section-number">4.3</span> Formular “Image Set”</h2>
+<p>Eine Kometenbeobachtung (bestehend aus Kometenstack und Sternenstack) basiert auf einer Serie von Einzelbelichtungen - einem <em>Image Set</em>. Das vorliegende Formular wird benutzt um entweder ein bereits vorher definiertes Set auszuwählen oder die Angaben zu einem neues Set zu erfassen:</p>
+<dl>
+<dt>Set Name:</dt>
+<dd>Ein in diesem Projekt eindeutiger Kurzname für dieses Set, bestehend aus zwei Buchstaben (z.B. co für Komet) und zwei Ziffern (z.B. laufende Nummer der Beobachtung in dieser Nacht). Dieser Setname wird als Basis des Namens von diversen Ergebnisdateien verwendet.
+</dd>
+<dt>Target comet:</dt>
+<dd>Bezeichnung des Kometen. Diese wird u.a. verwendet, um Ephemeriden aus der MPC-Datenbank per Webzugriff abzufragen. Die Schreibweise für periodische Kometen ist Nummer mit angehängtem P (z.B. 41P), sonst Jahr und Bezeichnung ohne Leerzeichen (z.B. 2015ER61).
+</dd>
+<dt>Local Start Time:</dt>
+<dd>Startzeit der Belichtungsreihe. Diese dient nur als Orientierung und zur eigenen Identifizierung der Beobachtung.
+</dd>
+<dt>Average exposure time:</dt>
+<dd>Mittlere Belichtungszeit eines Einzelbildes in Sekunden.
+</dd>
+<dt>Number of exposures:</dt>
+<dd>Anzahl der Belichtungen die gestackt wurden.
+</dd>
+<dt>Reference image number for stacking:</dt>
+<dd>Nummer des Bildes in der Serie, das als Referenzbild beim Stacken benutzt wurde. Wenn nicht angegeben, wird angenommen, daß auf das erste Bild gestackt wurde.
+</dd>
+<dt>Pixel binning:</dt>
+<dd>Anzahl der Pixel, die beim Auslesevorgang zusammengefaßt wurden.
+</dd>
+<dt>Instrument:</dt>
+<dd>An dieser Stelle kann aus einer Liste von bereits definerten Beobachtungsinstrumenten selektiert werden. Wurde ein neues Instrument (Teleskop und/oder Kamera) benutzt, muß der Eintrag “add new instrument” gewählt werden.
+</dd>
+<dt>Comments:</dt>
+<dd>Feld für die Filterbezeichnung oder andere Angaben.
+</dd>
+<dt>Image files of individual exposures:</dt>
+<dd>Liste der FITS-Dateien der verwendeten Einzelbilder, die über den Datei-Browser (rechtes Ordner-Symbol) selektiert werden können. Wenn diese bekannt sind, dann wird die Aufnahmezeit aller Bilder extrahiert und später in den AIRTOOLS-Programmen mit verwendet.
+</dd>
+</dl>
+<p><img src="images/launcher_set.png" alt="Airtools-Launcher Formular Image Set" />{width=8cm}</p>
+<h2 id="FormInstrument"><span class="header-section-number">4.4</span> Formular “New Instrument”</h2>
+<p>Das Formular dient der Definition eines neuen Aufnahmeinstruments mit den benötigten Angaben zu Teleskop und verwendeter Kamera. Die Felder sind wie folgt auszufüllen:</p>
+<dl>
+<dt>Instrument ID:</dt>
+<dd>Kurzbezeichnung für das benutzte Instrument, bestehend aus 3-6 Buchstaben oder Ziffern. Diese dient der eindeutigen Identifizierung unter allen definierten Beobachtungsinstrumenten, d.h. allen Teleskop-Kamera-Kombinationen.
+</dd>
+<dt>Focal length:</dt>
+<dd>Aufnahmebrennweite in mm. Hinweis: Es ist ausreichend, wenn zwei der drei Felder: Focal length, Aperture, F-Ratio ausgefüllt werden.
+</dd>
+<dt>Aperture:</dt>
+<dd>Durchmesser der Teleskop- bzw. Objektiv-Öffnung in mm.
+</dd>
+<dt>F-Ratio:</dt>
+<dd>Öffnungsverhältnis f/D bzw. Blende.
+</dd>
+<dt>Camera Model:</dt>
+<dd>Modellbezeichnung der Kamera.
+</dd>
+<dt>Camera Rotation:</dt>
+<dd>Rotationswinkel der Kamera in Grad (Norden oben = 0°, Norden links = 90°)
+</dd>
+<dt>RawBits:</dt>
+<dd>Anzahl der Bits pro Pixel in einem Farbkanal.
+</dd>
+<dt>Saturation:</dt>
+<dd>Grenzwert der Counts (ADU) bis zu dem die Signalwiedergabe linear ist. Wenn der Wert nicht bekannt ist, dann wird der volle Dynamikbereich benutzt
+</dd>
+<dt>Gain:</dt>
+<dd>Anzahl der Elektronen je ADU. Wenn nicht bekannt, dann kann als Schätzwert 1 eingesetzt werden.
+</dd>
+<dt>Pixel scale:</dt>
+<dd>Größe des Bildpunktes am Himmel in Bogensekunden.
+</dd>
+<dt>Mag zero point:</dt>
+<dd>Schätzwert für Helligkeitsnullpunkt, d.h. die Sternhelligkeit, die bei 1 Sekunde Belichtungszeit eine Intensität von 1 Count (ADU) erzeugen würde.
+</dd>
+<dt>Telescope type:</dt>
+<dd>Auswahl des Teleskop-Typs: Reflector, Refractor, Photo Lens
+</dd>
+<dt>Camera type:</dt>
+<dd>Auswahl des Kameratyps: CCD, DSLR
+</dd>
+</dl>
+<p>Zu beachten ist, daß sich die Werte für <em>Saturation</em>, <em>Gain</em> und <em>Mag zero point</em> auf das gestackte Bild geziehen, das möglicherweise in der Intensität gegenüber den ausgelesenen Rohbildern gestreckt ist. Es ist z.B. nicht unüblich, daß DSLR-Aufnahmen mit 14bit je Pixel auf einen 16bit Dynamikbereich gestreckt werden, wonach die Intensitäten im gestackten Bild bis ca. 60000 ADU linear sein können.</p>
+<p><img src="images/launcher_instrument.png" alt="Airtools-Launcher Formular New Instrument" />{width=8cm}</p>
+<h2 id="formular-launch"><span class="header-section-number">4.5</span> Formular “Launch”</h2>
+<p>Abschließend erfolgt nun die Auswahl der Bilddateien, die mit den AIRTOOLS analysiert werden sollen:</p>
+<dl>
+<dt>Stack centered on stars:</dt>
+<dd>Wenn das Feld noch leer ist, dann ist hier die FITS-Datei auszuwählen, die den Sternenstack enthält.
+</dd>
+<dt>Stack centered on comet:</dt>
+<dd>Wenn das Feld noch leer ist, dann ist hier die FITS-Datei auszuwählen, die den Kometenstack enthält.
+</dd>
+<dt>Action:</dt>
+<dd>Auswahl der Aktion, die nach Klicken des Knopfes “OK” erfolgt. Normalerweise wird dies der Start der graphischen Oberfläche zum Aufruf der AIRTOOLS-Tasks sein. Es besteht aber auch die Möglichkeit, die Dateiverwaltung im Projekt-Ordner zu starten oder für spezielle Experten-Aktionen ein Terminal-Fenster im Projekt-Ordner zu öffnen.
+</dd>
+</dl>
+<p>Nach Wahl der Aktion “Launch AIRTOOLS” werden die FITS Bilder konvertiert in 16bit PGM Bilddateien (bzw. PPM bei RGB-FITS Bildern). Die Namen dieser Dateien beginnen mit dem Namen des “Image Sets”. Wurde beispielsweise das Set mit <code>co01</code> bezeichnet und handelt es sich um monochrome CCD Aufnahmen, so heißt der umgewandelte Sternstack <code>co01.pgm</code> und der Kometenstack <code>co01_m.pgm</code>.</p>
+<p>Funktionieren Bildkonvertierung und die Validierung der Header-Informationen dann wird die Arbeit des Launchers beendet und nach einigen Sekunden das Programm <em>SAOImage</em> gestartet, das als graphische Oberfläche für die AIRTOOLS Tasks dient.</p>
+<p><img src="images/launcher_launch.png" alt="Airtools-Launcher Formular Launch" />{width=8cm}</p>
+<h1 id="airtools-tasks"><span class="header-section-number">5</span> AIRTOOLS Tasks</h1>
+<h2 id="saoimage-als-grafische-oberfläche"><span class="header-section-number">5.1</span> SAOImage als grafische Oberfläche</h2>
+<p>Das Programm <em>SAOImage</em> wird als graphisches Frontend zur Interaktion mit FITS Bildern auch an professionellen Sternwarten eingesetzt. Es bietet viele nützliche Funktionen und umfangreiche Hilfe-Informationen. Im Rahmen der AIRTOOLS wird nur ein kleiner Funktionsumfang gebraucht.</p>
+<p>Nach Beendigung des Launchers erscheint das Fenster “SAOImage AIRTOOLS”. Es besitzt eine Menüzeile, diverse Informationsfelder, ein kleines Übersichtsbild (mit x-y-Achsen) und ein Lupenfeld (Vergrößerung der Region um den Mauszeiger), darunter zwei Knopfleisten und den großen Bildrahmen und ganz unten einen Intensitätsbalken mit Skale. Sichtbar ist das Bild des Sternenstacks. In einer zweiten Ebene - Rahmen 2, durch Tab erreichbar - befindet sich das Bild des Kometenstacks.</p>
+<p>Bei Verwendung kleiner Bildschirme kann man durch Verringerung der Fontgröße Platz sparen. Dazu unter Menu Bearbeiten/Einstellungen die Einstellungen von</p>
+<ul>
+<li>GUI Font: helvetica anklicken und Größe z.B. 10 wählen</li>
+<li>Text Font: courier anklicken und Größe z.B. 10 wählen</li>
+</ul>
+<p>und abschließend die Einstellungen speichern. Außerdem kann es hilfreich sein, unter Menü Ansicht auf vertikales Layout umzustellen.</p>
+<p>Durch folgenden Aktionen läßt sich die Aussehen des FITS-Bildes manipulieren:</p>
+<ul>
+<li>Änderung von Bildhelligkeit und Kontrast durch Klicken und Ziehen der rechten Maustaste. Bei horizontaler Bewegung ändert sich die Helligkeit, bei vertikaler Bewegung der Kontrast.</li>
+<li>Verkleinern und Vergrößern des Bildausschnitts durch Rollen des Mausrades.</li>
+<li>Bewegen des Bildausschnitts durch Klicken mit der mittleren Maustaste im Bild oder im kleinen Übersichtsbild (Panner, mit x-y-Achsen). Damit wird ein neues Bildzemtrum gewählt.</li>
+<li>Bildwechsel bei mehreren geladenen Bildern durch Verwendung von Tab (vorwärts) beziehungsweise Shift-Tab (rückwärts). Wenn mehrere Bilder geladen sind, werden sie standardmäßig einzeln dargestellt. Über den Menüpunkt “Rahmen / Gekachelte Rahmen” kann man die Bilder auch nebeneinander darstellen.</li>
+</ul>
+<p>Bei einer Reihe von AIRTOOLS-Programmen wird der Nutzer aufgefordert, im Bild Regionen zu definieren, z.B. für die ausgedehnte Koma des Kometen oder für Bereiche des Hintergrunds, die in den folgenden Meßroutinen verwendet werden. Da Regionen mehrmals benötigt werden, empfiehlt es sich, in der oberen der zwei Knopfleisten über dem Bild “region” zu wählen, damit in der unteren Leiste bestimmte Aktionen für Regionen schnell zugänglich sind. Folgende Dinge sollten geübt werden:</p>
+<ul>
+<li>Regionen anlegen durch Klicken (bzw. Klicken und Ziehen) mit der linken Maustaste im Bild. Dies erzeugt standardmäßig eine Kreisregion. Die Form kann im Menü Region/Form geändert werden.<br /></li>
+<li>Eine Region wird durch einen kurzen Klick innerhalb der Fläche zur Bearbeitung markiert. Sie kann nun durch Klicken und Ziehen an den Markierungspunkten modifiziert werden. Bei einer Polygon-Region können Punkte durch Klicken auf den Linien hinzugefügt und mit Hilfe der Entf-Taste gelöscht werden. Dabei wird nur wenn der Mauszeiger genau über einem Punkt steht dieser gelöscht, ansonsten die gesamte Region. Dazu ist etwas Übung erforderlich.</li>
+<li>Mehrere markierte Regionen werden gleichzeitig bewegt, kopiert (Strg-C, Strg-V) oder gelöscht.</li>
+<li>Regionen speichern, z.B. unter Verwendung der Knopfleisten oberhalb des Bildes (obere Leiste “region”, untere Leiste rechts “speichern”) oder Verwendung des Menüpunktes Region / Regionen speichern. Alle Regionen sind stets im voreingestellten Format (Format: ds9, Koordinatensystem: physical) abzuspeichern.</li>
+</ul>
+<h2 id="airtools-tasks-im-überblick"><span class="header-section-number">5.2</span> AIRTOOLS Tasks im Überblick</h2>
+<p>Die Bearbeitung und Analyse der Kometenaufnahmen erfolgt in mehreren Schritten, die nacheinander auszuführen sind. Sie sind als Tasks unter dem Menü “Analyse” eingebunden. Durch Drücken der Taste F1 bei Positionierung des Mauszeigers im Bildbereich erhält man jederzeit eine Übersicht zu den vorhandenen AIRTOOLS Tasks (und Hilfsprogrammen) und deren Tastenkürzel.</p>
+<p>Die Bearbeitungsschritte sind</p>
+<ul>
+<li>Astrometrische Kalibration des Sternenstacks</li>
+<li>Entfernung des Hintergrundgradients in beiden Stacks</li>
+<li>Extraktion der PSF im Sternenstack und im Kometenstack (Sternspur)</li>
+<li>Kometenextraktion</li>
+<li>Manuelle Erfassung von Zusatzinformationen</li>
+<li>Fotometrische Kalibration</li>
+</ul>
+<p>Beim Start eines Tasks werden in einem einfachen Formular Parameter abgefragt, wobei in den meisten Fällen bereits die Voreinstellungen zu guten Ergebnissen führen. Während ein Task läuft, werden Meldungen und diverse Zwischenergebnisse in einem Fenster angezeigt und gleichzeitig in eine Protokolldatei <code>airtask.log</code> im Projektordner geschrieben. Im Meldungsfenster erscheinen gegebenenfalls auch Aufforderungen zu Aktionen des Nutzers.</p>
+<p>Verschiedene Tasks erzeugen neue Ergebnisbilder, die dem Hauptfenster “SAOImage AIRTOOLS” hinzugefügt werden. Manche Tasks erzeugen temporär auch neue SAOImage Fenster, die am Namen in der Titelleiste des Fensters unterscheidbar sind. Diese temporären Fenster sind nach Beendigung des jeweiligen Tasks zu schließen.</p>
+<h2 id="astrometrie"><span class="header-section-number">5.3</span> Astrometrie</h2>
+<p>Erster Arbeitsschritt ist die astrometrische Kalibration des Sternenstacks. Dazu muß dieser im Bildrahmen dargestellt sein.</p>
+<p>Vor Aufruf des Tasks ist jedoch zuerst die Bildorientierung zu überprüfen. Einige Programme, die zur Bildbearbeitung und zum Stacken verbreitet sind, benutzen eine geänderte Reihenfolge der Pixel in der FITS-Datei. Es kann also sein, daß das dargestellte Bild unter SAOImage gespiegelt erscheint, d.h. oben und unten vertauscht sind. In diesem Fall müssen Sternenstack und Kometenstack nacheinander gespiegelt werden. Die entsprechende Funktion <em>imflip</em> wird durch Taste i aufgerufen. Wenn keine Referenzaufnahme oder Sternkarte zur Hand ist, kann ein Ausschnitt des Digital Sky Survey online verglichen werden. Taste a startet die Funktion <em>aladindss</em>, wobei ein Browserfenster mit einem entsprechenden Himmelsausschnitt geöffnet wird.</p>
+<p>Nach Bildwechsel zum Sternenstack kann die astrometrische Kalibration gestartet werden (Aufruf über entsprechenden Eintrag im Analysis-Menü oder Taste w).</p>
+<p>Ein Fenster zur Eingabe/Modifikation der Taskparameter erscheint:</p>
+<dl>
+<dt>starstack:</dt>
+<dd>Bildname des Sternstacks. Üblicherweise muß hier nichts eingegeben werden und es wird das gezeigte Bild verwendet
+</dd>
+<dt>catalog:</dt>
+<dd>Referenzkatalog für die Astrometrie. Die Kataloge UCAC-4, UCAC-3 und PPMX stehen zur Verfügung. Letzterer kann insbesondere für Weitfeldaufnahmen mit geringerer Reichweite nützlich sein.
+</dd>
+<dt>maglim:</dt>
+<dd>Wenn angegeben werden nur Katalogsterne verwendet, die heller als dieser Grenzwert sind.
+</dd>
+<dt>thres:</dt>
+<dd>S/N Schwellwert für Sterne in der Aufnahme. Bei Aufnahme in dichten Sternfeldern sollte der Wert erhöht werden, um die Zahl der zu matchenden Sterne zu begrenzen.
+</dd>
+<dt>north:</dt>
+<dd>Näherungswert für den Positionswinkel der Richtung zum Himmelspol auf der Aufnahme. Norden oben entspricht 0° und Norden links 90°.
+</dd>
+<dt>opts:</dt>
+<dd>Feld für Exporten-Optionen (sollte nicht benutzt werden).
+</dd>
+</dl>
+<div class="figure">
+<img src="images/task_wcscalib.png" alt="Taskparameter Astrometrie" /><p class="caption">Taskparameter Astrometrie</p>
+</div>
+<p>Die Kalibration nutzt Sterne der gesamten Aufnahme, nicht nur diejenigen in der Umgebung des Kometen. Vordergründig ist nicht die möglichst präzise Positionsbestimmung des Kometen, sondern eine gute Bestimmung der Koordinaten über das ganze Feld um später die Identifikation vieler fotometrischer Standardsterne zu gewährleisten.</p>
+<p>Nach Übernahme der Taskparameter (Knopf OK) beginnt das Programm mit dem Download der Katalogsterne. Das kann in weiten bzw. sternreichen Feldern einige Zeit in Anspruch nehmen. Danach startet der Match-Algorithmus und am Ende werden Plots zur Begutachtung der Ergebnisse erzeugt und Resultate im Meldungsfenster ausgewiesen:</p>
+<ul>
+<li>nimg - Anzahl der identifizierten Sterne im Bild</li>
+<li>ncat - Anzahl der heruntergeladenen Katalogsterne (in einem Feld ca. doppelt so groß wie das Bild)</li>
+<li>nmatch - Anzahl der gematchten Sterne</li>
+<li>nhigh - Anzahl der gematchten Sterne mit hohem S/N</li>
+<li>xrms - Mittlerer Fehler in x in Bogensekunden</li>
+<li>yrms - Mittlerer Fehler in y in Bogensekunden</li>
+</ul>
+<p>Der erste Plot (mit <code>astr_referror1d</code> im Dateinamen) zeigt die verbleibenden Positionsfehler. Durch Drücken der Leertaste im Plot gelangt man zum zweiten Plot, der die Lage des Bildfeldes im Koordinatennetz und die Variation der Pixelskala zeigt. Der dritte und letzte Plot zeigt die Sternpositionen an. Die gematchten Sterne sind darin grün dargestellt.</p>
+<p>In dichten Sternfeldern empfiehlt es sich, den Parameter <em>thres</em> soweit zu erhöhen, daß nur etwa 2000-5000 Sterne in der Aufnahme detektiert werden (bei einer Sensorgröße von 10 Megapixel). Desweiteren kann die Zahl der verwendeten Katalogsterne durch setzen von <em>maglim</em> eingeschränkt werden. Beste Ergebnisse der Astrometrie werden bei erfolgreichem matchen von ca. 1000 Sternen erreicht.</p>
+<h2 id="bild-hintergrund"><span class="header-section-number">5.4</span> Bild-Hintergrund</h2>
+<p>Um später schwache Details im Bild besser erkennen zu können, muß der Bild-Hintergrund geebnet werden. Dabei erfolgt lediglich der Abzug eines ebenen Gradienten. Die Korrektur mit Flächen höherer Ordnung bzw. mit nichtlinearen Anteilen würde unweigerlich zu systematischen Fehlern bei der Fotometrie der ausgedehnten Koma und des Hintergrundes führen.</p>
+<p>Sollen Bildregionen von der Gradientenberechnung ausgeschlossen werden, so sind diese vor Aufruf des Tasks zu definieren. Es ist zweckmäßig, zuerst das Bild komplett sichtbar zu machen (Menü Zoom/Zoom Fit) und den Kontrast stark anzuheben. Dann können beliebige Regionen unterschiedlicher Form (siehe Menü Region/Form) erzeugt werden. Alle sichtbaren Regionen werden im Task nicht mit berücksichtigt.</p>
+<p>Die Taskparameter sind</p>
+<dl>
+<dt>starstack:</dt>
+<dd>Bildname des Sternstacks. Üblicherweise muß hier nichts eingegeben werden und es wird das gezeigte Bild verwendet
+</dd>
+<dt>bgmult:</dt>
+<dd>Faktor, um den die Intensitäten (ADU) im zu erzeugenden Hintergrundbild gestreckt werden. Dies ist notwendig, da an einigen Stellen im Programm mit Integer-Werten gerechnet wird und bei niedrigem Hintergrundsignal sonst Bild-Artefakte (z.B. Stufen) auftreten können. Empfehlung: bei Bildern mit Hintergrund &lt;=3000 ADU den Wert bei 10 belassen, bei &gt;3000 ADU auf 1 setzen.
+</dd>
+</dl>
+<div class="figure">
+<img src="images/task_bggradient.png" alt="Taskparameter Bild-Hintergrund" /><p class="caption">Taskparameter Bild-Hintergrund</p>
+</div>
+<p>Als Resultat erscheint ein neues Fenster “SAOImage Backgrounds” mit dem verkleinerten Bild der Residuen und - mit der Taste Tab erreichbar - dem Gradientenbild. Quantitative Angaben zur Amplitude des Gradienten und zum mittleren, gestreckten Helligkeitswert findet man im Meldungsfenster des Tasks.</p>
+<p>Das Residuenbild ist gut geeignet, um die Genauigkeit der Flatfield-Korrektur zu ermitteln. Bei hoher Qualität der Flats und/oder dunklem Himmel werden selbst schwache Hintergrundstrukturen galaktischen Ursprungs deutlich sichtbar.</p>
+<h2 id="ermittlung-der-psf"><span class="header-section-number">5.5</span> Ermittlung der PSF</h2>
+<p>Ziel dieses Aktion ist die Ermittlung des Stern-Profils (PSF = point spread function) einerseits und des Profils der Sternspur im Kometenstack andererseits, da später alle Sternspuren aus diesem entfernt werden sollen. Es ist der Task, der am meisten Rechenzeit benötigt.</p>
+<p>Die Taskparameter sind</p>
+<dl>
+<dt>set:</dt>
+<dd>Name des Image Set. Dieser sollte bereits korrekt ausgewählt sein.
+</dd>
+<dt>starstack:</dt>
+<dd>Bildname des Sternstacks. Üblicherweise muß hier nichts geändert werden. Es wird im weiteren Verlauf automatisch auf evtl. vorhandene Hintergrund-korrigierte Bilder zurückgegriffen.
+</dd>
+<dt>rlim:</dt>
+<dd>Radius um den Kometen innerhalb dessen Sterne zur Erzeugung der PSF herangezogen werden. Der Radius ist in Prozent der Bilddiagonale angegeben. In den allermeisten Fällen kann die Voreinstellung verwendet werden.
+</dd>
+<dt>merrlim:</dt>
+<dd>Bei den Iterationen zur Ermittlung der PSF werden Hintergrundsterne abgezogen. Hintergrundsterne mit einer Unsicherheit der Helligkeitsbestimmung die größer ist als der Parameterwert werden nicht berücksichtigt. Da in dichten Sternfeldern schwächere Sterne nur schwer voneinander zu trennen sind, sollten nur sicher zu erfassende, hellere Hintergrundsterne Berücksichtigung finden und deutlich mehr Sterne ausgeschlossen werden. Das wird durch Verringerung von <em>merrlim</em> erreicht.
+</dd>
+<dt>psfsize:</dt>
+<dd>Größe der PSF-Bilder (deren Kantenlänge) in Pixel. Die Voreinstellung ist für alle Fälle kurzer Sternspuren (respektive kurzer Kometenspur) geeignet. Die Sternspur muß letztendlich komplett in das Bild passen.
+</dd>
+</dl>
+<p>Nach Abschluß der Berechnungen wird ein Fenster “SAOImage PSF” mit den Bildern der PSF der Sterne und der Sternspur gezeigt. Die PSF wird später nur innerhalb der dargestellten Masken verwendet. Innerhalb dieser Bereiche sollte kein Signal überlappender anderer Sterne liegen. Um dies zu erreichen ist es häufig erforderlich, einige zur Bildung der PSF verwendete Sterne manuell auszuschließen. Dazu wechselt man zum Hauptfenster und analysiert das neu dargestellte Bild in dem die Hintergrundsterne abgezogen sind und die PSF-Sterne durch Kreis-Regionen (grün) dargestellt sind.</p>
+<p>Um einen Stern als unbrauchbar zu kennzeichnen, muß dessen Region angeklickt und markiert werden. Zum Ein- bzw. Ausschalten der Markierung (die Region wird dann rot dargestellt) dient die Taste o. Nach folgenden Kriterien findet man - mit etwas Übung - die auszuschließenden Sterne:</p>
+<ul>
+<li>In unmittelbarer Nähe befindet sich ein heller, gesättigter und daher nicht abgezogener Stern.</li>
+<li>Ein weiterer PSF-Stern steht in der Nähe und zwar so, daß ihre Sternspuren überlappen bzw. dicht nebeneinander liegen.</li>
+<li>Doppelsterne sind jetzt leicht erkennbar und sollten ebenfalls ausgeschlossen werden.</li>
+</ul>
+<p>Nach Setzen der Markierungen und Schließen des Fensters mit der PSF-Darstellung muß der Task erneut aufgerufen werden. Dieses Verfahren kann mehrmals durchlaufen werden bis eine zufriedenstellende PSF erhalten wird.</p>
+<p>Unter Umständen kann es erforderlich sein, die PSF-Masken zu modifizieren. Nach Anpassung einer Masken-Region muß diese im Unterordner <code>comets</code> gespeichert werden.</p>
+<h2 id="kometen-extraktion"><span class="header-section-number">5.6</span> Kometen-Extraktion</h2>
+<p>Die Kometen-Extraktion ist das Kernstück zu einer erfolgreichen Bestimmung der Koma-Helligkeit. Die Liste der Taskparameter ist überschaubar und nur selten sind Änderungen vorzunehmen:</p>
+<dl>
+<dt>set:</dt>
+<dd>Name des Image Set. Dieser sollte bereits korrekt ausgewählt sein.
+</dd>
+<dt>starstack:</dt>
+<dd>Bildname des Sternstacks. Üblicherweise muß hier nichts geändert werden. Es wird im weiteren Verlauf automatisch auf evtl. vorhandene Hintergrund-korrigierte Bilder zurückgegriffen.
+</dd>
+<dt>bgimage:</dt>
+<dd>Name des in der Intensität skalierten Hintergrundbildes. Wenn bei der Hintergrundbestimmung (siehe <a href="#bggradient">oben</a>) für bgmult 1 benutzt wurde, so muß im Dateinamen der String <code>bgm10</code> durch <code>bgm1</code> ersetzt werden.
+</dd>
+<dt>comult:</dt>
+<dd>Faktor zur Kontraststeigerung des extrahierten Kometen-Bildes. Bei Kometen mit sehr hellem Kern ist sicherzustellen, daß bei der Kontraststeigerung nicht der Grenzwert des 16bit Dynamikbereichs überschritten wird. Dazu muß das Intensitätsmaximums des Kernbereichs im Kometenstack gemessen werden. Liegt die Intensität dort weniger als 6000 ADU über dem Hintergrund, so kann comult=10 benutzt werden. Ist die Intensität größer, muß comult=1 gesetzt werden.
+</dd>
+</dl>
+<p>Kurze Zeit nach Start der Berechnungen wird ein Fenster “SAOImage CometRegions” geöffnet. Im dargestellten Bild sind alle Sternspuren (der nicht gesättigten Sterne) abgezogen. Es ist zusätzlich geglättet wodurch bei Erhöhung des Kontrastes und Zoomen auf niedrige Auflösung die Ausdehnung der äußeren Koma gut erfaßt werden kann. Im Meldungsfenster erscheint die Aufforderung zur Festlegung diverser Regionen mit den zu benutzenden Dateinamen.</p>
+<p>Der Ort des Kometen (laut Ephemeriden) ist bereits durch eine Region markiert, die nun in Größe und Form der Ausdehnung der Koma angepaßt werden muß. Danach ist die Region zu speichern. Anschließend definiert man ca. 4-6 um den Kometen platzierte Regionen zur Messung des Hintergrundes und speichert diese ebenfalls. Liegen im Bereich der Koma Spuren von gesättigten Sternen, so müssen diese Regionen ebenfalls erfasst und gespeichert werden, damit sie bei der später erfolgenden Fotometrie ausgeschlossen werden.</p>
+<p>Nach dem Schließen des Fensters “SAOImage CometRegions” wird die Analyse fortgesetzt. Dabei wird u.a. aus dem extrahierten Kometen und den Aufnahmezeiten der gestackten Einzelaufnahmen eine Kometenspur modelliert.</p>
+<p>Der Abzug von Sternen bzw. Sternspuren basiert auf der Verwendung fotometrischer Daten die im Sternenstack durch ein schnelles Verfahren gemessen werden. Dabei treten unter Umständen Ungenauigkeiten auf und es verbleiben Residuen mit positivem und negativem Signal. Schwache Sterne werden mitunter gar nicht berücksichtigt. Deshalb gibt es im nächsten Schritt die Möglichkeit, ausgewählte Sterne noch einmal genauer zu vermessen. Dazu erscheint das Fenster “SAOImage PhotCorr” mit zwei Bildern. Das erste zeigt den Sternenstack und die im letzten Schritt definierten Regionen. Das zweite zeigt den gleichen Sternenstack nach Abzug der Sterne und der modellierten Kometenspur. In diesem zweiten Bild können jetzt Kreisregionen auf die Sterne gesetzt werden, die neu gemessen werden sollen. Die Regionen sind in der Datei <code>x.newphot.reg</code> im Projektordner zu speichern. Danach kann das Fenster geschlossen werden.</p>
+<p>Der weitere Fortschritt des Tasks kann in dessen Meldungsfenster verfolgt werden. Am Ende werden die Ergebnisse der Intensitätsmessungen in einer Zeile zusammengefaßt:</p>
+<ul>
+<li>Name des Image Sets.</li>
+<li>Mittlere Intensität in der Kometenregion in ADU</li>
+<li>Fläche der Kometenregion</li>
+<li>Gesamtintensität des Kometen in ADU</li>
+<li>Durchmesser des Kometen in Pixel (bei flächengleichem Kreis)</li>
+<li>interner Hintergrundwert</li>
+<li>Variation des Hintergrundes (Statistik der verschiedenen Hintergrundregionen)</li>
+</ul>
+<p>Im Hauptfenster werden eine Reihe von Bildern zur Begutachtung der Kometenextraktion hinzugefügt:</p>
+<ul>
+<li>Extrahierten Komet, d.h. Kometenstack nach Abzug der Sternspuren</li>
+<li>Geglättetes Bild des Kometen mit den zur Messung benutzten Regionen</li>
+<li>Sternenstack nach Abzug der Sterne</li>
+<li>Sternenstack nach Abzug von Sternen und Kometenspur mit Kennzeichnung der nachgemessenen Sterne</li>
+</ul>
+<p>Unter Umständen ist es sinnvoll, Anpassungen an den Meßregionen vorzunehmen. Beispiesweise kann es wünschenswert sein, die Kometenregion noch einmal zu vergrößern. Nach speichern der modifizierten Region mit korrektem Dateinamen muß dann der Task erneut gestartet werden.</p>
+<h2 id="manuelle-messungen"><span class="header-section-number">5.7</span> Manuelle Messungen</h2>
+<p>Dieser Task dient zur Erfassung von weiteren Meßdaten. Folgende Zusatzmessungen können manuell auf den im Hauptfenster dargestellten Bildern durchgeführt werden:</p>
+<ul>
+<li>Messung der Intensität von Cosmics im Bereich der Komaregion. Die Summe der Counts ist von der gemessenen Gesamtintensität der Koma abzuziehen</li>
+<li>Abschätzung der fehlenden Intensität von “Löchern” in der Koma, die von den Bereichen der gesättigten Sterne herrühren.</li>
+<li>Messung der Intensität der schwächsten, gerade noch wahrnehmbaren Sterne zur Ermittlung der Grenzhelligkeit der Aufnahme</li>
+<li>Schweifparameter wie Länge und Positionswinkel</li>
+</ul>
+<p>Die Taskparameter dienen hier als Formularfelder für diese gemessenen Größen.</p>
+<h2 id="fotometrie"><span class="header-section-number">5.8</span> Fotometrie</h2>
+<p>Um die gemessenen Intensitäten in Helligkeiten umzuwandeln, ist eine fotometrische Kalibration notwendig. Dazu werden Referenzsterne aus einem Katalog in der Aufnahme des Sternstacks klassisch mit dem Verfahren der Aperturfotometrie gemessen.</p>
+<p>Hier ist die Beschreibung der Taskparameter:</p>
+<dl>
+<dt>set:</dt>
+<dd>Name des Image Set. Dieser sollte bereits korrekt ausgewählt sein.
+</dd>
+<dt>idx:</dt>
+<dd>Bei Verwendung von Aufnahmen mit mehreren Farbkanälen (RGB Bilder) ist hier die Nummer des Kanals (bzw. der Bildebene oder der FITS Extension) anzugeben. Der Grünkanal eines RGB Bildes hat beispielsweise idx=2.
+</dd>
+<dt>catalog:</dt>
+<dd>Name des fotometrischen Referenzkatalogs. Die Kataloge APASS und Tycho2 sind verfügbar.
+</dd>
+<dt>color:</dt>
+<dd>Farbgleichung, d.h. Farbband und Farbindex des Referenzkatalogs, die in die Ausgleichsrechnung einbezogen werden.
+</dd>
+<dt>aprad:</dt>
+<dd>Aperturradius, der zur Messung in der Aufnahme benutzt wird. Dieser wird normalerweise automatisch ermittelt (u.a. aus FWHM abgeleitet). In dichten Sternfeldern oder bei defokussierten Aufnahmen kann es sinnvoll sein, abweichend einen selbstdefinierten kleineren Wert zu setzen.
+</dd>
+<dt>topts:</dt>
+<dd>Optionen, die für Kalibration mit Sternen des Tycho2-Katalogs verwendet werden. Folgende Optionen stehen zur Verfügung: - -l <wert> - Helligkeitslimit, d.h. begrenze auf Sterne heller als <wert>, Standard: unbegrenzt - -n <wert> - Anzahl der Sterne, beginnend bei den hellsten Sternen, Standard: 100 - -r <wert> - Maximalabstand vom Kometen in Pixel, Standard: 25% der Bilddiagonale
+</dd>
+<dt>aopts:</dt>
+<dd>Optionen, die für Kalibration mit Sternen des APASS-Katalogs verwendet werden (vgl. <em>topts</em>)
+</dd>
+<dt>skip:</dt>
+<dd>Liste von Sternen, die beim Fit ausgeschlossen werden (durch Leerzeichen getrennte ID’s).
+</dd>
+</dl>
+<p>Nach Übernahme der Parameter beginnt das Programm mit dem Download der Katalogsterne und dem Match-Algorithmus. Dananach werden die aus dem Bild zugeordneten Sterne durch Aperturfotometrie gemessen.</p>
+<p>Bei der Fotometrie von z.B. Veränderlichen Sternen verwendet man gleich große Aperturen für den Veränderlichen und die Vergleichssterne. Die Aperturgröße wird so gewählt, daß ein optimales Signal-Rauschverhältnis besteht. Dabei spielt es keine Rolle, daß dabei ca. 20% des Sternlichts außerhalb der Apertur bleiben, da dieser Anteil bei Veränderlichem und Vergleichsstern gleich ist. Im Falle der Kometenfotometrie ist das anders: die Kometenmessung erfolgt typischerweise in einer wesentlich größeren Region. An die Aperturmessung der Vergleichssterne ist also eine Korrektur anzubringen, deren Betrag durch Messung ausgewählter heller Sterne mit sehr viel größerer Apertur ermittelt werden kann.</p>
+<p>Die Ergebnisse werden in zwei Plots dargestellt: der erste Plot zeigt die verbliebenen Abweichungen vom Fit und der zweite die Helligkeitskorrektur bei Verwendung großer Aperturen.</p>
+<p>Im Meldungsfenster des Tasks werden die Ergebnisse der Fotometrie zusammengefaßt. Am Ende des vorletzten Textblocks werden gegebenenfalls Hinweise zu Sternen mit großen Abweichungen gelistet (outliers). Wenn gewünscht, können diese von der Analyse ausgeschlossen werden. Dazu kopiert man die Liste der Identifier, ruft den Task erneut auf und fügt diese Liste im Feld <em>skip</em> ein.</p>
+<p>Die letzte Datenzeile im Meldungsfenster entspricht einem ICQ Record, wie er für Meldungen an die ICQ oder an die COBS Datenbank verwendet wird:</p>
+<pre><code>                          mag                 dd        tlen tpa                    mlim
+2017O1  2017 09 05.10  C  9.4 AQ 07.5A 4E040  16        0.10 248        XXXXX       18.9</code></pre>
+<p>Gekennzeichnet sind die Positionen für Helligkeit (mag), Komadurchmesser in Bogenminuten (dd), Schweiflänge in Grad (tlen) , Positionswinkel des Schweifs (tpa) und Grenzhelligkeit (mlim).</p>
+<p>In der Zeile darüber befinden sich diverse Zusatzinformation wie</p>
+<ul>
+<li>mzero: Nullpunkt der Helligkeitsskala</li>
+<li>nstar: Anzahl der in der Ausgleichsrechnung benutzten Sterne</li>
+<li>rms: mittlerer Fehler der Helligkeit eines Sterns</li>
+<li>moon: Phase, Winkelabstand, Höhe des Mondes</li>
+<li>alt: Höhe des Kometen</li>
+<li>m1: Helligkeit des Kometen</li>
+</ul>
+<h1 id="abschlußarbeiten"><span class="header-section-number">6</span> Abschlußarbeiten</h1>
+<h2 id="projektübersicht"><span class="header-section-number">6.1</span> Projektübersicht</h2>
+<p>Auflistung der über den Launcher definierten “Image Sets” (Beobachtungen)</p>
+<p>Anzeige der fotometrischen Ergebnisse</p>
+<h2 id="datensicherung"><span class="header-section-number">6.2</span> Datensicherung</h2>
+<h1 id="anhang"><span class="header-section-number">7</span> Anhang</h1>
+<h2 id="dateien-im-projektordner"><span class="header-section-number">7.1</span> Dateien im Projektordner</h2>
+<p>Die verschiedenen AIRTOOLS Tasks erzeugen eine Reihe von Dateien und Ordnern im Projektverzeichnis, die es erlauben, auch später alle Arbeitsschritte nachzuvollziehen und Zwischenergebnisse zu analysieren.</p>
+<p>Im Projektverzeichnis befinden sich folgende Textdateien mit Metadaten</p>
+<ul>
+<li><code>camera.dat</code>: Angaben zu verwendeten Instrumenten (Teleskop und Kamera, siehe <a href="#FormInstrument">oben</a>)</li>
+<li><code>refcat.dat</code>: Informationen zu Referenzkatalogen für interne Zwecke</li>
+<li><code>set.dat</code>: Angaben zu den Beobachtungen (Image Sets, siehe <a href="#FormSet">oben</a>)</li>
+<li><code>sites.dat</code>: Angaben zu Beobachtungsorten (siehe <a href="#FormSite">oben</a>)</li>
+<li><code>rawfiles.dat</code>: Angaben zu den Einzelbelichtungen</li>
+</ul>
+<p>Nach Abschluß aller Arbeiten existieren zu jeder Kometenbeobachtung eine Reihe von Bilddateien (Endung <code>pgm</code> oder <code>ppm</code>) und Headerdateien (Endung <code>head</code>), die mit dem Namen des Sets beginnen. Heißt das Image Set co01 so beginnen alle Dateien die sich auf den Sternstack beziehen mit <code>co01.</code>, alle Dateien die vom Kometenstack abgeleitet sind mit <code>co01_m.</code>. Taucht im Namen die Zeichenkette <code>bgs</code> auf, so handelt es sich um ein Bild, dessen Hintergrundgradient abgezogen wurde.</p>
+<p>Bei späteren Recherchen oder auch bei der Fehlersuche ist die Logdatei <code>airtask.log</code> von besonderem Interesse. Hier sind alle Ausgaben der AIRTOOLS Tasks, die in den zugehörigen Meldungsfenstern erschienen sind, protokolliert.</p>
+<p>Die Tasks erzeugen Unterorner mit folgenden Informationen:</p>
+<ul>
+<li>Verzeichnis <strong>wcs</strong> enthält Dateien und Plots der astrometrischen Kalibration</li>
+<li>Verzeichnis <strong>bgcorr</strong> enthält Dateien im Zusammenhang mit der Hintergrundkorrektur</li>
+<li>Verzeichnis <strong>comet</strong> enthält u.a. die extrahierten PSF Bilder und die Regionen von Komet und Hintergrund</li>
+<li>Verzeichnis <strong>phot</strong> enthält Dateien die bei der photometrischen Kalibration entstehen</li>
+</ul>
+<p>Dateien im Projektordner, deren Namen mit <code>x.</code> beginnen, enthalten temporäre Informationen, die nach dem Abschluß der Arbeiten nicht mehr benötigt werden.</p>
+<h2 id="XUbuntuDesktop"><span class="header-section-number">7.2</span> XUbuntu Linux - Erste Hilfe</h2>
+<ul>
+<li>Der Desktop</li>
+<li>Datei-Browser</li>
+<li>Text-Editor</li>
+<li>Web-Browser</li>
+</ul>
+<h2 id="XUbuntuInstall"><span class="header-section-number">7.3</span> Installation von XUbuntu Linux in VirtualBox VM</h2>
+</body>
+</html>
