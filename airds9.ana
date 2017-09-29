@@ -8,11 +8,12 @@
 #     ds9cmd from airfun.sh
 #
 # ChangeLog:
-#   3.0.3 23 Sep 2017
+#   3.0.3 28 Sep 2017
 #       * lower number of entries in Analysis menu
 #       * wcscalib: rename first parameter from image to starstack
 #       * cometextract: renamed third parameter from bgfit10 to bgimage
 #       * photcal: added parameter idx (second parameter)
+#       * new tasks imload, expert
 #
 #   3.0.2 06 Sep 2017
 #       * new tasks projectstatus, usermanual, shorthelp
@@ -95,8 +96,10 @@ end
 
 # Main Help menu entry
 #-----------------------
-# note: do not use keys h,j,k,l
+# note: do not use key f which is bound to freeze the interface
+#       keys h,j,k,l are normally used to move the mouse pointer
 # use F1 to call shorthelp
+# use x to open expert menu
 
 help Help on AIRTOOLS tasks (F1)
 wcscalib (w)     - Astrometric calibration
@@ -109,6 +112,7 @@ photcal (p)      - Photometric calibration
 aladindss (a)    - Show DSS image using Aladin sky atlas (in web browser)
 dcontrast (d)    - Set display contract from local noise statistics
 imflip (i)       - Flip images top-bottom
+imload (l)       - Load image or region file
 regswitch (o)    - Switch region marker on/off
 regstat (s)      - Statistics in image regions
 regphot (r)      - Photometry in selected regions
@@ -168,6 +172,11 @@ Disable binding
 bind "Control c"
 true |& $text
 
+Disable binding
+*
+bind "f"
+true |& $text
+
 
 
 # bind commands (keyboard shortcuts)
@@ -187,7 +196,7 @@ Show user manual
 bind u
 aircmd.sh usermanual |& $text
 
-Query or Modify Project Status
+Query or modify project status
 *
 bind q
 aircmd.sh project |& $text
@@ -202,7 +211,7 @@ Test parameter handling
 bind t
 $param(airtools); aircmd.sh test "$image" |& $text
 
-Switch Region Marker On/Off
+Switch region marker on/off
 *
 bind o
 aircmd.sh regswitch |& $text
@@ -218,15 +227,25 @@ Region photometry
 bind r
 $param(regphot); aircmd.sh regphot "$image" "$bgrgb" |& $text
 
-Flip Images Top-Bottom
+Flip images top-bottom
 *
 bind i
 $param(imflip); aircmd.sh imflip "$image" |& $text
+
+Load image or region file
+*
+bind l
+aircmd.sh imload |& $text
 
 Show DSS image using Aladin sky atlas web interface
 *
 bind a
 aircmd.sh aladindss |& $text
+
+Show expert menu
+*
+bind x
+aircmd.sh expert |& $text
 
 
 Astrometric calibration
@@ -244,7 +263,7 @@ PSF extraction
 bind e
 $param(psfextract); aircmd.sh psfextract $set $starstack "$rlim" "$merrlim" "$psfsize" "$skip" |& $text
 
-Comet Extraction and Large Aperture Measurements
+Comet extraction and large aperture measurements
 *
 bind c
 $param(cometextract); aircmd.sh cometextract $set $starstack "$bgimage" "$comult" |& $text
@@ -254,7 +273,7 @@ Add data from manual measurements
 bind m
 $param(manualdata); aircmd.sh manualdata $set $idx "$ccorr" "$stlim" "$dtlen" "$dtang" "$ptlen" "$ptang" |& $text
 
-Photometric Calibration using Reference Catalog
+Photometric calibration using reference catalog
 *
 bind p
 $param(photcal); aircmd.sh photcal $set $idx $catalog "$color" "$aprad" "$topts" "$aopts" "$skip" |& $text

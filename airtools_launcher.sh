@@ -13,7 +13,7 @@ PINFO="\
       h          show this help text
 "
 CHANGELOG="
-    1.2  - 25 Sep 2017
+    1.2  - 27 Sep 2017
         * added field 'binning' to form 'image set' and set appropriate
           header keyword after image conversion (in AIstart)
         * show progress window during image conversion and loading
@@ -192,6 +192,14 @@ stop_progresswindow () {
 }
 
 
+open_terminal () {
+    local d="$1"
+    (cd $d; x-terminal-emulator -e 'env PROMPT_COMMAND="unset PROMPT_COMMAND;
+    test -e .airtoolsrc && . .airtoolsrc;
+    echo \"# loading $(type -p airfun.sh) ...\";
+    . $(type -p airfun.sh)" bash')
+}
+
 
 #--------------------
 #   get options
@@ -344,14 +352,14 @@ create a new project by filling in the lower entries of this form\n"
         --form \
         --date-format="%Y-%m-%d" --separator="|" --item-separator=";" \
         --field="<b>Open existing project</b>:LBL"  "" \
-        --field="Latest Projects::CB"               "$latestlist" \
-        --field="All Existing Projects::CB"         "$projectlist" \
+        --field="Latest projects::CB"               "$latestlist" \
+        --field="All projects::CB"                  "$projectlist" \
         --field="\n:LBL" "" \
         --field="<b>Create a new project</b>:LBL"   "" \
-        --field="Base Directory for Projects::MDIR" "$basedir" \
+        --field="Base directory for projects::MDIR" "$basedir" \
         --field="Date of observation::DT"           "" \
-        --field="Temporary Directory::MDIR"         "$tmpdir" \
-        --field="Observatory Site::CB"              "$siteslist" \
+        --field="Temporary directory::MDIR"         "$tmpdir" \
+        --field="Observatory site::CB"              "$siteslist" \
         --field="\n:LBL" "" \
         --button=gtk-help:"xdg-open $docu" \
         --button=gtk-cancel:1 \
@@ -767,10 +775,10 @@ three values for focal length, aperture and f-ratio must be specified):\n"
             --field="Instrument ID (e.g. XYZ):" "$tel" \
             --field="Focal length / mm :"       "$flen" \
             --field="Aperture / mm :"           "$aperture" \
-            --field="F-Ratio (f/d):"            "$fratio" \
-            --field="Camera Model:"             "$camera" \
-            --field="Camera Rotation / ° :"     "$rot" \
-            --field="RawBits:"                  "$rawbits" \
+            --field="F-ratio (f/d):"            "$fratio" \
+            --field="Camera model:"             "$camera" \
+            --field="Camera rotation / ° :"     "$rot" \
+            --field="Rawbits:"                  "$rawbits" \
             --field="Saturation:"               "$satur" \
             --field="Gain / e-/ADU :"           "$gain" \
             --field="Pixel scale / arcsec :"    "$pixscale" \
@@ -973,7 +981,7 @@ do
         --form \
         --field="Stack centered on stars:$sttype"   "$starstack" \
         --field="Stack centered on comet:$cotype"   "$cometstack" \
-        --field="<b>Choose an Action</b>:CB"        "$actionlist" \
+        --field="<b>Choose an action</b>:CB"        "$actionlist" \
         --field="\n:LBL" ""
         )
     buttonID=$?
@@ -1004,7 +1012,8 @@ do
                     xdg-open $projectdir
                     ;;
         terminal)   echo "# open terminal"
-                    (cd $projectdir; x-terminal-emulator);;
+                    open_terminal $projectdir
+                    ;;
         airtools)   if [ ! "$errmsg" ]
                     then
                         x=""

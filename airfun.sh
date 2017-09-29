@@ -17,12 +17,13 @@
 AI_VERSION="3.0.1"
 : << '----'
 CHANGELOG
-    3.0.1 - 25 Sep 2017
-        * AIccd: added check to ensure same size of dark and flat images
+    3.0.1 - 28 Sep 2017
+        * ds9cmd: new tasks imload, expert
         * ds9cmd regphot: allow for simple photometry of any region
         * AIstart: allow user to provide header keywords (via -k key=value)
         * AIexamine: propagate all header keywords when converting pnm images
             to temporary FITS files
+        * AIccd: added check to ensure same size of dark and flat images
         * ppm2gray: added option -c <cboxsize> which allows to blank any data
             outside a given center box area
         * mkpgm, mkppm: changed default output file name to "-" which allows
@@ -31,7 +32,7 @@ CHANGELOG
             texp and nexp 
         * get_header: enhanced to support gziped FITS images
         * logfile of GUI tasks renamed from ds9cmd.log to airtask.log
-        * new functions: is_fitsgz, get_jd
+        * new functions: is_fitsgz, get_jd, check_url
 
     3.0   - 13 Sep 2017
         * ds9cmd: new tasks shorthelp, usermanual and project
@@ -2320,7 +2321,7 @@ get_jd () {
     for i in 1 2
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
-        test "$1" == "-k" && klist=$2 && shift 1
+        test "$1" == "-k" && klist=$2 && shift 2
     done
 
     local hdr=$1    # image name or header file
@@ -4275,7 +4276,13 @@ AIstart () {
             has_mpcephem=1
             echo "# Comet ephemerides keywords added" >&2
         else
-            echo "# WARNING: object $object is not known at MPC database" >&2
+            if [ $? -eq 1 ]
+            then
+                echo "ABORTING $FUNCNAME due to missing network access." >&2 &&
+                return 255
+            else
+                echo "# WARNING: object $object is not known at MPC database" >&2
+            fi
         fi
     fi
 
@@ -4382,6 +4389,30 @@ AIstart () {
     return 0
 }
 
+
+check_url () {
+    # check if a given website is reachable
+    local url=${1:-"http://www.google.com"}
+    local tries=6
+    local delay=1
+    local retval
+    local i=1
+    while [ $i -le $tries ]
+    do
+        if [ $i -gt 1 ]
+        then
+            test "$AI_DEBUG" && echo "# $i/$tries sleep $delay" >&2
+            sleep $delay
+            delay=$(echo $delay | awk '{
+                x=1.5*$1; if(x>10){x=10}; printf("%.1f", x)}')
+        fi
+        wget -q --tries=2 --timeout=10 --spider $url
+        retval=$?
+        test $retval -eq 0 && break
+        i=$((i+1))
+    done
+    return $retval
+}
 
 click2mpcheck () {
     # convert click-position as given by jaicomp to data suitable for input
@@ -4665,6 +4696,10 @@ get_mpcephem () {
         test -z "$uttime" && uttime=$(jd2ut -t $jd | cut -d " " -f2)
     fi
     test "$AI_DEBUG" && echo "# objects=\"$objects\" ut=\"$utday $uttime\""
+    
+    # check internet connection
+    ! check_url && echo "ERROR: no internet connection." >&2 && return 1
+    ! check_url $url && echo "ERROR: no access to $url" >&2 && return 1
     
     # set interval
     interval=""
@@ -4966,6 +5001,7 @@ phot2icq () {
         return 1
 
     test -z "$observer" && test "$USER" == "lehmann" && observer="LEHaa"
+    test -z "$observer" && observer="OBSxx"
 
     while read ltime sname x type x x x nref x
     do
@@ -5046,7 +5082,9 @@ phot2icq () {
                 # convert coma diameter and tail parameter
                 coma="    "; tail="         "; pa="   "; ptail=""
                 is_number "$cdia"  && coma=$(echo $cdia $pixscale | \
-                    awk '{printf("%4.1f", $1*$2/60)}')
+                    awk '{x=$1*$2/60; fmt="%4.1f"
+                        if (x>10) {fmt="%2.0f  "}
+                        printf(fmt, x)}')
                 is_number "$dtlen" && tail=$(echo $dtlen $pixscale | tr -d '>' | \
                     awk '{if($1=="-") {print $1} else {printf("%9.2f", $1*$2/3600)}}')
                 is_number "$dtang" && pa=$(echo $dtang $rot | \
@@ -5073,7 +5111,7 @@ phot2icq () {
                     test "$val" && str=$str" alt=$val"
                     val=$(get_header -q $hdr AP_CMAG$x)
                     test "$val" && str=$str" m1=$val"
-                    echo "# $str"
+                    echo "# $str d=${coma// /}'"
                 fi
 
                 # camera info
@@ -5140,7 +5178,14 @@ phot2icq () {
             # convert coma diameter and tail parameter
             coma="    "; tail="         "; pa="   "
             is_number "$cdia"  && coma=$(echo $cdia $pixscale | \
-                awk '{printf("%4.1f", $1*$2/60)}')
+                awk '{x=$1*$2/60; fmt="%4.1f"
+                    if (x> 2 && x<= 4) {x=sprintf("%.0f", 5*x);   x=x/5} 
+                    if (x> 4 && x<=10) {x=sprintf("%.0f", 2*x);
+                                      if(x%2==0) {fmt="%2.0f  "}; x=x/2} 
+                    if (x>10) {fmt="%2.0f  "}
+                    if (x>20 && x<=40) {x=sprintf("%.0f", 0.5*x); x=x/0.5} 
+                    if (x>40)          {x=sprintf("%.0f", 0.2*x); x=x/0.2} 
+                    printf(fmt, x)}')
             is_number "$dtlen" && tail=$(echo $dtlen $pixscale | tr -d '>' | \
                 awk '{if($1=="-") {print $1} else {printf("%9.2f", $1*$2/3600)}}')
             is_number "$dtang" && pa=$(echo $dtang $rot | \
@@ -5937,7 +5982,7 @@ EOF
 
 focas () {
     # multi-aperture photometry of a comet in comet/$set.cosub*.$ext
-    # note: large aperture photometry must have been done already
+    # note: large aperture photometry data must exist already
     # test cases:
     # 160813s co02 226P     0433+007 2457614.295 180  6  6.6  178 1.7  f=530,f/5.0 SSO    # co.bad
     # 160820s co03 226P     0445+027 2457621.297 120  7 10.0  954 2.1  f=530,f/5.0 SSO
@@ -8095,7 +8140,7 @@ ppm2gray () {
         then
             keys=$(grep -Ev "^BITPIX|^HISTORY|^COMMENT|^END" $head | \
                 cut -d "/" -f1 | tr "'" ' ' | sed -e 's|[ ]*=[ ]*|=|' | tr '\n' ' ')
-            test "$AI_DEBUG" && echo "keys=$keys"
+            test "$AI_DEBUG" && echo "keys=$keys" >&2
             sethead $tmp1 $keys
         fi
         cat $tmp1
@@ -9959,7 +10004,7 @@ AIexamine () {
     test $w -lt 480 && w=480
     geom="${w}x${h}"
     test "$AI_DEBUG" && echo "screen=${sw}x${sh}  geom=$geom" >&2
-    opts="-title $ds9name -geometry $geom -regions system physical -view wcs no -view physical no"
+    opts="-title $ds9name -geometry $geom -regions system physical -view physical no"
     test $small -gt 1 && opts="$opts -view colorbar no -view panner no -view object no \
         -view magnifier no -view frame no"
     # TL: line disabled in v2.8.1 to suit ds9 v7.5
@@ -10011,7 +10056,7 @@ AIexamine () {
         test ! -f "$infile" &&
             echo "ERROR: input file $infile does not exist." >&2 && return 255
         # check region file
-        is_reg $infile &&
+        is_reg "$infile" &&
             opts="$opts -region $infile" &&
             xcmd="$xcmd; xpaset -p $ds9name region $infile" &&
             continue
@@ -10064,6 +10109,13 @@ AIexamine () {
                             gm convert $infile pgm:- | ppm2gray -f - "" $hdr > $tfits
                         fi
                     fi
+                    # TODO: the arbitrary wcs header should be removed by AIstack
+                    test "$hdr" &&
+                        str=$(get_header -q $hdr SOFTNAME) &&
+                        test "$(echo $str | tr '[A-Z]' '[a-z]')" == "swarp" &&
+                        str=$(get_header -q $hdr AUTHOR) &&
+                        test "$(echo $str | tr '[A-Z]' '[a-z]')" == "lehmann" &&
+                        delwcs $tfits
                     sethead $tfits AI_IMAGE=$infile
                     if [ "$wcshead" ]
                     then
@@ -10107,11 +10159,15 @@ AIexamine () {
             x=$5""$6""$7; gsub(/[0-9]/,"",x); if($4=="o" && x==""){print $2}}' | \
         tr '\n' '|' | sed -e 's/.$//')
     # get setname from $firstimage or use first entry in $slist
-    sname=$(basename $firstimage)
-    sname=${sname%%.*}
-    echo $slist | grep -q -w $sname
-    test $? -ne 0 && sname=$(echo $slist | awk -F "|" '{printf("%s", $1)}')
-
+    if [ "$firstimage" ]
+    then
+        sname=$(basename $firstimage)
+        sname=${sname%%.*}
+        echo $slist | grep -q -w $sname
+        test $? -ne 0 && sname=""
+    fi
+    test -z "$sname" && sname=$(echo $slist | awk -F "|" '{printf("%s", $1)}')
+    
     if [ "$afile" ] # && [ ! "$(xpaget xpans 2>/dev/null)" ]
     then
         # ref.: https://heasarc.gsfc.nasa.gov/lheasoft/headas/pil/node12.html
@@ -13498,6 +13554,7 @@ AIwcs () {
     local kw
     local cmd
     local allcats
+    local server
     
     test "$showhelp" &&
         echo "usage: AIwcs [-s] [-r] [-f] [-n north] [-b binning] [-p plotdev|$plotdev] [-o maxoff]" \
@@ -13781,7 +13838,7 @@ END     " >> wcs/$b.src.ahead
                 -sn_thresholds 10,40 -match_resol $mres \
                 -mergedoutcat_type FITS_LDAC -mergedoutcat_name wcs/$b.match.dat \
                 $sopts $tmpcat 2>&1 | $cmd | grep -v "tmp.*reference pair.*processed'"
-            (test $? -ne 0 || test ! -f scamp.xml) &&
+            (test $? -ne 0 || test ! -f scamp.xml || ! test -s ${tmpcat%.*}.head) &&
                 echo "ERROR: scamp failed:" >&2 &&
                 echo scamp -c $sconf -astref_catalog file -astrefcat_name $refcatfile \
                 $plotparams $photparams $posparams \
@@ -13792,6 +13849,14 @@ END     " >> wcs/$b.src.ahead
                 return 255
         else
             # requires aclient and online access to vizier database
+            server=$(echo $sopts | sed 's| -|\n-|g' | grep -i REF_SERVER | awk '{printf("%s", $2)}')
+            test -z $server &&
+                server=$(grep REF_SERVER $sconf | awk '{printf("%s", $2)}')
+            test "$AI_DEBUG" && echo "# server = $server"
+            ! check_url &&
+                echo "ERROR: no internet connection." >&2 &&
+                return 255
+            # TODO: check server url
             scamp -c $sconf -astref_catalog  $refcat -save_refcatalog Y \
                 $plotparams $photparams $posparams \
                 -astrefmag_limits -99,$maglim -distort_degrees $fitdegrees \
@@ -13799,7 +13864,7 @@ END     " >> wcs/$b.src.ahead
                 -mergedoutcat_type FITS_LDAC -mergedoutcat_name wcs/$b.match.dat \
                 $sopts $tmpcat 2>&1 | $cmd | grep -v "tmp.*reference pair.*processed'"
             vizcat=$(ls -tr *cat | grep -i "^$refcat" | tail -1)
-            (test $? -ne 0 || test ! -f scamp.xml || test ! "$vizcat") &&
+            (test $? -ne 0 || test ! -f scamp.xml || ! test -s ${tmpcat%.*}.head || test ! "$vizcat") &&
                 echo "ERROR: scamp failed." >&2 &&
                 echo scamp -c $sconf -astref_catalog  $refcat -save_refcatalog Y \
                 $plotparams $photparams $posparams \
@@ -15337,6 +15402,9 @@ AIphotcal () {
     else
         case "$catalog" in
             apass)  url="https://www.aavso.org/cgi-bin/apass_download.pl"
+                    ! check_url $url &&
+                        echo "ERROR: unable to retrieve reference catalog stars." >&2 &&
+                        return 255
                     set - $centerdeg
                     opts="ra=$1&dec=$2&radius=$radius"
                     echo "opts=$opts" >&2
@@ -15396,6 +15464,7 @@ AIphotcal () {
     then
         echo "reusing phot/$setname.$catalog.xphot.dat" >&2
     else
+        echo "# matching stars ..."
         # convert photometric reference catalog
         delim="|"
         test "$catalog" == "apass" && delim=","
@@ -16522,6 +16591,8 @@ AIcomet () {
         pnmccdred -a $((-9*bgres)) -m 10 $cosub - | \
             convert - -blur 0x2 x.coblur.$ext
     fi
+    (! test -s x.coblur.$ext || ! is_pnm x.coblur.$ext) &&
+        echo "ERROR: unable to create x.coblur.$ext" >&2 && return 255
     rm -f x.coblur.head
     ln -s $hdr x.coblur.head
 
@@ -16537,14 +16608,16 @@ AIcomet () {
             return 255
         
         jdref=$(get_header -q $hdr JD_REF)
-        test -z "$jdref" && jdref=$(get_header -q $hdr JD_REF)
         test -z "$jdref" && jdref=$(get_header -q $hdr MJD_REF)
-        # get jdref from rawfiles.dat
-        nref=$(get_header -q $hdr NREF)
-        test -z "$nref" && nref=$(AIsetinfo -b $sname | head -1 | awk '{printf("%s", $8)}')
-        test "$nref" && test -s rawfiles.dat &&
-            jdref=$(grep "^$nref " rawfiles.dat | awk '{printf("%s", $5)}') &&
-            echo "# nref=$nref jdref=$jdref (rawfiles.dat)"
+        if [ -z "$jdref" ]
+        then
+            # get jdref from rawfiles.dat
+            nref=$(get_header -q $hdr NREF)
+            test -z "$nref" && nref=$(AIsetinfo -b $sname | head -1 | awk '{printf("%s", $8)}')
+            test "$nref" && test -s rawfiles.dat &&
+                jdref=$(grep "^$nref " rawfiles.dat | awk '{printf("%s", $5)}') &&
+                echo "# nref=$nref jdref=$jdref (rawfiles.dat)"
+        fi
         
         if [ -z "$jdref" ]
         then
@@ -16568,7 +16641,7 @@ AIcomet () {
                 split($1,a,/@/)
                 r=(a[2]-$3)*3.1415926/180
                 printf("%.2f", a[1]*cos(r)*$2/$4/3600)}')
-            echo "comet offset: x=$x y=$y" >&2
+            echo "# comet offset: x=$x y=$y" >&2
         fi
 
         # create initial comet region
@@ -17548,6 +17621,7 @@ ds9cmd () {
     cmd=$1
     shift 1
     local tmp1=$(mktemp "/tmp/tmp1_xpa_XXXXXX.dat")
+    local tmp2=$(mktemp "/tmp/tmp2_xpa_XXXXXX.dat")
     local tmpreg=$(mktemp "/tmp/tmp1_reg_XXXXXX.reg")
     local tmpmask=$(mktemp "/tmp/tmp1_mask_XXXXXX.pbm")
     local tmpim1=$(mktemp "/tmp/tmp1_im1_XXXXXX.pnm")
@@ -17641,7 +17715,7 @@ ds9cmd () {
                 AIsetinfo -b
                 echo
                 echo "# ICQ records:"
-                phot2icq -o XXXXX
+                phot2icq
                 echo ""
                 ;;
         shorthelp)
@@ -17660,6 +17734,11 @@ ds9cmd () {
                 test ! -e $x/$y && y=""
                 test ! -e $x/$y && x=/usr/share/doc/airtools-core
                 xdg-open $x/$y
+                ;;
+        expert) str=$(yad --title="AIRTOOLS Expert Menu" --borders=10 --width=400 \
+                    --text="\n Run AIRTOOLS command:" --entry 2>/dev/null)
+                test "$str" && echo "# $str" && $str
+                echo ""
                 ;;
         test)   img=$1
                 echo "running test $img"
@@ -17743,6 +17822,14 @@ ds9cmd () {
                     LANG=C printf "%s %s  %6.0f %s %s # %s\n" \
                         "${1//,/ }" "${2//,/ }" "${3//,/ }" "${4//,/ }" "${5//,/ }" "$6"
                 done
+                echo ""
+                ;;
+        imload) fname=$(yad --title="Open Image or Region file:" \
+                    --borders=10 --width=800 --height=600 --file --multiple \
+                    --file-filter="Image files | *.pgm *.ppm *.fits" \
+                    --file-filter="Region files | *.reg" 2>/dev/null)
+                test "$AI_DEBUG" && echo "files:" && echo "$fname" | tr '|' '\n'
+                test "$fname" && AIexamine ${fname//|/ }
                 echo ""
                 ;;
         imflip) img=$1
@@ -17986,10 +18073,10 @@ ds9cmd () {
                 # check for bg subtracted images
                 test -f ${starstack%.*}.bgs.$ext &&
                     starstack=${starstack%.*}.bgs.$ext &&
-                    echo "bg subtracted star stack found: $starstack"
+                    echo "# bg subtracted star stack found: $starstack"
                 test "$cometstack" && test -f ${cometstack%.*}.bgs.$ext &&
                     cometstack=${cometstack%.*}.bgs.$ext &&
-                    echo "bg subtracted comet stack found: $cometstack"
+                    echo "# bg subtracted comet stack found: $cometstack"
                 test ! -e ${starstack%.*}".head" && ln -s $set.head ${starstack%.*}".head"
                 test "$cometstack" && test ! -e ${cometstack%.*}".head" && ln -s $set.head ${cometstack%.*}".head"
                 
@@ -18152,10 +18239,10 @@ ds9cmd () {
                 # check for bg subtracted images
                 test -f ${starstack%.*}.bgs.$ext &&
                     starstack=${starstack%.*}.bgs.$ext &&
-                    echo "bg subtracted star stack found: $starstack"
+                    echo "# bg subtracted star stack found: $starstack"
                 test -f ${cometstack%.*}.bgs.$ext &&
                     cometstack=${cometstack%.*}.bgs.$ext &&
-                    echo "bg subtracted comet stack found: $cometstack"
+                    echo "# bg subtracted comet stack found: $cometstack"
                 test ! -e ${starstack%.*}".head" && ln -s $set.head ${starstack%.*}".head"
                 test ! -e ${cometstack%.*}".head" && ln -s $set.head ${cometstack%.*}".head"
                 
@@ -18223,12 +18310,18 @@ ds9cmd () {
                 test ! -e "$img" && echo "ERROR: missing image $img" >&2 &&
                     echo >&2 && return 255
 
-                # derive set name from header file name
-                test ! -e ${img%.*}.head &&
-                    echo "ERROR: missing header file ${img%.*}.head" >&2 &&
-                    return 255
-                str=$(basename $(readlink -f ${img%.*}.head))
-                set=${str%%.*}
+                # derive set name
+                set=$(basename ${img%%.*})
+
+                # check header file name
+                if ! is_setname $set
+                then
+                    test ! -e ${img%.*}.head &&
+                        echo "ERROR: missing header file ${img%.*}.head" >&2 &&
+                        return 255
+                    str=$(basename $(readlink -f ${img%.*}.head))
+                    set=${str%%.*}
+                fi
                 photcat=comet/$set.newphot.dat
                 test ! -e $photcat &&
                     echo "WARNING: missing photcat=$photcat" >&2 &&
@@ -18236,22 +18329,28 @@ ds9cmd () {
                 echo "# set=$set photcat=$photcat"
                 
                 npix=$(identify $img | cut -d ' ' -f3 | awk -F 'x' '{print $1*$2}')
-                xpaset -p $ds9name regions color red
+                xpaset -p $ds9name regions background
                 xpaset -p $ds9name regions system physical
                 xpaset -p $ds9name regions save $tmp1
+                cat $tmp1 | grep "(.*) #.* color=red" > $tmp2
+                n=$(cat $tmp2 | wc -l)
+                test "$AI_DEBUG" && test $n -gt 0 && echo "# red regions: $n"
+                if [ $n -eq 0 ]
+                then
+                    cat $tmp1 | grep "(.*) #.* background" > $tmp2
+                    n=$(cat $tmp2 | wc -l)
+                    test "$AI_DEBUG" && test $n -gt 0 && echo "# selected: $n"
+                fi
+                xpaset -p $ds9name regions source
                 xpaset -p $ds9name regions save x.empty.reg
-                n=$(grep "color=red" $tmp1 | wc -l)
                 test $n -eq 0 &&
                     echo "ERROR: no region selected." >&2 &&
                     echo && return 255
-                test $n -eq 1 &&
-                    xpaset -p $ds9name regions color green
                 test $n -gt 1 &&
-                    echo "measuring $n stars ..."
+                    echo "measuring $n regions ..."
                 
                 while read
                 do
-                    test "$(echo $REPLY | grep "color=red")" || continue
                     id=$(echo $REPLY | tr ' ' '\n' | tr -d '}' | \
                         grep "^text={" | cut -d '{' -f2)
                     echo -e "# Region file format: DS9 version 4.1
@@ -18277,7 +18376,7 @@ physical" > $tmpreg
                     test $? -ne 0 &&
                         echo "ERROR: in newmag $set \"$photcat\" \"$id\" $narea $cnt 1 $bgrgb" >&2 &&
                         echo
-                done < $tmp1
+                done < $tmp2
                 echo "$cmd finished"
                 echo ""
                 ;;
@@ -18356,7 +18455,7 @@ physical" > $tmpreg
                 then
                     echo ""
                     echo "# ICQ data:"
-                    phot2icq -v -o XXXXX $set $catalog
+                    phot2icq -v $set $catalog
                 fi
                 
                 # remove some temp files
@@ -18373,7 +18472,7 @@ physical" > $tmpreg
         *)      echo "WARNING: unknown command: $cmd"
                 ;;
     esac
-    rm -f $tmp1 $tmpreg $tmpim1 $tmpmask $tmpfits1 $tmpfits2
+    rm -f $tmp1 $tmp2 $tmpreg $tmpim1 $tmpmask $tmpfits1 $tmpfits2
 }
 
 
@@ -18778,12 +18877,12 @@ AIcheck_ok () {
     #   fitscopy: regfilter AIregister AIcomet
     #   listhead: many functions
     # wcstools
-    #   imhead sethead sky2xy xy2sky newfits
+    #   imhead sethead sky2xy xy2sky newfits delwcs
     for p in dcraw-tl gm convert rsvg-convert potrace exiftool gnuplot curl wget \
              ds9 xpaget xpaset \
              pnmcombine pnmccdred pnmtomef \
              imcopy imarith imlist fitscopy listhead \
-             imhead sethead sky2xy xy2sky newfits \
+             imhead sethead sky2xy xy2sky newfits delwcs \
              stilts sex scamp swarp stiff sky missfits
     do
         ! type -p $p > /dev/null 2>&1 && retval=255 &&
