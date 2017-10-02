@@ -11,7 +11,9 @@ DATADIR = $(DESTDIR)/$(prefix)/share/$(PACKAGE)
 DOCDIR  = $(DESTDIR)/$(prefix)/share/doc/$(PACKAGE)
 APPDIR  = $(DESTDIR)/$(prefix)/share/applications
 DATA	= data/*
-DOCS	= README* doc/*
+DOCS	= README* doc/README* doc/*txt doc/manual-de.html
+IMAGESDIR	= $(DOCDIR)/images
+IMAGES	= doc/images/*
 
 BIN 	= dcraw-tl pnmtomef pnmccdred pnmcombine
 BINSH 	= airfun.sh aircmd.sh airtools_launcher.sh
@@ -56,6 +58,8 @@ install: all
 	install -m 0644 -p $(DESKTOP) $(APPDIR)
 	install -m 0755 -d $(DOCDIR)
 	install -m 0644 -p $(DOCS) $(DOCDIR)
+	install -m 0755 -d $(IMAGESDIR)
+	install -m 0644 -p $(IMAGES) $(IMAGESDIR)
 
 tarball:
 	make clean

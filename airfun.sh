@@ -17,7 +17,7 @@
 AI_VERSION="3.0.1"
 : << '----'
 CHANGELOG
-    3.0.1 - 28 Sep 2017
+    3.0.1 - 29 Sep 2017
         * ds9cmd: new tasks imload, expert
         * ds9cmd regphot: allow for simple photometry of any region
         * AIstart: allow user to provide header keywords (via -k key=value)
