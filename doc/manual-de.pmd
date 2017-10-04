@@ -3,9 +3,6 @@
 % September 2017
 
 
-
-\newpage
-
 # Einführung
 
 AIRTOOLS ist ein Akronym für **A**stronomical **I**mage **R**eduction **TOOLS**et und steht
@@ -69,7 +66,7 @@ Weimar, im September 2017
 
 
 
-# Kometen-Aufnahmen {#Aufnahmen}
+# Kometen-Aufnahmen
 
 Sollen Aufnahmen zur späteren Kometen-Fotometrie gewonnen werden, empfielt es
 sich, anstatt einer langen Belichtung mehrere kürzere Belichtungen als Serie
@@ -234,7 +231,7 @@ Ausschaltknopf, über den das virtuelle Linux-System heruntergefahren werden kan
 Die dabei erscheinende Meldung zur Entfernung des Installationsmediums
 kann ignoriert werden. Nach Betätigen der Enter-Taste wird die VM geschlossen.
 Weitere Informationen zur Orientierung auf dem Xubuntu Desktop befinden sich
-im [Anhang](#XubuntuDesktop).
+im [Anhang](#xubuntu-linux---erste-schritte).
 
 Beim ersten Start erscheint der Xubuntu Desktop in einer geringen Größe, die
 zum Arbeiten mit den AIRTOOLS nicht ausreichend wäre. Eine Möglichkeit der
@@ -272,10 +269,11 @@ Nachteile der Nutzung der AIRTOOLS in solch einem Live-System sind:
 
 Abhilfe für alle genannten Punkte schafft die permanente
 Installation des Xubuntu-Linux Systems auf eine virtuelle Festplatte innerhalb
-der VM (siehe [Anhang](#XubuntuInstall)). Für erste Schritte und Tests der AIRTOOLS
+der VM (siehe [Anhang](#installation-von-xubuntu-linux-in-virtualbox-vm)).
+Für erste Schritte und Tests der AIRTOOLS
 Software ist die Arbeit mit dem Live-System hingegen bestens geeignet.
 
-### Austausch von Dateien zwischen Host und virtualisiertem Linux PC {#Dateiaustausch}
+### Austausch von Dateien zwischen Host und virtualisiertem Linux PC
 
 Es gibt verschiedene Wege, um Dateien zwischen dem Hostrechner (Windows-PC)
 und einem virtualisierten Rechner (z.B. Linux in VM) auszutauschen. Eine
@@ -301,7 +299,7 @@ Maustaste auf das USB-Stick-Symbol und *Datenträger auswerfen*. Jetzt kann
 er vom virtualisierten PC "abgezogen" werden. Dazu wird im Fenster der VM über
 den Menüpunkt Geräte/USB der Geräteeintrag zum USB Stick deaktiviert.
 
-## Installation der AIRTOOLS Software {#Install}
+## Installation der AIRTOOLS Software
 
 Die im Folgenden beschriebene Installation von Binärpaketen erfordert ein
 laufendes Linux-System. Der gesamte Installationsvorgang
@@ -352,7 +350,7 @@ Zur Einrichtung eines neuen AIRTOOLS-Projektes und zur Abfrage der genannten
 Metadaten wird ein Hilfsprogramm, der Airtools-Launcher verwendet. Er
 wird durch Doppelklick auf das Airtools-Icon gestartet.
 
-## Formular "Project" {#FormProjekt}
+## Formular "Project"
 
 Der obere Teil des Formulars dient zum Öffnen eines schon vorhandenen Projektes.
 Soll ein neues Projekt angelegt werden, so sind die unteren Formularfelder
@@ -379,7 +377,7 @@ Observatory Site:
 
 ![Airtools-Launcher Formular "Project"](images/launcher_project.png){width=8cm}
 
-## Formular "New Site" {#FormSite}
+## Formular "New Site"
 
 Folgende Angaben eines Beobachtungsortes werden benötigt:
 
@@ -397,16 +395,17 @@ Altitude:
 :   Höhe des Beobachtungsortes über dem Meeresspiegel in Metern.
 
 Jeder Beobachtungsort muß nur einmal erfaßt werden. Danach steht er für
-alle zukünftigen Projekte zur Verfügung (siehe [oben](#FormProjekt)).
+alle zukünftigen Projekte zur Verfügung (siehe [oben](#formular-project)).
 
 ![Airtools-Launcher Formular "New Site"](images/launcher_site.png){width=8cm}
 
-## Formular "Image Set" {#FormSet}
+## Formular "Image Set"
 
 Eine Kometenbeobachtung (bestehend aus Kometenstack und Sternenstack) basiert
 auf einer Serie von Einzelbelichtungen - einem *Image Set*. Das vorliegende
 Formular wird benutzt, um entweder ein bereits vorher definiertes Set auszuwählen
 oder die Angaben zu einem neuen Set zu erfassen:
+
 
 Set name:
 :   Ein in diesem Projekt eindeutiger Kurzname für das *Image Set*, bestehend
@@ -439,16 +438,15 @@ Instrument (telescope/camera):
     gewählt werden.
 Comments:
 :   Feld für die Filterbezeichnung oder andere Angaben.
-Image files of individual exposures: {#Rawfiles}
+Image files of individual exposures:
 :   Liste der beim Stacken verwendeten Einzelbilder (FITS-Dateien), die über den
     Datei-Browser (rechtes Ordner-Symbol) selektiert werden können. Wenn diese
     bekannt sind, dann wird die Aufnahmezeit aller Bilder extrahiert und später
-    in den AIRTOOLS-Programmen mit verwendet. 
-
+    in den AIRTOOLS-Programmen mit verwendet.
 ![Airtools-Launcher Formular "Image Set"](images/launcher_set.png){width=8cm}
 
 
-## Formular "New Instrument" {#FormInstrument}
+## Formular "New Instrument"
 
 Das Formular dient der Definition eines neuen Aufnahmeinstruments mit den
 zugehörigen Angaben von Teleskop und verwendeter Kamera. Die Felder sind wie
@@ -836,7 +834,7 @@ starstack:
     Hintergrund-korrigierte Bilder zurückgegriffen.
 bgimage:
 :   Name des in der Intensität skalierten Hintergrundbildes. Wenn bei der
-    Hintergrundbestimmung (siehe [oben](#bggradient)) für bgmult 1 benutzt wurde,
+    Hintergrundbestimmung (siehe [oben](#bild-hintergrund)) für bgmult 1 benutzt wurde,
     so muß im Dateinamen der String `bgm10` durch `bgm1` ersetzt werden.
 comult:
 :   Faktor zur Kontraststeigerung des extrahierten Kometen-Bildes. Bei Kometen
@@ -865,8 +863,8 @@ erfolgenden Fotometrie ausgeschlossen werden.
 Nach dem Schließen des Fensters *SAOImage CometRegions* wird die Analyse
 fortgesetzt. Dabei wird u.a. aus dem extrahierten Kometen und den Aufnahmezeiten
 der gestackten Einzelaufnahmen eine Kometenspur modelliert. Wurden bei der
-Erfassung der Daten des *Image Sets* im Launcher die Einzelbilder nicht angegeben
-(siehe [Rawfiles](#Rawfiles)), so können nur Schätzungen der Aufnahmezeiten
+Erfassung der Daten des *Image Sets* im Launcher die Einzelbilder nicht angegeben,
+so können nur Schätzungen der Aufnahmezeiten
 verwendet werden. Die modellierte Kometenspur ist dann weniger genau.
 
 Der Abzug von Sternen bzw. Sternspuren basiert auf der Verwendung fotometrischer
@@ -1025,7 +1023,7 @@ Bei Verwendung der AIRTOOLS mit einem Linux Live-System auf DVD oder ISO-Datei
 innerhalb einer virtuellen Maschine müssen die Ergebnisse vor dem Herunterfahren
 des Linux Systems unbedingt auf einem externen Medium gesichert werden.
 
-Das geschieht so, wie es im Abschnitt zum [Dateiaustausch](#Dateiaustausch)
+Das geschieht so, wie es im Abschnitt zum [Dateiaustausch](#austausch-von-dateien-zwischen-host-und-virtualisiertem-linux-pc)
 beschrieben ist. Wird dabei z.B. ein Projektordner auf einen FAT-formatierten
 USB-Stick geschrieben, kommt es zu Fehlermeldungen beim Kopieren von
 symbolischen Links. Diese Links werden vom FAT-Dateisystem nicht unterstützt
@@ -1068,11 +1066,11 @@ nachzuvollziehen und Zwischenergebnisse zu analysieren.
 Im Projektverzeichnis befinden sich folgende Textdateien mit Metadaten
 
 - `camera.dat`: Angaben zu verwendeten Instrumenten (Teleskop und Kamera, siehe 
-    [oben](#FormInstrument))
+    [oben](#formular-new-instrument))
 - `refcat.dat`: Informationen zu Referenzkatalogen für interne Zwecke
 - `set.dat`: Angaben zu den Beobachtungen (Image Sets, siehe 
-[oben](#FormSet))
-- `sites.dat`: Angaben zu Beobachtungsorten (siehe [oben](#FormSite))
+[oben](#formular-image-set))
+- `sites.dat`: Angaben zu Beobachtungsorten (siehe [oben](#formular-new-site))
 - `rawfiles.dat`: Angaben zu den Einzelbelichtungen
 
 Nach Abschluß aller Arbeiten existieren zu jeder Kometenbeobachtung eine Reihe
@@ -1101,7 +1099,7 @@ Dateien im Projektordner, deren Namen mit `x.` beginnen, enthalten temporäre
 Informationen, die nach dem Abschluß der Arbeiten nicht mehr benötigt werden.
 
 
-## Xubuntu Linux - Erste Schritte {#XubuntuDesktop}
+## Xubuntu Linux - Erste Schritte
 
 Der Desktop besitzt oben eine dunkle Zeile (*Panel*) mit diversen Symbolen:
 ganz links das blau-weiße Symbol zum Öffnen des Programm-Menüs und rechts
@@ -1140,7 +1138,7 @@ Links:
 -->
 
 
-## Installation von Xubuntu Linux in VirtualBox VM {#XubuntuInstall}
+## Installation von Xubuntu Linux in VirtualBox VM
 
 Die permanente Installation von Xubuntu Linux auf eine virtuelle Festplatte
 innerhalb einer VirtualBox VM ist nicht kompliziert und dauert ca. 10-15
@@ -1183,5 +1181,5 @@ Die Installation von Xubuntu Linux erfordert folgende Schritte:
 
 Wenn keine automatische Anmeldung gewählt wurde, erscheint nach dem Booten der
 Login-Bildschirm. Nach Eingabe von Benutzername und Passwort wird der Nutzer
-angemeldet und der Desktop erscheint. Die [Installation der AIRTOOLS](#Install)
+angemeldet und der Desktop erscheint. Die [Installation der AIRTOOLS](#installation-der-airtools-software)
 kann beginnen.
