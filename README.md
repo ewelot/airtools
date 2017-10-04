@@ -26,13 +26,13 @@ commonly used in professional astronomy:
   basic FITS routines
 
 
-Instructions for installation of all required software components on Linux
-can be found in the file [INSTALL](INSTALL.md).
+**NEW** A [german user manual](doc/manual-de.md) has been added recently. It
+covers all aspects from installation to using the provided AIRTOOLS tasks for
+comet photometry.
 
-Users who wish to setup the
-AIRTOOLS software on computers running a Windows operating system or MacOS X
-should consult the [README.Windows](doc/README.Windows.md) file first.
-
-For basic information about how to start AIRTOOLS after successful installation
-please consult the [GettingStarted](doc/GettingStarted.txt) text file.
-
+Users which do not speak german can use the following documentation
+- [README.Windows](doc/README.Windows.md): which has instructions on preparing
+  a computer running Windows operating system or MacOS X
+- [INSTALL](INSTALL.md): Installation instructions for the AIRTOOLS software
+- [GettingStarted](doc/GettingStarted.txt) text file for
+  basic information on how to start AIRTOOLS tasks after installation.
