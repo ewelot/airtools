@@ -12,6 +12,7 @@ of comet observations. New procedures were developed to measure the total coma
 brightness. Those image processing steps are easily accessible by means of
 analysis tasks in the SAOImage display GUI.
 
+<img src="doc/images/splash.png" alt="AIRTOOLS in action" width="820" />
 
 The underlying shell functions make use of powerful third party software
 commonly used in professional astronomy:
