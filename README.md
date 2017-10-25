@@ -12,7 +12,6 @@ of comet observations. New procedures were developed to measure the total coma
 brightness. Those image processing steps are easily accessible by means of
 analysis tasks in the SAOImage display GUI.
 
-
 The underlying shell functions make use of powerful third party software
 commonly used in professional astronomy:
 - [SAOImage DS9](http://ds9.si.edu/site/Home.html): image display, catalog
@@ -25,14 +24,18 @@ commonly used in professional astronomy:
 - [Cexamples](http://heasarc.gsfc.nasa.gov/docs/software/fitsio/cexamples.html):
   basic FITS routines
 
+<img src="doc/images/splash.png" alt="AIRTOOLS in action" width="800" />
+(Screenshot of an AIRTOOLS session)
 
-Instructions for installation of all required software components on Linux
-can be found in the file [INSTALL](INSTALL.md).
+## Documentation
 
-Users who wish to setup the
-AIRTOOLS software on computers running a Windows operating system or MacOS X
-should consult the [README.Windows](doc/README.Windows.md) file first.
+**NEW**: A [german user manual](doc/manual-de.md) has been added recently. It
+covers all aspects from installation to using the provided AIRTOOLS tasks for
+comet photometry.
 
-For basic information about how to start AIRTOOLS after successful installation
-please consult the [GettingStarted](doc/GettingStarted.txt) text file.
-
+Users which do not speak german can use the following documentation:
+- [README.Windows](doc/README.Windows.md): which has instructions on preparing
+  a computer running Windows operating system or MacOS X
+- [INSTALL](INSTALL.md): Installation instructions for the AIRTOOLS software
+- [GettingStarted](doc/GettingStarted.txt) text file for
+  basic information on how to start AIRTOOLS tasks after installation.

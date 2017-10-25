@@ -6,13 +6,16 @@
 #   launcher GUI to help startup of airtools
 #
 ########################################################################
-VERSION="1.2"
-VINFO="T. Lehmann, Sep. 2017"
+VERSION="1.3"
+VINFO="T. Lehmann, Oct. 2017"
 PINFO="\
     options:
       h          show this help text
 "
 CHANGELOG="
+    1.3  - 25 Oct 2017
+        * improved handling of spaces in file path names of stacked images
+
     1.2  - 27 Sep 2017
         * added field 'binning' to form 'image set' and set appropriate
           header keyword after image conversion (in AIstart)
@@ -993,14 +996,14 @@ do
     # get field values
     # starstack
     x=$(echo $values | cut -d '|' -f1)
-    test "$x" && test "$sttype" == "RO" && starstack=$x && x=""
-    test "$x" && test -f $x && starstack=$x && x=""
-    test "$x" && adderr "Star stack image $x not found"
+    test "$x" && test "$sttype" == "RO" && starstack="$x" && x=""
+    test "$x" && test -f "$x" && starstack="$x" && x=""
+    test "$x" && adderr "Star stack image '$x' not found"
     # cometstack
     x=$(echo $values | cut -d '|' -f2)
-    test "$x" && test "$cotype" == "RO" && cometstack=$x && x=""
-    test "$x" && test -f $x && cometstack=$x && x=""
-    test "$x" && adderr "Comet stack image $x not found"
+    test "$x" && test "$cotype" == "RO" && cometstack="$x" && x=""
+    test "$x" && test -f "$x" && cometstack="$x" && x=""
+    test "$x" && adderr "Comet stack image '$x' not found"
     (test -z "$starstack" || test -z "$cometstack") &&
         test -z "$errmsg" &&
         adderr "Missing entry for stacked image(s)"
@@ -1018,9 +1021,9 @@ do
                     then
                         x=""
                         test "$binning" && x="-k BINNING=$binning"
-                        echo "# AIstart -c -n $x $setname $starstack $cometstack"
+                        echo "# AIstart -c -n $x $setname \"$starstack\" \"$cometstack\""
                         show_progresswindow "$title" "Loading images ..."
-                        str=$(AIstart -c -n $x $setname $starstack $cometstack)
+                        str=$(AIstart -c -n $x $setname "$starstack" "$cometstack")
                         if [ $? -eq 0 ]
                         then
                             formOK=1

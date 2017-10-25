@@ -1,6 +1,12 @@
+airtools (2.0.1-1) stable; urgency=medium
+
+  * New version of airfun.sh and airtools-launcher.sh
+
+ -- Thomas Lehmann <t_lehmann@freenet.de>  Wed, 25 Oct 2017 21:31:18 +0200
+
 airtools (2.0-2) stable; urgency=medium
 
-  * New version of airfun.sh (v3.0.1)
+  * New version of airfun.sh
   * Added user manual
 
  -- Thomas Lehmann <t_lehmann@freenet.de>  Sun, 01 Oct 2017 19:36:04 +0200
