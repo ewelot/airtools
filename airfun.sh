@@ -22,8 +22,8 @@ CHANGELOG
         * ppm2gray: bugfix: do not propagate NAXIS keywords to FITS file
         * get_jd_dmag: bugfix to correctly deal with sets stacked on other than
             middle exposure
-        * get_header, map_rawfiles, get_rawfile, AIstart, AIregister: bugfix:
-            deal with file path names containing spaces
+        * get_header, map_rawfiles, get_rawfile, meftopnm, AIstart, AIregister:
+            bugfix: deal with file path names containing spaces
         * get_jd: enhanced to deal with FITS header where time of observation
             is stored in TIME-OBS and DATE-OBS provides the day only
         * AIcomet:
@@ -8241,7 +8241,7 @@ meftopnm () {
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-a" && do_ascii_header=1 && shift 1
     done
-    local fits=$1
+    local fits="$1"
     local nx
     local tfits
     local tdir=${AI_TMPDIR:-"/tmp"}
@@ -8257,32 +8257,32 @@ meftopnm () {
     test ! -e "$fits" &&
         echo "ERROR: fits file $fits not found." >&2 &&
         return 255
-    ! is_fits $fits &&
+    ! is_fits "$fits" &&
         echo "ERROR: $fits is not a supported FITS file." >&2 &&
         return 255
 
     if [ "$do_ascii_header" ]
     then
-        listhead $fits | grep -E "^........=|^END$" # | grep -vwE "^SIMPLE|^BITPIX|^NAXIS[0-9 ]|^EXTEND"
+        listhead "$fits" | grep -E "^........=|^END$" # | grep -vwE "^SIMPLE|^BITPIX|^NAXIS[0-9 ]|^EXTEND"
     else
         nx=1
-        ln -s -r $fits $wdir/
-        if is_fitsrgb $fits
+        ln -s -r "$fits" $wdir/
+        if is_fitsrgb "$fits"
         then
             test "$AI_DEBUG" && echo "# FITSRGB" >&2
             missfits -d > $mconf
             (cd $wdir;
             missfits -c $mconf -verbose_type quiet -write_xml N -save_type new -new_suffix ".miss" \
-                -outfile_type split -split_suffix ".%03d.fits" $(basename $fits) >/dev/null)
+                -outfile_type split -split_suffix ".%03d.fits" "$(basename "$fits")" >/dev/null)
             nx=3
         fi
-        if is_fitscube $fits
+        if is_fitscube "$fits"
         then
             test "$AI_DEBUG" && echo "# FITSCUBE" >&2
             missfits -d > $mconf
             (cd $wdir;
             missfits -c $mconf -verbose_type quiet -write_xml N -save_type new -new_suffix ".miss" \
-                -outfile_type slice -slice_suffix ".%03d.fits" $(basename $fits) >/dev/null)
+                -outfile_type slice -slice_suffix ".%03d.fits" "$(basename "$fits")" >/dev/null)
             nx=3
         fi
         test "$AI_DEBUG" && is_number "$AI_DEBUG" && test $AI_DEBUG -gt 1 &&
@@ -8292,18 +8292,18 @@ meftopnm () {
         for i in $(seq 1 $nx)
         do
             #tfits=$[tfits$i]
-            tfits=$wdir/$(basename $fits | sed -e 's/\.[^.]*$//')".00$i.miss.fits"
-            test $nx -eq 1 && tfits=$wdir/$(basename $fits)
+            tfits=$wdir/"$(basename "$fits" | sed -e 's/\.[^.]*$//').00$i.miss.fits"
+            test $nx -eq 1 && tfits=$wdir/"$(basename "$fits")"
             #test "$AI_DEBUG" && echo "$i $tfits" >&2
-            listhead $tfits | grep -q "^DATAMIN " || sethead $tfits datamin=0
-            listhead $tfits | grep -q "^DATAMAX " || sethead $tfits datamax=65535
+            listhead "$tfits" | grep -q "^DATAMIN " || sethead "$tfits" datamin=0
+            listhead "$tfits" | grep -q "^DATAMAX " || sethead "$tfits" datamax=65535
             # note: fitstopnm does not handle 32bit FITS images
             #test $nx -eq 1 && fitstopnm $tfits 2>/dev/null | pnmflip -tb
             #test $nx -ne 1 && fitstopnm $tfits 2>/dev/null | pnmflip -tb > $tmp.$i
             stiff -c $sconf -sky_type manual -min_type manual -min_level 0 \
                 -max_type manual -max_level 65535 -satur_level 65535 \
                 -gamma 1 -bits_per_channel 16 -write_xml N \
-                -verbose_type quiet -outfile_name $tmptif $tfits
+                -verbose_type quiet -outfile_name $tmptif "$tfits"
             test $? -ne 0 &&
                 echo "ERROR: stiff failed." >&2 && return 255
             gm convert $tmptif pgm:- > $tmp.$i
@@ -8743,7 +8743,7 @@ datarange () {
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
     done
     
-    local fimg=$1
+    local fimg="$1"
     local min
     local max
     local md
@@ -8762,10 +8762,10 @@ datarange () {
         echo "usage: datarange <fitsimage>" >&2 &&
         return 1
 
-    ! is_fits $fimg &&
+    ! is_fits "$fimg" &&
         echo "ERROR: unsupported file format" >&2 && return 255
 
-    fitscopy $fimg"[:5,:5]" - > $tmpfits
+    fitscopy "$fimg[:5,:5]" - > $tmpfits
     meftopnm $tmpfits | imcrop - 80 > $tmpim
     set - $(AIstat $tmpim)
     min=$3
@@ -8776,7 +8776,7 @@ datarange () {
     if [ $max -lt 1000 ]
     then
         mult=$((60000/max))
-        imarith $fimg"[:5,:5]" $mult mul - | imarith - 100 add - > $tmpfits
+        imarith "$fimg[:5,:5]" $mult mul - | imarith - 100 add - > $tmpfits
         meftopnm $tmpfits | imcrop - 80 > $tmpim
         set - $(AIstat $tmpim)
         mmin=$3
@@ -8795,7 +8795,7 @@ datarange () {
     if [ $max -gt 60000 ]
     then
         mult=0.1
-        imarith $fimg"[:5,:5]" $mult mul - | imarith - 100 add - > $tmpfits
+        imarith "$fimg[:5,:5]" $mult mul - | imarith - 100 add - > $tmpfits
         meftopnm $tmpfits | imcrop - 80 > $tmpim
         set - $(AIstat $tmpim)
         mmin=$3

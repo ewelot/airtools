@@ -17,9 +17,9 @@ sleep 3
 test "$DEBUG" && set -x || true
 
 # process command line options
-package=airtools
+packages="airtools-core airtools airtools-doc"
 test "$1" == "-n" && do_not_install=1 && shift 1
-test "$1" == "-c" && package="airtools-core" && shift 1
+test "$1" == "-c" && packages="airtools-core" && shift 1
 
 # determine download url depending on distribution name
 dist=$(lsb_release -s -c)
@@ -54,6 +54,7 @@ if [ ! -e $aptsrc ]
 then
     echo "deb file://$ddir main/" > $aptsrc
 fi
+rm -f /var/lib/apt/lists/*airtools*
 apt-get update
 
 # install airtools
@@ -63,9 +64,9 @@ then
     exit 0
 fi
 echo "
-Installing $package ..."
+Installing $packages ..."
 sleep 3
-apt-get -y --allow-unauthenticated install $package
+apt-get -y --allow-unauthenticated install $packages
 apt-get clean
 echo ""
 echo "Installation finished."
