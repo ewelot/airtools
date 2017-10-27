@@ -18,8 +18,10 @@ test "$DEBUG" && set -x || true
 
 # process command line options
 packages="airtools-core airtools airtools-doc"
+svnopts="--non-interactive"
 test "$1" == "-n" && do_not_install=1 && shift 1
 test "$1" == "-c" && packages="airtools-core" && shift 1
+test "$1" == "-r" && svnopts="$svnopts -r $2" && shift 2
 
 # determine download url depending on distribution name
 dist=$(lsb_release -s -c)
@@ -39,14 +41,22 @@ fi
 echo "
 Starting download ($dist) ..."
 sleep 3
-svnopts=""
 if [ "$http_proxy" ]
 then
    set - ${http_proxy//:/ } && ph=${2#//} && pp=${3%/}
-   svnopts="--config-option servers:global:http-proxy-host=$ph"
+   svnopts="$svnopts --config-option servers:global:http-proxy-host=$ph"
    svnopts="$svnopts --config-option servers:global:http-proxy-port=$pp"
 fi
-(cd $ddir && svn $svnopts checkout $url/trunk/$dist/main)
+(cd $ddir
+svn $svnopts info main/
+if [ $? -eq 0 ]
+then
+    svn $svnopts revert -R main/
+    svn $svnopts update main/
+else
+    svn $svnopts checkout $url/trunk/$dist/main
+fi
+)
 
 # add local package repository
 aptsrc=/etc/apt/sources.list.d/airtools-deb.list
@@ -54,7 +64,7 @@ if [ ! -e $aptsrc ]
 then
     echo "deb file://$ddir main/" > $aptsrc
 fi
-rm -f /var/lib/apt/lists/*airtools*
+#rm -f $ddir/main/Release
 apt-get update
 
 # install airtools
