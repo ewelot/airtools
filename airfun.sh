@@ -14,9 +14,18 @@
 # - in order to use SAOImage DS9 analysis tasks (via AIexamine) you must
 #   have installed files airds9.ana and aircmd.sh
 ########################################################################
-AI_VERSION="3.0.2"
+AI_VERSION="3.0.3"
 : << '----'
 CHANGELOG
+    3.0.3 - 05 Nov 2017
+        * ds9cmd aladindss: deal with spaces in FITS keywords of coordinates
+        * AIsource: bugfix to correctly read parameters from camera.dat
+        * AIphotcal: get image size using imsize instead of using NAXIS
+            keywords
+        * get_mpcephem: improve checks on parameters and keywords
+        * datarange: correctly deal with fits cubes
+        * map_rawfiles: added option -n <num> to set first image number
+        
     3.0.2 - 25 Oct 2017
         * newmag: bugfix when operating on splitted sets (texp fixed)
         * ppm2gray: bugfix: do not propagate NAXIS keywords to FITS file
@@ -3936,11 +3945,13 @@ map_rawfiles () {
     local showhelp
     local verbose
     local skip_existing # if set, skip images which already have an entry in rdat
+    local firstnum
     local i
-    for i in 1 2
+    for i in 1 2 3 4
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-x" && skip_existing=1 && shift 1
+        test "$1" == "-n" && firstnum=$2 && shift 2
         test "$1" == "-v" && verbose=1 && shift 1
     done
     local sdat=${AI_SETS:-"set.dat"}
@@ -3962,35 +3973,40 @@ map_rawfiles () {
     local tmpdat=$(mktemp "/tmp/tmp_data_XXXXXX.dat")
     
     test "$showhelp" &&
-        echo "usage: map_rawfiles [-v] [-x] file1 [file2] ..." >&2 &&
+        echo "usage: map_rawfiles [-v] [-n firstnum] [-x] file1 [file2] ..." >&2 &&
         return 1
 
-    # get max number in use by $rdat, $sdat, $edat and in $AI_RAWDIR
-    if [ "$AI_RAWDIR" ] && [ -d $AI_RAWDIR ]
+    if [ "$firstnum" ]
     then
-        x=$(ls $AI_RAWDIR/[0-9][0-9][0-9][0-9].* 2>/dev/null | grep -v "^0000" | \
-            LANG=C sort | tail -1 | cut -d "." -f1)
-        test "$x" && test "$x" \> "$nmax" && nmax=$x
-        test "$verbose" && echo "# AI_RAWDIR: x=$x nmax=$nmax" >&2
-    fi
-    i=0
-    for f in "$sdat" "$edat" "$rdat"
-    do
-        i=$((i+1))
-        test "$verbose" && echo "# f=$f" >&2
-        test ! -e $f && continue
-        case $i in
-            1)  cidx=7;;
-            2)  cidx=2;;
-            3)  cidx=1;;
-        esac
+        nmax=$((firstnum - 1))
+    else
+        # get max number in use by $rdat, $sdat, $edat and in $AI_RAWDIR
+        if [ "$AI_RAWDIR" ] && [ -d $AI_RAWDIR ]
+        then
+            x=$(ls $AI_RAWDIR/[0-9][0-9][0-9][0-9].* 2>/dev/null | grep -v "^0000" | \
+                LANG=C sort | tail -1 | cut -d "." -f1)
+            test "$x" && test "$x" \> "$nmax" && nmax=$x
+            test "$verbose" && echo "# AI_RAWDIR: x=$x nmax=$nmax" >&2
+        fi
+        i=0
+        for f in "$sdat" "$edat" "$rdat"
+        do
+            i=$((i+1))
+            test "$verbose" && echo "# f=$f" >&2
+            test ! -e $f && continue
+            case $i in
+                1)  cidx=7;;
+                2)  cidx=2;;
+                3)  cidx=1;;
+            esac
 
-        x=$(grep -v "^#" $f | awk -v i=$cidx '{if($i~/^[0-9]{4}$/) {printf("%s\n", $i)}}' | \
-            LANG=C sort | tail -1)
-        test "$x" && test "$x" \> "$nmax" && nmax=$x
-        test "$verbose" && echo "# $(basename $f): x=$x nmax=$nmax" >&2
-    done
-    
+            x=$(grep -v "^#" $f | awk -v i=$cidx '{if($i~/^[0-9]{4}$/) {printf("%s\n", $i)}}' | \
+                LANG=C sort | tail -1)
+            test "$x" && test "$x" \> "$nmax" && nmax=$x
+            test "$verbose" && echo "# $(basename $f): x=$x nmax=$nmax" >&2
+        done
+    fi
+
     # extract very basic file information: fname tstart texp jd w h temp
     #   sort images according to JD
     #   spaces in file name are replaced by "_"
@@ -4335,13 +4351,8 @@ AIstart () {
             has_mpcephem=1
             echo "# Comet ephemerides keywords added" >&2
         else
-            if [ $? -eq 1 ]
-            then
-                echo "ABORTING $FUNCNAME due to missing network access." >&2 &&
-                return 255
-            else
-                echo "# WARNING: object $object is not known at MPC database" >&2
-            fi
+            echo "ABORTING $FUNCNAME due to failure in get_mpcephem $sname." >&2 &&
+            return 255
         fi
     fi
 
@@ -4639,7 +4650,7 @@ get_mpcephem () {
         test "$1" == "-w" && do_write_header=1 && shift 1
     done
     
-    local sname="$1"
+    local sname="$1"    # set name or header file
     local objects="$2"  # e.g. "C/2012 K1,154P"
     # objects="C%2F2012+K1%2CC%2F2010+S1%2C154P%2C2P%2CC%2F2012+S1%2CC%2F2013+R1"
     local utday="$3"    # e.g. "2013-09-29"
@@ -4669,6 +4680,7 @@ get_mpcephem () {
     local malt
     local str
     local nval
+    local hdr
     
     (test "$showhelp" || test $# -lt 1) &&
         echo -e "usage: get_mpcephem [-w] <set> [objects] [utday_yyyy-mm-dd] [uttime_hh:mm] [n|$n] [dhms|$dhr]" >&2 &&
@@ -4677,21 +4689,45 @@ get_mpcephem () {
     test -z "$sname" && (test -z "objects" || test -z "$utday" || test -z "$uttime") &&
         echo "ERROR: set name or any of objects,utday,uttime missing." >&2 && return 255
 
-    test "$sname" && test ! -f $sdat &&
-        echo "ERROR: file $sdat missing." >&2 && return 255
-    test "$do_write_header" && test -z "$sname" &&
-        echo "ERROR: set name is missing (required by option -w)" >&2 && return 255
-    test "$do_write_header" && test ! -s $sname.head &&
-        echo "ERROR: file $sname.head is missing (required by option -w)" >&2 && return 255
+    # set name and header file
+    if is_setname "$sname"
+    then
+        hdr=$sname.head
+    else
+        test "$sname" && hdr="$sname"
+        sname=""
+    fi
+    test "$hdr" && ! test -e $hdr &&
+        echo "ERROR: file $hdr is missing." >&2 && return 255
+    test "$do_write_header" && test -z "$hdr" &&
+        echo "ERROR: file $hdr is missing (required by option -w)" >&2 && return 255
+    
+    # get object name(s)
+    test -z "$objects" && test "$hdr" && objects=$(get_header -q $hdr OBJECT)
+    test -z "$objects" && if [ "$sname" ]
+    then
+        set - $(grep   -v "^#" $sdat | awk -v s=$sname '{if($2==s){print $0}}')
+        test -z "$objects" && objects="$3"
+        test -z "$objects" && echo "ERROR: no matching $sname in $sdat." >&2 && return 255
+    fi
+    test -z "$objects" &&
+        echo "ERROR: missing object name(s)." >&2 && return 255
+    if is_integer ${objects:0:4} && [ ${#objects} -ge 6 ]
+    then
+        test "${objects:4:1}" != " " && objects="C/${objects:0:4} ${objects:4}"
+        test "${objects:4:1}" == " " && objects="C/$objects"
+    fi
+
+    # get lat/long
     if [ "$AI_SITE" ]
     then
-        test "$sname" && test -f $sname.head &&
-            long=$(get_header -q $sname.head SITELONG | cut -d ':' -f1-3)
+        test "$sname" && test -f $hdr &&
+            long=$(get_header -q $hdr SITELONG | cut -d ':' -f1-3)
         test "$long" || long=$(get_param -k 2 sites.dat long "$AI_SITE" AI_LONGITUDE)
         test $? -ne 0 && return 255
         test "${long/:/}" != "$long" && long=$(sexa2dec $long)
-        test "$sname" && test -f $sname.head &&
-            lat=$(get_header -q $sname.head SITELAT | cut -d ':' -f1-3)
+        test "$sname" && test -f $hdr &&
+            lat=$(get_header -q $hdr SITELAT | cut -d ':' -f1-3)
         test "$lat"  || lat=$(get_param  -k 2 sites.dat lat  "$AI_SITE" AI_LATITUDE)
         test $? -ne 0 && return 255
         test "${lat/:/}" != "$lat" && lat=$(sexa2dec $lat)
@@ -4714,40 +4750,20 @@ get_mpcephem () {
     test $dhr -gt 240 &&
         echo "ERROR: interval is bejond limit of 240 hours." >&2 && return 255
 
-    # parse object name from $sdat
-    if [ "$sname" ]
-    then
-        set - $(grep   -v "^#" $sdat | awk -v s=$sname '{if($2==s){print $0}}')
-        test -z "$objects" && objects="$3"
-        test -z "$objects" && echo "ERROR: no matching $sname in $sdat." >&2 && return 255
-    fi
-    if is_integer ${objects:0:4} && [ ${#objects} -ge 6 ]
-    then
-        test "${objects:4:1}" != " " && objects="C/${objects:0:4} ${objects:4}"
-        test "${objects:4:1}" == " " && objects="C/$objects"
-    fi
-
     # determine utday and uttime
     test "$utday" && test ${#utday} -eq 8 &&
         utday=${utday:0:4}"-"${utday:4:2}"-"${utday:6:2}
     # TODO: check correct format of uttime, hours must have 2 digits (leading zero)
     if [ -z "$utday" ] || [ -z "$uttime" ]
     then
-        # try to get jd from header of stacked image
-        jd=""
-        test -z "$jd" && test -f $sname.head &&
-            jd=$(get_header -q $sname.head JD | awk '{printf("%.3f\n", $1)}')
-        test -z "$jd" && test -f $sname.head &&
-            jd=$(get_header -q $sname.head JD_OBS | awk '{printf("%.3f\n", $1)}')
-        test -z "$jd" && test -f $sname.head &&
-            jd=$(get_header -q $sname.head MJD_REF| awk '{printf("%.3f\n", $1)}')
-        test -z "$jd" && test -f $sname.head &&
-            dateobs=$(get_header -q $sname.head DATE-OBS) &&
-            jd=$(ut2jd $(echo $dateobs | tr -d '-' | awk -F "T" '{print $2" "substr($1,3)}'))
+        jd=$(get_jd -k "JD,JD_OBS,DATE-OBS" $hdr)
         # try header of nref
-        test -z "$jd" && test -f measure/$8.src.head &&
-            jd=$(grep -E "^MJD_OBS[ ]*=|^JD " measure/$8.src.head | \
-                head -1 | tr '=' ' ' | awk '{printf("%.3f\n", $2)}')
+        test -z "$jd" && if [ "$sname" ]
+        then
+            set - $(AIsetinfo -b $sname | grep -w o | head -1)
+            test -f measure/$8.src.head &&
+                jd=$(get_jd -q -k "JD,JD_OBS,MJD_OBS,DATE-OBS" measure/$8.src.head)
+        fi
         test -z "$jd" &&
             echo "ERROR: cannot get jd to calculate missing utday/uttime." >&2 && return 255
         
@@ -4758,7 +4774,7 @@ get_mpcephem () {
     
     # check internet connection
     ! check_url && echo "ERROR: no internet connection." >&2 && return 1
-    ! check_url $url && echo "ERROR: no access to $url" >&2 && return 1
+    ! check_url $url && echo "ERROR: no access to $url" >&2 && return 2
     
     # set interval
     interval=""
@@ -4776,6 +4792,8 @@ get_mpcephem () {
     curl -s --referer $ref --data "ty=e&TextArea=$objects&d=$utday+${uttime//:/}&$args&$args2" \
         -o $tmp1 $url
     #w3m -dump -T text/html $tmp1
+    test $? -ne 0 &&
+        echo "ERROR: get_mpcephem: curl failed" >&2 && return 255
     cat $tmp1 | awk 'BEGIN{sectionnum=0; data=0; drow=0}{
         if ($0~/<hr>/) {
             sectionnum++
@@ -4801,7 +4819,8 @@ get_mpcephem () {
     then
         test "$AI_DEBUG" && echo $tmp1 $tmp2 >&2
         test "$AI_DEBUG" || rm $tmp1 $tmp2
-        return 255
+        echo "ERROR: No current elements found for $objects." >&2
+        return 3
     fi
     
     if [ "$do_write_header" ] && grep -q -v "^#" $tmp2
@@ -4815,8 +4834,12 @@ get_mpcephem () {
             test $nval -eq 23 && shift 10
             test $nval -eq 24 && shift 11
             dr=$1; pa=$2; alt=$4; mphase=$6; mdist=$7; malt=$8
-            str=$(LANG=C printf "%s %s %s %s  %.1f@%.1f  %.2f %3g %s\n" $sname $ra $de $alt  $dr $pa  $mphase $mdist $malt)
-            AIsetkeys "$str" AI_CORA AI_CODEC AI_COALT AI_OMOVE AI_MOP AI_MOD AI_MOALT
+            set_header $hdr AI_CORA="$ra" AI_CODEC="$de" AI_COALT="$alt"
+            set_header $hdr AI_OMOVE=$(LANG=C printf "%.1f@%.1f" $dr $pa)
+            set_header $hdr AI_MOP="$mphase" AI_MOD="${mdist##+(0)}" AI_MOALT="$malt"
+            #str=$(LANG=C printf "%s %s %s %s  %.1f@%.1f  %.2f %3g %s\n" \
+            #    $hdr $ra $de $alt  $dr $pa  $mphase $mdist $malt)
+            #AIsetkeys "$str" AI_CORA AI_CODEC AI_COALT AI_OMOVE AI_MOP AI_MOD AI_MOALT
         else
             echo "WARNING: $sname: wrong number of values ($nval), not writing to header" >&2
         fi
@@ -8407,6 +8430,7 @@ imslice () {
     
     num=$(echo $slicenum | awk '{printf("%03d", $1)}')
     tfits=$wdir/$(basename $img | sed -e 's/\.[^.]*$//')".$num.miss.fits"
+    #delhead $tfits CTYPE3
     cat $tfits
     
     rm -rf $wdir
@@ -8747,16 +8771,11 @@ datarange () {
     local min
     local max
     local md
-    local mmin
-    local mmax
-    local mmd
-    local mult=1
-    local add=0
     local x
     local tdir=${AI_TMPDIR:-"/tmp"}
-    local tmpim=$(mktemp $tdir/tmp_im_$$.XXXXXX.pnm)
-    local tmpfits=$(mktemp $tdir/tmp_im_$$.XXXXXX.fits)
     local tmpdat=$(mktemp $tdir/tmp_data_$$.XXXXXX.dat)
+    local tmpfits=$(mktemp $tdir/tmp_im_$$.XXXXXX.fits)
+    local tmpfits2=$(mktemp $tdir/tmp_im2_$$.XXXXXX.fits)
 
     (test "$showhelp" || test $# -ne 1) &&
         echo "usage: datarange <fitsimage>" >&2 &&
@@ -8765,52 +8784,28 @@ datarange () {
     ! is_fits "$fimg" &&
         echo "ERROR: unsupported file format" >&2 && return 255
 
-    fitscopy "$fimg[:5,:5]" - > $tmpfits
-    meftopnm $tmpfits | imcrop - 80 > $tmpim
-    set - $(AIstat $tmpim)
-    min=$3
-    max=$4
-    md=$(pnmnoraw $tmpim | sed -e '1,3d' | median -)
-    
-    # condition: max >= 1000
-    if [ $max -lt 1000 ]
+    if is_fitscube "$fimg"
     then
-        mult=$((60000/max))
-        imarith "$fimg[:5,:5]" $mult mul - | imarith - 100 add - > $tmpfits
-        meftopnm $tmpfits | imcrop - 80 > $tmpim
-        set - $(AIstat $tmpim)
-        mmin=$3
-        mmax=$4
-        mmd=$(pnmnoraw $tmpim | sed -e '1,3d' | median -)
-        set - $(echo $mmin $mmd $mmax $mult 100 | awk '{
-            printf("%.1f %.1f %.1f\n", ($1-$5)/$4, ($2-$5)/$4, ($3-$5)/$4)}')
-        min=$1
-        md=$2
-        max=$3
-        echo "# min/median/max: $min $md $max"
-        return 255
+        # choose green channel only
+        imslice "$fimg" 2 > $tmpfits2
+        fitscopy "$tmpfits2[:5,:5]" - > $tmpfits
+    else
+        fitscopy "$fimg[:5,:5]" - > $tmpfits
     fi
+    # determine center area (80%)
+    x=$(imsize $tmpfits | awk '{
+        dx=0.1*$1; dy=0.1*$2
+        printf("%.0f:%.0f,%.0f:%.0f\n", dx, $1-dx, dy, $2-dy)}')
+    imlist "$tmpfits[$x]" | sed -e 's/^[ ]*[0-9]*//' | sed -e '1,2d' | tr ' ' '\n' | \
+        grep "[0-9]" > $tmpdat
+    set - $(minmax $tmpdat)
+    min=$1
+    max=$2
+    md=$(median $tmpdat)
     
-    # condition: max <= 80000
-    if [ $max -gt 60000 ]
-    then
-        mult=0.1
-        imarith "$fimg[:5,:5]" $mult mul - | imarith - 100 add - > $tmpfits
-        meftopnm $tmpfits | imcrop - 80 > $tmpim
-        set - $(AIstat $tmpim)
-        mmin=$3
-        mmax=$4
-        mmd=$(pnmnoraw $tmpim | sed -e '1,3d' | median -)
-        set - $(echo $mmin $mmd $mmax $mult 100 | awk '{
-            printf("%.0f %.0f %.0f\n", ($1-$5)/$4, ($2-$5)/$4, ($3-$5)/$4)}')
-        min=$1
-        md=$2
-        max=$3
-        echo "# min/median/max: $min $md $max"            
-        test $max -gt 80000 && return 255
-        return 0
-    fi
-    
+    test "$AI_DEBUG" && echo $tmpfits $tmpdat
+    test -z "$AI_DEBUG" && rm -f $tmpfits $tmpdat
+    rm -f $tmpfits2
     echo "# min/median/max: $min $md $max"
     return 0
 }
@@ -10271,6 +10266,7 @@ AIexamine () {
             PBM|PGM|PPM|PNG)
                     hdr=${infile%.*}.head
                     test -f $hdr || hdr=""
+                    
                     tfits=$tdir/$b.tmp_${RANDOM}.fits
                     if [ $ftype == "PPM" ]
                     then
@@ -10284,12 +10280,13 @@ AIexamine () {
                         fi
                     fi
                     # TODO: the arbitrary wcs header should be removed by AIstack
-                    test "$hdr" &&
+                    false && test "$hdr" &&
                         str=$(get_header -q $hdr SOFTNAME) &&
                         test "$(echo $str | tr '[A-Z]' '[a-z]')" == "swarp" &&
                         str=$(get_header -q $hdr AUTHOR) &&
                         test "$(echo $str | tr '[A-Z]' '[a-z]')" == "lehmann" &&
                         delwcs $tfits
+                    test "$hdr" && delwcs $tfits
                     sethead $tfits AI_IMAGE=$infile
                     if [ "$wcshead" ]
                     then
@@ -10706,7 +10703,7 @@ AIplot () {
     local wide=0    # control plot window size
     local useboxes  # if set plot histogram like filled boxes
     local uselines  # if set plot lines and points
-    local printfile # if set the plot is saved to $dat.png
+    local printfile # if set the plot is saved to printfile
     local gpcmd     # gnuplot commands inserted before plotting
     local title
     local showhelp
@@ -10720,7 +10717,7 @@ AIplot () {
         test "$1" == "-b" && useboxes=1 && nofit=1 && shift 1
         test "$1" == "-s" && small=1 && shift 1
         test "$1" == "-w" && wide=1 && shift 1
-        test "$1" == "-f" && printfile=1 && shift 1
+        test "$1" == "-o" && printfile="$2" && shift 2
         test "$1" == "-t" && title="$2" && shift 2
         test "$1" == "-g" && gpcmd="$2" && shift 2
     done
@@ -10739,7 +10736,7 @@ AIplot () {
     local log=$(mktemp "/tmp/tmp_log_$$.XXXXXX")
 
     test "$showhelp" &&
-        echo "usage: AIplot [-a] [-f] [-t title] [-g gpcmd] [-p|b] [-s|w]" \
+        echo "usage: AIplot [-a] [-o outfile] [-t title] [-g gpcmd] [-p|b] [-s|w]" \
             "<dat> [xcol] <ycol> [xmin] [xmax] [ranges]" >&2 &&
         return 1
 
@@ -10806,14 +10803,15 @@ AIplot () {
     echo "" >> $tmp2
     if [ "$printfile" ]
     then
+        echo -n "set term postscript enhanced eps color blacktext dashlength 2.5 " >> $tmp2
         case "$small$wide" in
-            10) echo "set terminal pngcairo font 'Verdana,8' size 400,280" >> $tmp2;;
-            01) echo "set terminal pngcairo font 'Verdana,10' size 950,330" >> $tmp2;;
-            11) echo "set terminal pngcairo font 'Verdana,8' size 500,200" >> $tmp2;;
-            *)  echo "set terminal pngcairo font 'Verdana' enhanced" >> $tmp2;;
+            10) echo "font ',16' size 4,  2.8" >> $tmp2;;
+            01) echo "font ',20' size 9.5,3.5" >> $tmp2;;
+            11) echo "font ',16' size 5,  2.3" >> $tmp2;;
+            *)  echo "font ',20' size 6.3,4.6" >> $tmp2;;
         esac
-        test "$dat" != "/dev/stdin" && echo "set output '$dat.png'; replot" >> $tmp2
-        test "$dat" == "/dev/stdin" && echo "set output 'x.plot.png'; replot" >> $tmp2
+        echo "set title '$title' font ',24'" >> $tmp2
+        echo "set output '$printfile'; replot" >> $tmp2
     fi
     cat $tmp2 | gnuplot -p > $log 2>&1
     if [ $? -eq 0 ]
@@ -12129,6 +12127,7 @@ AIsource () {
     local mag0
     local w
     local h
+    local telid
 
     sopts="-backphoto_type local -filter N $sparam"
     test "$quiet" && sopts="-verbose_type quiet $sopts"
@@ -12203,10 +12202,20 @@ AIsource () {
             magzero=$(grep "^MAGZERO" $hdr | tr '=' ' ' | awk '{if ($2>0) printf("%.2f", $2)}')
             saturation=$(grep "^SATURATE" $hdr | tr '=' ' ' | awk '{if ($2>0) printf("%.2f", $2)}')
             pixscale=$(get_wcspscale $hdr)
+            telid=$(get_header -q $hdr AI_TELID)
+            if [ "$telid" ]
+            then
+                test -z "$gain"       && gain=$(get_param       camera.dat gain     $telid)
+                test -z "$pixscale"   && pixscale=$(get_param   camera.dat pixscale $telid)
+                test -z "$magzero"    && magzero=$(get_param    camera.dat magzero  $telid) &&
+                    set_header $hdr MAGZERO=$magzero
+                test -z "$saturation" && saturation=$(get_param camera.dat satur    $telid) &&
+                    set_header $hdr SATURATE=$saturation
+            fi
         fi
         test -z "$texp"   && texp=1
         test -z "$nexp"   && nexp=1
-        
+
         # read data from environment
         test "$AI_SATURATION"   && saturation=$AI_SATURATION
         test "$AI_GAIN"         && gain=$AI_GAIN
@@ -12277,7 +12286,7 @@ AIsource () {
         mag0=$(echo $magzero $texp $nexp | awk '{
             printf("%.2f\n", $1+2.5/log(10)*log($2/$3))}')
         setparam="$setparam -mag_zeropoint $mag0"
-        test "$quiet" || echo "# texp=$texp nexp=$nexp gain=$gain pixscale=$pixscale" \
+        echo "# texp=$texp nexp=$nexp gain=$gain pixscale=$pixscale" \
             "magzero=$magzero saturation=$saturation" >&2
 
 
@@ -13749,11 +13758,6 @@ AIwcs () {
 
     if [ -f "$setname" ]
     then
-        # RAD ??
-        (test -z "$ra" || test -z "$de") &&
-            echo "ERROR: missing center coordinates for $setname." >&2 &&
-            return 255
-
         # try to read some keywords from $img.head
         hdr=${setname%.*}.head
         if [ -f $hdr ]
@@ -13780,7 +13784,7 @@ AIwcs () {
         set - $(scamp -d | grep ASTREF_CATALOG)
         refcat=$2
     else
-        # "tranlate" refcat
+        # "translate" refcat
         case $refcat in
             ucac3)  refcat=ucac-3;;
             ucac4)  refcat=ucac-4;;
@@ -13871,7 +13875,9 @@ AIwcs () {
             continue
         
         # get ra de from $sname.head or measure/$nref.src.head
-        if [ -z "$singleimage" ] && ([ -z "$rad" ] || [ -z "$ded" ])
+        hdr=$sname.head
+        test "$singleimage" && hdr=${sname%.*}.head
+        test -e $hdr && if [ -z "$rad" ] || [ -z "$ded" ]
         then
             for kw in RA RATEL OBJCTRA AI_CORA
             do
@@ -15497,11 +15503,10 @@ AIphotcal () {
     test -d phot || mkdir phot
 
     # calculate image size (degrees)
-    test $(get_header -q $head NAXIS1,NAXIS2 | wc -l) -ne 2 &&
-        echo "ERROR: missing keywords NAXIS1,NAXIS2" >&2 && return 255
-    size=$(echo $(grep "^NAXIS[12]" $head | sort | awk '{print $3}') $(get_wcspscale $whead) | \
+    size=$(echo $(imsize $setname.$inext) $(get_wcspscale $whead) | \
         awk '{printf("%.1fx%.1f", $1*$3/3600, $2*$3/3600)}')
     test "$AI_DEBUG" && echo "size=$size" >&2
+
     # old: set rlim for wide field images >3 deg to 1/6 diagonale
     # new 150828: set rlim to 1/6 diagonale, 150922: 1/4 diagonale
     test -z "$rlim" &&
@@ -18093,11 +18098,11 @@ ds9cmd () {
                     echo "ERROR: missing $set.head" >&2 && echo >&2 && return 255
 
                 # determine approx. image center
-                ra=$(get_header -q $img RA)
-                test -z "$ra" && ra=$(get_header -q $img OBJCTRA)
+                ra=$(get_header -q $img RA | tr ' ' ':')
+                test -z "$ra" && ra=$(get_header -q $img OBJCTRA | tr ' ' ':')
                 test -z "$ra" && ra=$(get_header -q $img AI_CORA)
-                dec=$(get_header -q $img DEC)
-                test -z "$dec" && dec=$(get_header -q $img OBJCTDEC)
+                dec=$(get_header -q $img DEC | tr ' ' ':')
+                test -z "$dec" && dec=$(get_header -q $img OBJCTDEC | tr ' ' ':')
                 test -z "$dec" && dec=$(get_header -q $img AI_CODEC)
                 (test -z "$ra" || test -z "$dec") &&
                     echo "ERROR: missing image center coordinates" >&2 &&
@@ -18116,7 +18121,7 @@ ds9cmd () {
                 # TODO: get displayed image size
                 url="http://aladin.u-strasbg.fr/AladinLite/?target=$ra%20$dec&fov=1"
                 test "$AI_DEBUG" && echo "url=$url"
-                xdg-open "$url"
+                xdg-open "$url" 3>&1 1>&2 2>&3 3>&- | grep -vi "GLib-GObject-CRITICAL **: g_object_.*ref: assertion"
                 echo ""
                 ;;
         wcscalib) img=$1
@@ -18295,14 +18300,6 @@ ds9cmd () {
                 test ! -e ${starstack%.*}".head" && ln -s $set.head ${starstack%.*}".head"
                 test "$cometstack" && test ! -e ${cometstack%.*}".head" && ln -s $set.head ${cometstack%.*}".head"
                 
-                # check for keyword MAGZERO
-                # TODO: query from camera.dat should be done by AIsource, AIpsfextract
-                mzero=$(get_header -q $set.head MAGZERO)
-                test -z "$mzero" && mzero=$(get_param camera.dat magzero $set AI_MAGZERO) &&
-                    set_header $set.head MAGZERO=$mzero
-                test -z $mzero &&
-                    echo "ERROR: unknown MAGZERO." >&2 && echo "" && return 255
-
                 # check for comet position keywords
                 oxy=""
                 set - $(get_header -s $set.head AI_CORA,AI_CODEC) xx
@@ -18461,14 +18458,6 @@ ds9cmd () {
                 test ! -e ${starstack%.*}".head" && ln -s $set.head ${starstack%.*}".head"
                 test ! -e ${cometstack%.*}".head" && ln -s $set.head ${cometstack%.*}".head"
                 
-                # check for keyword MAGZERO
-                # TODO: query from camera.dat should be done by AIsource, AIpsfextract
-                mzero=$(get_header -q $set.head MAGZERO)
-                test -z "$mzero" && mzero=$(get_param camera.dat magzero $set AI_MAGZERO) &&
-                    set_header $set.head MAGZERO=$mzero
-                test -z $mzero &&
-                    echo "ERROR: unknown MAGZERO." >&2 && echo "" && return 255
-
                 # determine comet position
                 set - $(get_header -s $set.head AI_CORA,AI_CODEC,AI_OMOVE)
                 test $# -ne 3 &&

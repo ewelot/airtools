@@ -64,7 +64,7 @@ if [ ! -e $aptsrc ]
 then
     echo "deb file://$ddir main/" > $aptsrc
 fi
-#rm -f $ddir/main/Release
+rm -f $ddir/main/Release
 apt-get update
 
 # install airtools
