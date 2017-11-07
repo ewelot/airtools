@@ -1,6 +1,6 @@
 
 PACKAGE = airtools
-VERSION = 2.0.1
+VERSION = 2.0.2
 
 # installation prefix
 prefix	= /usr/local

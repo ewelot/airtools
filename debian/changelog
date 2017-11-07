@@ -1,3 +1,11 @@
+airtools (2.0.2-1) stable; urgency=medium
+
+  * Improved postinst script
+  * Minor update of airfun.sh (version 3.0.3) and airtools-launcher.sh
+    (version 1.4)
+
+ -- Thomas Lehmann <t_lehmann@freenet.de>  Tue, 07 Nov 2017 21:18:21 +0100
+
 airtools (2.0.1-1) stable; urgency=medium
 
   * New version of airfun.sh and airtools-launcher.sh

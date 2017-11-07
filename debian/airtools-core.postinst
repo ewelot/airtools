@@ -24,14 +24,19 @@ case "$1" in
         export dfile
         xdg-desktop-menu install --novendor $dfile
         
-        # install desktop icon
         duser=$(last | grep -w ":0 " | head -1 | sed -e 's|[ \t].*||')
-        test "$duser" &&
+        if [ "$duser" ]
+        then
+            # install desktop icon
             su - $duser -c "xdg-desktop-icon install --novendor $dfile"
         
-        # open FITS header files .head using mousepad
-        test "$duser" &&
-            su - $duser -c 'xdg-mime default mousepad.desktop image/fits'
+            # open FITS header files .head using mousepad
+            mfile=.config/mimeapps.list
+            adir=.local/share/applications
+            su - $duser -c "test -d $adir || mkdir -p $adir"
+            su - $duser -c "ln -s ~/$mfile ~/$adir"
+            su - $duser -c "xdg-mime default mousepad.desktop image/fits"
+        fi
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)

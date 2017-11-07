@@ -6,13 +6,17 @@
 #   launcher GUI to help startup of airtools
 #
 ########################################################################
-VERSION="1.3"
-VINFO="T. Lehmann, Oct. 2017"
+VERSION="1.4"
+VINFO="T. Lehmann, Nov. 2017"
 PINFO="\
     options:
       h          show this help text
 "
 CHANGELOG="
+    1.4  - 07 Nov 2017
+        * form 'launch': if AIstart fails then allow for adding/changing
+          header keywords
+
     1.3  - 25 Oct 2017
         * improved handling of spaces in file path names of stacked images
 
@@ -945,6 +949,7 @@ errmsg=""
 actionlist="Lauch AIRTOOLS;Open File Browser;Open Terminal"
 starstack=""
 cometstack=""
+keylist=""
 sttype="SFL"   # starstack field type
 cotype="SFL"   # cometstack field type
 # check for stacked images in PNM format
@@ -975,7 +980,23 @@ fi
 while [ ! "$formOK" ]
 do
     txt="Launch AIRTOOLS or choose any of the other actions\n"
-
+    if [ "$errmsg" ]
+    then
+    x="Optionally provide FITS header keywords, using the following syntax"
+    values=$(test $sttype == "SFL" && test $cotype == "SFL" && test -d $AI_RAWDIR && \
+        cd $AI_RAWDIR
+        yad $yadopts --title="$title" \
+        --text="$txt<span foreground='red'>$errmsg</span>" \
+        --date-format="%Y-%m-%d" --separator="|" --item-separator=";" \
+        --form \
+        --field="Stack centered on stars:$sttype"   "$starstack" \
+        --field="Stack centered on comet:$cotype"   "$cometstack" \
+        --field="\n$x: KEY1=\"value1\" KEY2=\"value2\" ...:LBL" "" \
+        --field="FITS header keywords"              "$keylist" \
+        --field="<b>Choose an action</b>:CB"        "$actionlist" \
+        --field="\n:LBL" ""
+        )
+    else
     values=$(test $sttype == "SFL" && test $cotype == "SFL" && test -d $AI_RAWDIR && \
         cd $AI_RAWDIR
         yad $yadopts --title="$title" \
@@ -987,6 +1008,7 @@ do
         --field="<b>Choose an action</b>:CB"        "$actionlist" \
         --field="\n:LBL" ""
         )
+    fi
     buttonID=$?
 
     errmsg=""
@@ -994,6 +1016,8 @@ do
     test -z "$values" && echo "# launcher stoped (form canceled)" && exit 1
     
     # get field values
+    nval=$(echo $values | tr '|' '\n' | wc -l)
+    echo "# nval=$nval"
     # starstack
     x=$(echo $values | cut -d '|' -f1)
     test "$x" && test "$sttype" == "RO" && starstack="$x" && x=""
@@ -1007,9 +1031,17 @@ do
     (test -z "$starstack" || test -z "$cometstack") &&
         test -z "$errmsg" &&
         adderr "Missing entry for stacked image(s)"
-                    
+    # keyword list
+    if [ $nval == 7 ]
+    then
+        x=$(echo $values | cut -d '|' -f4 | tr ',' '.')
+        test "$x" && keylist="$x" && x=""
+        test "$keylist" &&
+            eval set_header "$cometstack" $keylist
+    fi
+    
     # take an action
-    action=$(echo $values | cut -d '|' -f3 | awk '{print tolower($NF)}')
+    action=$(echo $values | cut -d '|' -f$((nval-2)) | awk '{print tolower($NF)}')
     case "$action" in
         browser)    echo "# open file browser"
                     xdg-open $projectdir
