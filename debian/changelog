@@ -1,3 +1,9 @@
+airtools (2.0.2-2) stable; urgency=medium
+
+  * Fixed bug in postinst script
+
+ -- Thomas Lehmann <t_lehmann@freenet.de>  Fri, 10 Nov 2017 17:32:45 +0100
+
 airtools (2.0.2-1) stable; urgency=medium
 
   * Improved postinst script
