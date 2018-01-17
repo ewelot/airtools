@@ -17,7 +17,7 @@
 AI_VERSION="3.1"
 : << '----'
 CHANGELOG
-    3.1 - 17 Jan 2017
+    3.1 - 17 Jan 2018
         * AIbgmap bugfix: take rejected background regions into account
             when computing final statistics
         * ppm2gray:
