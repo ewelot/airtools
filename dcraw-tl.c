@@ -26,6 +26,7 @@
 #define DCRAW_VERSION "9.27"
 /* TL: line added */
 #define NO_LCMS
+#define NO_JASPER
 
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE

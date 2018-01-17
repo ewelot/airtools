@@ -1,6 +1,6 @@
 % Anleitung zur Kometen-Fotometrie mit AIRTOOLS
 % Thomas Lehmann
-% September 2017
+% Januar 2018
 
 
 # Einführung
@@ -83,8 +83,10 @@ Die Bildkalibration unter Verwendung von Bias, Dark, Flat mit den Mitteln der
 AIRTOOLS wird an dieser Stelle nicht beschrieben, ebensowenig das Stacken der
 Einzelbilder. Dazu existieren auch unter den zumeist benutzten Betriebssystemen
 Windows und MacOS ausgereifte Programme, die den meisten Astrofotografen
-geläufig sind. Um die so erzeugten gestackten Bilder mit den AIRTOOLS
-weiter bearbeiten zu können, sind folgende Voraussetzungen zu erfüllen:
+geläufig sind.
+
+Die gestackten Bilder, die mit den AIRTOOLS
+verarbeitet werden sollen, müssen folgende **Voraussetzungen** erfüllen:
 
 - Die gestackten Bilder müssen im FITS-Format vorliegen. Die Pixel haben
   Intensitäten (auch counts oder ADU) im 16bit Dynamikbereich, also Werte
@@ -104,7 +106,8 @@ weiter bearbeiten zu können, sind folgende Voraussetzungen zu erfüllen:
 - Genäherte Koordinaten der Bildmitte werden aus den Feldern RA (bzw. OBJCTRA)
   und DEC (bzw. OBJCTDEC) im FITS-Header übernommen. Sind diese nicht vorhanden,
   werden die Koordinaten des Kometen zur Beobachtungszeit laut Ephemeriden
-  verwendet.
+  verwendet und es wird angenommen, daß sich der Komet nahe der Bildmitte
+  befindet (maximal erlaubte Distanz: ca. 10% der Bildgröße).
 
 
 
@@ -701,16 +704,12 @@ die Sternpositionen. Die gematchten Sterne sind hier grün dargestellt.
 ![Plots zur Bewertung der Astrometrie](images/wcscalib_images.png){width=13cm}
 
 Es empfiehlt sich, den Parameter *thres* soweit zu erhöhen, daß bei einer
-Sensorgröße von 10 Megapixel nicht nicht mehr als ca. 5000 Sterne in der Aufnahme
-detektiert werden. Desweiteren kann die Zahl der verwendeten
-Katalogsterne durch setzen von *maglim* eingeschränkt werden. Beste Ergebnisse
-der Astrometrie werden bei erfolgreichem matchen von ca. 1000 Sternen
-erreicht.
-
-In dichten Sternfeldern kann es bei Verwendung des Katalogs UCAC-4 in
-Verbindung mit einem Eintrag für maglim vorkommen, daß in
-größeren Bereichen des Bildes scheinbar keine Katalogsterne vorhanden sind.
-In diesem Fall sollte auf einen anderen Katalog gewechselt werden.
+Sensorgröße von 10 Megapixel nicht mehr als ca. 5000 Sterne in der
+Aufnahme detektiert werden. Ebenso sollte die Zahl der verwendeten
+Katalogsterne auf ein Maximum von ca. 10000 beschränkt werden, was durch
+das setzen von *maglim* erreicht wird. Gute Ergebnisse
+der Astrometrie werden bei erfolgreicher Zuordnung von ca. 1000 Sternen
+erzielt.
 
 
 ## Bild-Hintergrund

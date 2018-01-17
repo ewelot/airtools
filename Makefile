@@ -1,6 +1,6 @@
 
 PACKAGE = airtools
-VERSION = 2.0.2
+VERSION = 2.1
 
 # installation prefix
 prefix	= /usr/local
@@ -15,7 +15,7 @@ DOCS	= README* doc/README* doc/*txt doc/manual-de.html
 IMAGESDIR	= $(DOCDIR)/images
 IMAGES	= doc/images/*
 
-BIN 	= dcraw-tl pnmtomef pnmccdred pnmcombine
+BIN 	= dcraw-tl pnmtomef pnmccdred pnmcombine pnmrowsort
 BINSH 	= airfun.sh aircmd.sh airtools_launcher.sh
 ANALYSIS = airds9.ana
 DESKTOP	= airtools.desktop
@@ -23,7 +23,8 @@ DESKTOP	= airtools.desktop
 # compiler/linker definitions
 CC = gcc
 CFLAGS = -O4 -Wall
-LIBDCRAW = -lm -ljasper -ljpeg
+#LIBDCRAW = -lm -ljasper -ljpeg
+LIBDCRAW = -lm -ljpeg
 LIBPNM = -lm -lnetpbm
 
 
@@ -44,6 +45,9 @@ pnmccdred: pnmccdred.c
 
 pnmcombine: pnmcombine.o functions.o
 	$(CC) $(CFLAGS) -o $@ $^ $(LIBPNM)
+
+pnmrowsort: pnmrowsort.c
+	$(CC) $(CFLAGS) -o $@ pnmrowsort.c $(LIBPNM)
 
 clean:
 	-rm -f *.o

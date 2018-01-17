@@ -1,3 +1,18 @@
+airtools (2.1-1) stable; urgency=medium
+
+  * Update to airfun.sh version 3.1
+  * Added program pnmrowsort
+  * Requires cfitsio-examples >=0.2
+
+ -- Thomas Lehmann <t_lehmann@freenet.de>  Wed, 17 Jan 2018 17:53:45 +0100
+
+airtools (2.0.2-3) stable; urgency=medium
+
+  * Drop support of jasper in dcraw-tl.c to allow building on Debian 9 Stretch
+  * airtools-core: added dependency on bc
+
+ -- Thomas Lehmann <t_lehmann@freenet.de>  Tue, 14 Nov 2017 11:50:13 +0100
+
 airtools (2.0.2-2) stable; urgency=medium
 
   * Fixed bug in postinst script

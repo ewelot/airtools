@@ -1,6 +1,3 @@
-Anleitung zur Kometen-Fotometrie mit AIRTOOLS
-=============================================
-
 -   [Einführung](#einführung)
 -   [Kometen-Aufnahmen](#kometen-aufnahmen)
 -   [Installation](#installation)
@@ -66,7 +63,9 @@ Sollen Aufnahmen zur späteren Kometen-Fotometrie gewonnen werden, empfielt es s
 
 Zur Trennung von Komet und Hintergrundsternen werden zwei Bilddateien benötigt: zum einen das auf den Kometen gestackte Bild, das die Sterne als Spuren enthält (im folgenden: Kometen-Stack) und zum zweiten das auf die Sterne gestackte Bild, das die Kometenspur zeigt (Sternen-Stack).
 
-Die Bildkalibration unter Verwendung von Bias, Dark, Flat mit den Mitteln der AIRTOOLS wird an dieser Stelle nicht beschrieben, ebensowenig das Stacken der Einzelbilder. Dazu existieren auch unter den zumeist benutzten Betriebssystemen Windows und MacOS ausgereifte Programme, die den meisten Astrofotografen geläufig sind. Um die so erzeugten gestackten Bilder mit den AIRTOOLS weiter bearbeiten zu können, sind folgende Voraussetzungen zu erfüllen:
+Die Bildkalibration unter Verwendung von Bias, Dark, Flat mit den Mitteln der AIRTOOLS wird an dieser Stelle nicht beschrieben, ebensowenig das Stacken der Einzelbilder. Dazu existieren auch unter den zumeist benutzten Betriebssystemen Windows und MacOS ausgereifte Programme, die den meisten Astrofotografen geläufig sind.
+
+Die gestackten Bilder, die mit den AIRTOOLS verarbeitet werden sollen, müssen folgende **Voraussetzungen** erfüllen:
 
 -   Die gestackten Bilder müssen im FITS-Format vorliegen. Die Pixel haben Intensitäten (auch counts oder ADU) im 16bit Dynamikbereich, also Werte zwischen 0 und 65535. Die Bildgröße beider Stacks muß gleich sein.
 -   Die Linearität des mit dem Detektor empfangenen Signals muß bei allen bisher erfolgten Arbeitssschritten (z.B. RAW-Entwicklung, Bias-, Dark-, Flatkalibration, Stacken) erhalten geblieben sein.
@@ -74,7 +73,7 @@ Die Bildkalibration unter Verwendung von Bias, Dark, Flat mit den Mitteln der AI
 -   Der Intensitäts-Nullpunkt (“Schwarzpunkt”, d.h. die counts ohne Lichteinfall) muß bekannt sein (idealerweise bei 0).
 -   Die Stacks sind aus Mittelwert-Bildung entstanden. Die Anwendung eines Median-Filters beim Stacken ist nicht erlaubt.
 -   Die Beobachtungszeit (idealerweise Mitte der Belichtungen) muß im FITS-Header enthalten sein, entweder als JD oder als DATE-OBS (Datum und Zeit in UT).
--   Genäherte Koordinaten der Bildmitte werden aus den Feldern RA (bzw. OBJCTRA) und DEC (bzw. OBJCTDEC) im FITS-Header übernommen. Sind diese nicht vorhanden, werden die Koordinaten des Kometen zur Beobachtungszeit laut Ephemeriden verwendet.
+-   Genäherte Koordinaten der Bildmitte werden aus den Feldern RA (bzw. OBJCTRA) und DEC (bzw. OBJCTDEC) im FITS-Header übernommen. Sind diese nicht vorhanden, werden die Koordinaten des Kometen zur Beobachtungszeit laut Ephemeriden verwendet und es wird angenommen, daß sich der Komet nahe der Bildmitte befindet (maximal erlaubte Distanz: ca. 10% der Bildgröße).
 
 Installation
 ============
@@ -439,9 +438,7 @@ Zur Einschätzung der Qualität der Astrometrie werden mehrerer Plots generiert.
 
 <img src="images/wcscalib_images.png" alt="Plots zur Bewertung der Astrometrie" width="491" />
 
-Es empfiehlt sich, den Parameter *thres* soweit zu erhöhen, daß bei einer Sensorgröße von 10 Megapixel nicht nicht mehr als ca. 5000 Sterne in der Aufnahme detektiert werden. Desweiteren kann die Zahl der verwendeten Katalogsterne durch setzen von *maglim* eingeschränkt werden. Beste Ergebnisse der Astrometrie werden bei erfolgreichem matchen von ca. 1000 Sternen erreicht.
-
-In dichten Sternfeldern kann es bei Verwendung des Katalogs UCAC-4 in Verbindung mit einem Eintrag für maglim vorkommen, daß in größeren Bereichen des Bildes scheinbar keine Katalogsterne vorhanden sind. In diesem Fall sollte auf einen anderen Katalog gewechselt werden.
+Es empfiehlt sich, den Parameter *thres* soweit zu erhöhen, daß bei einer Sensorgröße von 10 Megapixel nicht mehr als ca. 5000 Sterne in der Aufnahme detektiert werden. Ebenso sollte die Zahl der verwendeten Katalogsterne auf ein Maximum von ca. 10000 beschränkt werden, was durch das setzen von *maglim* erreicht wird. Gute Ergebnisse der Astrometrie werden bei erfolgreicher Zuordnung von ca. 1000 Sternen erzielt.
 
 Bild-Hintergrund
 ----------------

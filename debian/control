@@ -8,7 +8,7 @@ Homepage: https://github.com/ewelot/airtools
 
 Package: airtools
 Architecture: any
-Depends: airtools-core, airtools-doc, cfitsio-examples, saods9 | saods9-bin,
+Depends: airtools-core, airtools-doc, cfitsio-examples (>=0.2), saods9 | saods9-bin,
 	missfits, scamp, sextractor, skymaker, stiff, swarp, stilts,
 	${misc:Depends}
 Description: Astronomical Image Reduction TOOLSet
@@ -20,8 +20,9 @@ Description: Astronomical Image Reduction TOOLSet
 Package: airtools-core
 Architecture: any
 Depends: imagemagick, graphicsmagick, gnuplot-x11, librsvg2-bin, potrace,
-	plplot12-driver-cairo, exiftool, curl, wget, gawk, yad, xpa-tools, wcstools,
-    ${shlibs:Depends}, ${misc:Depends}
+	plplot12-driver-cairo, exiftool, bc, curl, wget, gawk, yad,
+	xpa-tools, wcstools,
+	${shlibs:Depends}, ${misc:Depends}
 Suggests: airtools
 Description: Astronomical Image Reduction TOOLSet - Core components
  AIRTOOLS is a collection of programs to aim at astronomical image reduction

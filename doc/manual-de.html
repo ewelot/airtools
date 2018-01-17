@@ -12,7 +12,7 @@
 <div id="header">
 <h1 class="title">Anleitung zur Kometen-Fotometrie mit AIRTOOLS</h1>
 <h2 class="author">Thomas Lehmann</h2>
-<h3 class="date">September 2017</h3>
+<h3 class="date">Januar 2018</h3>
 </div>
 <div id="TOC">
 <ul>
@@ -72,7 +72,8 @@
 <h1 id="kometen-aufnahmen"><span class="header-section-number">2</span> Kometen-Aufnahmen</h1>
 <p>Sollen Aufnahmen zur späteren Kometen-Fotometrie gewonnen werden, empfielt es sich, anstatt einer langen Belichtung mehrere kürzere Belichtungen als Serie aufzunehmen. Da die Größe der Koma zumeist weit unterschätzt wird, sollte auf ein ausreichend großes Gesichtsfeld geachtet werden. Es sollten möglichst wenige gesättigte Sterne in den Bereich der Koma fallen.</p>
 <p>Zur Trennung von Komet und Hintergrundsternen werden zwei Bilddateien benötigt: zum einen das auf den Kometen gestackte Bild, das die Sterne als Spuren enthält (im folgenden: Kometen-Stack) und zum zweiten das auf die Sterne gestackte Bild, das die Kometenspur zeigt (Sternen-Stack).</p>
-<p>Die Bildkalibration unter Verwendung von Bias, Dark, Flat mit den Mitteln der AIRTOOLS wird an dieser Stelle nicht beschrieben, ebensowenig das Stacken der Einzelbilder. Dazu existieren auch unter den zumeist benutzten Betriebssystemen Windows und MacOS ausgereifte Programme, die den meisten Astrofotografen geläufig sind. Um die so erzeugten gestackten Bilder mit den AIRTOOLS weiter bearbeiten zu können, sind folgende Voraussetzungen zu erfüllen:</p>
+<p>Die Bildkalibration unter Verwendung von Bias, Dark, Flat mit den Mitteln der AIRTOOLS wird an dieser Stelle nicht beschrieben, ebensowenig das Stacken der Einzelbilder. Dazu existieren auch unter den zumeist benutzten Betriebssystemen Windows und MacOS ausgereifte Programme, die den meisten Astrofotografen geläufig sind.</p>
+<p>Die gestackten Bilder, die mit den AIRTOOLS verarbeitet werden sollen, müssen folgende <strong>Voraussetzungen</strong> erfüllen:</p>
 <ul>
 <li>Die gestackten Bilder müssen im FITS-Format vorliegen. Die Pixel haben Intensitäten (auch counts oder ADU) im 16bit Dynamikbereich, also Werte zwischen 0 und 65535. Die Bildgröße beider Stacks muß gleich sein.</li>
 <li>Die Linearität des mit dem Detektor empfangenen Signals muß bei allen bisher erfolgten Arbeitssschritten (z.B. RAW-Entwicklung, Bias-, Dark-, Flatkalibration, Stacken) erhalten geblieben sein.</li>
@@ -80,7 +81,7 @@
 <li>Der Intensitäts-Nullpunkt (“Schwarzpunkt”, d.h. die counts ohne Lichteinfall) muß bekannt sein (idealerweise bei 0).</li>
 <li>Die Stacks sind aus Mittelwert-Bildung entstanden. Die Anwendung eines Median-Filters beim Stacken ist nicht erlaubt.</li>
 <li>Die Beobachtungszeit (idealerweise Mitte der Belichtungen) muß im FITS-Header enthalten sein, entweder als JD oder als DATE-OBS (Datum und Zeit in UT).</li>
-<li>Genäherte Koordinaten der Bildmitte werden aus den Feldern RA (bzw. OBJCTRA) und DEC (bzw. OBJCTDEC) im FITS-Header übernommen. Sind diese nicht vorhanden, werden die Koordinaten des Kometen zur Beobachtungszeit laut Ephemeriden verwendet.</li>
+<li>Genäherte Koordinaten der Bildmitte werden aus den Feldern RA (bzw. OBJCTRA) und DEC (bzw. OBJCTDEC) im FITS-Header übernommen. Sind diese nicht vorhanden, werden die Koordinaten des Kometen zur Beobachtungszeit laut Ephemeriden verwendet und es wird angenommen, daß sich der Komet nahe der Bildmitte befindet (maximal erlaubte Distanz: ca. 10% der Bildgröße).</li>
 </ul>
 <h1 id="installation"><span class="header-section-number">3</span> Installation</h1>
 <p>Im Folgenden wird die Installation der AIRTOOLS für Nutzer beschrieben, die einen PC mit Windows oder MacOS Betriebssystem besitzen. Im ersten Teil wird dabei ein virtualisiertes Linux-System gestartet. Nutzer, die bereits einen Linux-Rechner betreiben, können dieses Unterkapitel 3.1 überspringen. Im zweiten Teil wird die eigentliche AIRTOOLS-Installation im (eventuell virtualisierten) Linux-System beschrieben.</p>
@@ -414,8 +415,7 @@
 <img src="images/wcscalib_images.png" alt="Plots zur Bewertung der Astrometrie" width="716" />
 <p class="caption">Plots zur Bewertung der Astrometrie</p>
 </div>
-<p>Es empfiehlt sich, den Parameter <em>thres</em> soweit zu erhöhen, daß bei einer Sensorgröße von 10 Megapixel nicht nicht mehr als ca. 5000 Sterne in der Aufnahme detektiert werden. Desweiteren kann die Zahl der verwendeten Katalogsterne durch setzen von <em>maglim</em> eingeschränkt werden. Beste Ergebnisse der Astrometrie werden bei erfolgreichem matchen von ca. 1000 Sternen erreicht.</p>
-<p>In dichten Sternfeldern kann es bei Verwendung des Katalogs UCAC-4 in Verbindung mit einem Eintrag für maglim vorkommen, daß in größeren Bereichen des Bildes scheinbar keine Katalogsterne vorhanden sind. In diesem Fall sollte auf einen anderen Katalog gewechselt werden.</p>
+<p>Es empfiehlt sich, den Parameter <em>thres</em> soweit zu erhöhen, daß bei einer Sensorgröße von 10 Megapixel nicht mehr als ca. 5000 Sterne in der Aufnahme detektiert werden. Ebenso sollte die Zahl der verwendeten Katalogsterne auf ein Maximum von ca. 10000 beschränkt werden, was durch das setzen von <em>maglim</em> erreicht wird. Gute Ergebnisse der Astrometrie werden bei erfolgreicher Zuordnung von ca. 1000 Sternen erzielt.</p>
 <h2 id="bild-hintergrund"><span class="header-section-number">5.4</span> Bild-Hintergrund</h2>
 <p>Um später schwache Details im Bild besser erkennen zu können, muß der Bild-Hintergrund geebnet werden. Dabei erfolgt lediglich der Abzug eines linearen Gradienten. Die Korrektur mit Flächen höherer Ordnung bzw. mit nichtlinearen Anteilen würde unweigerlich zu systematischen Fehlern bei der Fotometrie der ausgedehnten Koma und des Hintergrundes führen.</p>
 <p>Bestimmte Bildregionen können stark vom natürlichen Helligkeitsgradienten im Bildhintergrund abweichen (sehr helle Sterne mit großem Hof, Sternhaufen etc.). Diese sollten von der Gradientenberechnung ausgeschlossen werden. Dazu müssen sie vor Aufruf des Tasks festgelegt werden. Es ist zweckmäßig, zuerst die vollständige Aufnahme sichtbar zu machen (Menü <em>Zoom/Zoom Fit</em>) und den Kontrast stark anzuheben. Anschließend können beliebige Regionen unterschiedlicher Form erzeugt werden, die anschließend im Task nicht mit berücksichtigt werden.</p>

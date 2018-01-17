@@ -6,13 +6,16 @@
 #   launcher GUI to help startup of airtools
 #
 ########################################################################
-VERSION="1.4"
-VINFO="T. Lehmann, Nov. 2017"
+VERSION="1.5"
+VINFO="T. Lehmann, Jan. 2018"
 PINFO="\
     options:
       h          show this help text
 "
 CHANGELOG="
+    1.5  - 05 Jan 2018
+        * modified few logging messages
+
     1.4  - 07 Nov 2017
         * form 'launch': if AIstart fails then allow for adding/changing
           header keywords
@@ -263,7 +266,7 @@ done
     error "missing function definition file airfun.sh
     (PATH=$PATH)"
 echo "# loading $(which airfun.sh)"
-. airfun.sh
+. airfun.sh > /dev/null
 echo "# AI_VERSION=$AI_VERSION"
 
 
@@ -952,20 +955,6 @@ cometstack=""
 keylist=""
 sttype="SFL"   # starstack field type
 cotype="SFL"   # cometstack field type
-# check for stacked images in PNM format
-ext=""
-test -z "$starstack" && test -e $projectdir/$setname.ppm && ext=ppm &&
-    starstack=$setname.$ext && sttype="RO"
-test -z "$starstack" && test -e $projectdir/$setname.pgm && ext=pgm &&
-    starstack=$setname.$ext && sttype="RO"
-if [ "$starstack" ] && [ -e $projectdir/$setname.head ]
-then
-    x=$(get_header $projectdir/$setname.head AI_COMST)
-    test "$x" && cometstack=$x && cotype="RO"
-fi
-test -z "$cometstack" && test -e $projectdir/${setname}_m.$ext &&
-    cometstack=${setname}_m.$ext && cotype="RO"
-echo "# starstack=$starstack  cometstack=$cometstack"
 
 # read binning from comment in $sdat if there was no previous conversion via AIstart
 if [ -z "$binning" ] && [ -e $sdat ] && [ ! -e $projectdir/$setname.head ]
@@ -979,6 +968,21 @@ fi
 
 while [ ! "$formOK" ]
 do
+	# check for stacked images in PNM format
+	ext=""
+	test -e $projectdir/$setname.ppm && ext=ppm &&
+		starstack=$setname.$ext && sttype="RO"
+	test -e $projectdir/$setname.pgm && ext=pgm &&
+		starstack=$setname.$ext && sttype="RO"
+	if [ "$starstack" ] && [ -e $projectdir/$setname.head ]
+	then
+		x=$(get_header $projectdir/$setname.head AI_COMST)
+		test "$x" && cometstack=$x && cotype="RO"
+	fi
+	test -z "$cometstack" && test -e $projectdir/${setname}_m.$ext &&
+		cometstack=${setname}_m.$ext && cotype="RO"
+	echo "# starstack=$starstack  cometstack=$cometstack"
+
     txt="Launch AIRTOOLS or choose any of the other actions\n"
     if [ "$errmsg" ]
     then
@@ -1017,7 +1021,7 @@ do
     
     # get field values
     nval=$(echo $values | tr '|' '\n' | wc -l)
-    echo "# nval=$nval"
+    #echo "# nval=$nval"
     # starstack
     x=$(echo $values | cut -d '|' -f1)
     test "$x" && test "$sttype" == "RO" && starstack="$x" && x=""
@@ -1037,7 +1041,8 @@ do
         x=$(echo $values | cut -d '|' -f4 | tr ',' '.')
         test "$x" && keylist="$x" && x=""
         test "$keylist" &&
-            eval set_header "$cometstack" $keylist
+            echo "# set_header $starstack $keylist" &&
+            set_header "$starstack" $keylist
     fi
     
     # take an action
