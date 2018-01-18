@@ -170,8 +170,8 @@ minimieren, wird die Verwendung einer Linux-Version empfohlen, für die alle
 Programme als Binärpakete verfügbar sind (sie sind somit kompiliert und leicht
 installierbar bzw. deinstallierbar). Dies sind zur Zeit die 64bit Versionen von
 
-- Ubuntu 16.04 (und Varianten wie Xubuntu)
-- Debian 8
+- Ubuntu 16.04 "Xenial" (und Varianten wie Xubuntu)
+- Debian 9 "Stretch"
 
 In der weiteren Anleitung wird Xubuntu Linux (<https://xubuntu.org/>) in der
 Version 16.04 LTS (64bit) verwendet. Sie müssen die entsprechende ISO-Image

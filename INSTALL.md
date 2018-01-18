@@ -3,8 +3,8 @@
 ## Installation of binary packages
 
 Binary packages are provided for two Linux distributions:
-- Ubuntu 16.04 (Xenial) and variants like XUbuntu
-- Debian 8 (Jessie)
+- Ubuntu 16.04 "Xenial" and variants like XUbuntu
+- Debian 9 "Stretch"
 
 Currently there is no public apt package repository. The binary package files
 are hosted on a GitHub repository instead. The installation procedure is as

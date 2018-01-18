@@ -11,17 +11,27 @@ chmod a+r /tmp/install.log
 exec >  >(tee -ia /tmp/install.log)
 exec 2> >(tee -ia /tmp/install.log >&2)
 
+# process command line options
+pkglist="airtools-core airtools airtools-doc"
+pkgothers="cfitsio-examples missfits scamp sextractor skymaker stiff swarp stilts"
+svnopts="--non-interactive"
+for i in $(seq 1 10)
+do
+    test "$1" == "-n" && do_not_install=1 && shift 1
+    test "$1" == "-r" && svnopts="$svnopts -r $2" && shift 2
+    test "$1" == "-a" && pkglist="$pkglist $pkgothers" && shift 1
+
+    test "$1" == "-h" &&
+	echo "usage: install_deb.sh [-a] [pkg1] [pkg2] ..." && exit 1
+    test "${1:0:1}" == "-" &&
+	echo "ERROR: unknown option $1." && exit -1
+done
+packages=${@:-"$pkglist"}
+
 echo "
 Starting $(basename $0) at $(date) ..."
 sleep 3
-test "$DEBUG" && set -x || true
-
-# process command line options
-packages="airtools-core airtools airtools-doc"
-svnopts="--non-interactive"
-test "$1" == "-n" && do_not_install=1 && shift 1
-test "$1" == "-c" && packages="airtools-core" && shift 1
-test "$1" == "-r" && svnopts="$svnopts -r $2" && shift 2
+test "$DEBUG" && echo packages=$packages && set -x || true
 
 # determine download url depending on distribution name
 dist=$(lsb_release -s -c)
@@ -73,6 +83,20 @@ then
     echo "" && echo "Script $0 finished (without installation)."
     exit 0
 fi
+# check for other apt/dpkg processes holding lock file
+while [ "$(lsof /var/lib/dpkg/lock 2>/dev/null)" ]
+do
+    echo ""
+    echo "WARNING: Another system process in blocking installation."
+    echo "    It might be necessary to wait a few minutes to allow"
+    echo "    that process to finish and release the lock."
+    printf "    Waiting 1 minute now ..."
+    for i in $(seq 1 6); do
+    	for k in $(seq 1 5); do sleep 2; printf "."; done
+        test ! "$(lsof /var/lib/dpkg/lock 2>/dev/null)" && break
+    done
+    printf "\n"
+done
 echo "
 Installing $packages ..."
 sleep 3

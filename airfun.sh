@@ -3,7 +3,7 @@
 # airfun.sh
 #   shell functions aimed towards astronomical image reduction
 #
-# Copyright: Thomas Lehmann, 2011-2017
+# Copyright: Thomas Lehmann, 2011-2018
 # License: GPL v3
 #
 # note:
@@ -14606,6 +14606,8 @@ AIwcs () {
     local north         # user defined north position angle (up=0, left=90)
                         # default is using value AI_NPA or entry in camera.dat
     local binning       # detector pixel binning
+    local ra            # approx. image center
+    local de
     local i
     for i in $(seq 1 12)
     do
@@ -14619,16 +14621,15 @@ AIwcs () {
         test "$1" == "-d" && fitdegrees=$2 && shift 2
         test "$1" == "-n" && north=$2 && shift 2
         test "$1" == "-b" && binning=$2 && shift 2
+        test "$1" == "-c" && ra="$2" && de="$3" && shift 3
         test "$1" == "-x" && sopts="$2" && shift 2
     done
     local setname=${1:-""}
     local refcat=${2:-""}       # e.g. USNO-B1, 2MASS
     local maglim=${3:-"99"}     # magnitude limit in refcat
-    local ra=${4:-""}           # approx. image center
-    local de=${5:-""}
-    local threshold=${6:-5}     # threshold for object detection in sextractor
-    local bgsize=${7:-"64"}     # bg mesh size used for bg subtraction
-    local fwhm=${8:-"4"}        # FWHM in arcsec (used by sextractor)
+    local threshold=${4:-5}     # threshold for object detection in sextractor
+    local bgsize=${5:-"64"}     # bg mesh size used for bg subtraction
+    local fwhm=${6:-"4"}        # FWHM in arcsec (used by sextractor)
     local rdir=${AI_RAWDIR:-"."}
     local sdat=${AI_SETS:-"set.dat"}
     local tdir=${AI_TMPDIR:-"/tmp"}
@@ -14667,10 +14668,10 @@ AIwcs () {
     local retval
     
     test "$showhelp" &&
-        echo "usage: AIwcs [-s] [-r] [-f|-q] [-n north] [-b binning] [-p plotdev|$plotdev] [-o maxoff_deg]" \
-            "[-d fitdegrees|$fitdegrees] [-x sopts] [set|img] [refcat] [maglim|$maglim]" \
-            "[ra] [de] [thres|$threshold] [bgsize|$bgsize]" \
-            "[fwhm|$fwhm]" >&2 &&
+        echo "usage: AIwcs [-s] [-r] [-f|-q] [-c ra dec] [-n north] [-b binning]" \
+            "[-p plotdev|$plotdev] [-o maxoff_deg] [-d fitdegrees|$fitdegrees] [-x sopts]" \
+            "[set|img] [refcat] [maglim|$maglim]" \
+            "[thres|$threshold] [bgsize|$bgsize] [fwhm|$fwhm]" >&2 &&
         return 1
     
     test "${1:0:1}" == "-" &&
@@ -19098,7 +19099,7 @@ ds9cmd () {
                 maglim=$3
                 thres=$4
                 north=$5
-                opts=$6
+                opts=$6     # e.g.: -x '-DISTORT_DEGREES 5'
                 echo "running wcscalib \"$img\" $catalog \"$maglim\" \"$thres\" \"$north\" \"$opts\""
                 
                 # get image name
@@ -19124,9 +19125,9 @@ ds9cmd () {
                 echo "# magzero=$mzero saturation=$(echo $x | awk '{printf("%.0f", $1)}')"
                 
                 test "$north" && north="-n $north"
-                echo "# AI_MAGZERO=$mzero AIwcs -x \"$opts\" -f $north $set $catalog" \
-                    "\"$maglim\" \"\" \"\" $thres" >&2
-                AI_MAGZERO=$mzero AIwcs -x "$opts" -q $north $set $catalog "$maglim" "" "" $thres
+                str="AI_MAGZERO=$mzero AIwcs $opts -q -f $north $set $catalog \"$maglim\" $thres"
+                echo "#" $str >&2
+                eval $str
                 if [ $? -eq 0 ] && [ -s $set.wcs.head ]
                 then
                     ls wcs/$set*.png > /dev/null 2>&1 &&

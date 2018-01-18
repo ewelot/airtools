@@ -107,8 +107,8 @@ VirtualBox (<http://www.virtualbox.org>) ist eine ausgereifte, frei erhältliche
 
 Linux gibt es in sehr unterschiedlichen Ausprägungen, wobei das Betriebssystem und ein großer Teil von Anwendungssoftware gebündelt als sogenannte Distribution angeboten wird. Prinzipiell lässt sich die AIRTOOLS-Software auf einer beliebigen Linux-Distribution installieren, da alle benötigten Komponenten auch im Quellcode verfügbar sind. Um jedoch den Installationsaufwand zu minimieren, wird die Verwendung einer Linux-Version empfohlen, für die alle Programme als Binärpakete verfügbar sind (sie sind somit kompiliert und leicht installierbar bzw. deinstallierbar). Dies sind zur Zeit die 64bit Versionen von
 
--   Ubuntu 16.04 (und Varianten wie Xubuntu)
--   Debian 8
+-   Ubuntu 16.04 “Xenial” (und Varianten wie Xubuntu)
+-   Debian 9 “Stretch”
 
 In der weiteren Anleitung wird Xubuntu Linux (<https://xubuntu.org/>) in der Version 16.04 LTS (64bit) verwendet. Sie müssen die entsprechende ISO-Image Datei aus dem Download-Bereich herunterladen (aktuell z.B. [xubuntu-16.04.3-desktop-amd64.iso](http://ftp.uni-kl.de/pub/linux/ubuntu-dvd/xubuntu/releases/16.04/release/xubuntu-16.04.3-desktop-amd64.iso)).
 
