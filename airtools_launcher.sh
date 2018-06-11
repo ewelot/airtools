@@ -6,13 +6,17 @@
 #   launcher GUI to help startup of airtools
 #
 ########################################################################
-VERSION="1.5"
-VINFO="T. Lehmann, Jan. 2018"
+VERSION="1.6"
+VINFO="T. Lehmann, Jun. 2018"
 PINFO="\
     options:
       h          show this help text
 "
 CHANGELOG="
+    TODO
+    1.6  - 11 Jun 2018
+        * added field in camera setup form (new column in camera.dat)
+
     1.5  - 05 Jan 2018
         * modified few logging messages
 
@@ -766,6 +770,7 @@ then
     aperture=""
     fratio=""
     camera=""
+    camchip=""  # added in v1.6
     rot=""
     rawbits=""
     satur=""
@@ -787,6 +792,7 @@ three values for focal length, aperture and f-ratio must be specified):\n"
             --field="Aperture / mm :"           "$aperture" \
             --field="F-ratio (f/d):"            "$fratio" \
             --field="Camera model:"             "$camera" \
+            --field="Camera and sensor keys:"   "$camchip" \
             --field="Camera rotation / ° :"     "$rot" \
             --field="Rawbits:"                  "$rawbits" \
             --field="Saturation:"               "$satur" \
@@ -830,35 +836,38 @@ three values for focal length, aperture and f-ratio must be specified):\n"
         
         # camera
         camera=$(echo $values | cut -d '|' -f5 | tr ' ' '_')
+        # camchip
+        camchip=$(echo $values | cut -d '|' -f6 | tr ' ' '/')
+        test -z "$camchip" && camchip="-"
         # rot must be number
-        x=$(echo $values | cut -d '|' -f6 | tr ',' '.')
+        x=$(echo $values | cut -d '|' -f7 | tr ',' '.')
         is_number "$x" && rot=$x && x=""
         test "$x" && adderr "Rotation $x is not a number"
         # rawbits must be number
-        x=$(echo $values | cut -d '|' -f7)
+        x=$(echo $values | cut -d '|' -f8)
         is_number "$x" && rawbits=$x && x=""
         test "$x" && adderr "Rawbits $x is not a number"
         # satur must be number
-        x=$(echo $values | cut -d '|' -f8)
+        x=$(echo $values | cut -d '|' -f9)
         is_number "$x" && satur=$x && x=""
         test "$x" && adderr "Saturation $x is not a number"
         # gain must be number
-        x=$(echo $values | cut -d '|' -f9 | tr ',' '.')
+        x=$(echo $values | cut -d '|' -f10 | tr ',' '.')
         is_number "$x" && gain=$x && x=""
         test "$x" && adderr "Gain $x is not a number"
         # pixscale must be number
-        x=$(echo $values | cut -d '|' -f10 | tr ',' '.')
+        x=$(echo $values | cut -d '|' -f11 | tr ',' '.')
         is_number "$x" && pixscale=$x && x=""
         test "$x" && adderr "Pixel scale $x is not a number"
         # magzero must be number
-        x=$(echo $values | cut -d '|' -f11 | tr ',' '.')
+        x=$(echo $values | cut -d '|' -f12 | tr ',' '.')
         is_number "$x" && magzero=$x && x=""
         test "$x" && adderr "Mag zero point $x is not a number"
         
         # keep selected items of ttypelist, ctypelist
-        x=$(echo $values | cut -d '|' -f12)
-        ttypelist=$(select_item "$ttypelist" "$x")
         x=$(echo $values | cut -d '|' -f13)
+        ttypelist=$(select_item "$ttypelist" "$x")
+        x=$(echo $values | cut -d '|' -f14)
         ctypelist=$(select_item "$ctypelist" "$x")
 
         echo "# tel=$tel flen=$flen aperture=$aperture fratio=$fratio camera=$camera pixscale=$pixscale"
@@ -870,21 +879,21 @@ three values for focal length, aperture and f-ratio must be specified):\n"
     telid=$tel
 
     # ttype, ctype
-    case "$(echo $values | cut -d '|' -f12)" in
+    case "$(echo $values | cut -d '|' -f13)" in
         Reflector)  ttype="L";;
         Refractor)  ttype="R";;
         Photo\ Lens) ttype="A";;
         *)          ttype="L";;
     esac
-    ctype=$(echo $values | cut -d '|' -f13)
+    ctype=$(echo $values | cut -d '|' -f14)
     
     # saving new camera
-    line=$(echo $tel $flen $aperture $fratio $camera $rot $rawbits $satur \
+    line=$(echo $tel $flen $aperture $fratio $camera $camchip $rot $rawbits $satur \
         $gain $pixscale $magzero $ttype $ctype | awk '{
-        printf("%-6s %4d   %4d   %4.1f   %-11s %3d  %2d %6d  ",
-            $1, $2, $3, $4, $5, $6, $7, $8)
+        printf("%-6s %4d   %4d   %4.1f   %-10s %-7s %3d  %2d %6d  ",
+            $1, $2, $3, $4, $5, $6, $7, $8, $9)
         printf("%5.2f  %6.2f    %4.1f    %s   %s",
-            $9, $10, $11, $12, $13)
+            $10, $11, $12, $13, $14)
         }')
     echo "$line" >> $basedir/camera.dat
     echo "$line" >> $projectdir/camera.dat
