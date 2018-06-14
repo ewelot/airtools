@@ -72,7 +72,7 @@ fi
 aptsrc=/etc/apt/sources.list.d/airtools-deb.list
 if [ ! -e $aptsrc ]
 then
-    echo "deb file://$ddir main/" > $aptsrc
+    echo "deb [trusted=yes] file://$ddir main/" > $aptsrc
 fi
 rm -f $ddir/main/Release
 apt-get update

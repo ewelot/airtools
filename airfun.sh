@@ -5885,10 +5885,14 @@ phot2icq () {
         test ! -e $hdr && echo "ERROR: header file $hdr not found." >&2 && continue
         whdr=$sname.wcs.head
         test ! -e $whdr && echo "ERROR: wcs header file $whdr not found." >&2 && continue
-      
+
         # reading keywords
         object=$(get_header $hdr OBJECT)
         test $? -ne 0 && echo "ERROR: no OBJECT in $hdr" >&2 && continue
+        # check for AI_CORA AICODEC which are indicative for a comet observation
+        val=$(get_header -q $hdr AI_CORA,AI_CODEC | wc -l)
+        test $val -ne 2 &&
+            echo "WARNING: $sname ($object) is not a comet observation" && continue
         mjd=$(get_header -q $hdr JD_OBS)
         test -z "$mjd" && mjd=$(get_header -q $hdr MJD_OBS)
         test -z "$mjd" && mjd=$(get_header -q $hdr JD)
@@ -19403,7 +19407,7 @@ ds9cmd () {
                 AIsetinfo -b
                 echo
                 echo "# ICQ records:"
-                phot2icq
+                phot2icq -c
                 echo ""
                 ;;
         shorthelp)
@@ -20148,7 +20152,7 @@ physical" > $tmpreg
                 then
                     echo ""
                     echo "# ICQ data:"
-                    phot2icq -v $set $catalog
+                    phot2icq -v -c $set $catalog
                 fi
                 
                 # remove some temp files

@@ -1,3 +1,11 @@
+airtools (2.2-1) stable; urgency=medium
+
+  * Update to airfun.sh version 3.3
+  * Added new column to camera.dat
+  * Update of dcraw-tl based on new upstream version of dcraw (9.28) 
+
+ -- Thomas Lehmann <t_lehmann@freenet.de>  Thu, 14 Jun 2018 18:24:49 +0200
+
 airtools (2.1-1) stable; urgency=medium
 
   * Update to airfun.sh version 3.1
