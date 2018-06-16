@@ -163,7 +163,8 @@ files (file name prefix x.) from your projects working directory.
 5. Additional Help
 --------------------
 
-AIRTOOLS Manual (in preparation)
-Screencast video at ...
+AIRTOOLS Manual: https://github.com/ewelot/airtools/blob/master/doc/manual-de.md
+ (english version in preparation)
+Screencast video at https://www.youtube.com/watch?v=sK9D_M06ovA
 E-Mail contact: Do not hesitate to ask any questions via private mail to
 t_lehmann (at) freenet (dot) de

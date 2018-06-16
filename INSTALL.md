@@ -2,13 +2,19 @@
 
 ## Installation of binary packages
 
-Binary packages are provided for two Linux distributions:
-- Ubuntu 16.04 "Xenial" and variants like XUbuntu
-- Debian 9 "Stretch"
+Binary packages are provided for the following Linux distributions:
+  - Ubuntu 18.04 "Bionic" 
+  - Ubuntu 16.04 "Xenial"
+  - Debian 9 "Stretch"
+  - Debian 8 "Jessie" (discontinued)
 
-Currently there is no public apt package repository. The binary package files
-are hosted on a GitHub repository instead. The installation procedure is as
-follows:
+Ubuntu packages were tested on XUbuntu distributions and should work on
+any Ubuntu desktop flavour (e.g. native Ubuntu, KUbuntu, LUbuntu). 
+
+The binary package files are hosted on a GitHub repository which is not
+accessible by the native software package management system provided by
+the Linux distribution. Nevertheless, installation is easily performed
+by following these steps:
 - Download the
   [install script](https://github.com/ewelot/airtools/raw/master/install_deb.sh) (e.g. right-click the link and choose `Save Link As`)
 - Open the file explorer (double-click the home icon)
@@ -21,34 +27,32 @@ follows:
 
 ## Compiling and Installing from source code
 
-If there is no binary package repository for your distribution then you
-have to compile the software and install it afterwards. The compilation depends
-on a number of libraries. On a Debian/Ubuntu based distribution they can be
-installed via:
+If you are running a Linux distribution for which there are no binary packages
+provided then you must compile and install all software components by yourself.
+The compilation depends on a number of libraries. On a Debian/Ubuntu based
+distribution they can be installed by the following example command:
 
     apt-get install libnetpbm10-dev libjasper-dev libjpeg-dev libcfitsio3-dev \
         libtiff5-dev libfftw3-dev libblas-dev libatlas-base-dev \
         libplplot-dev plplot12-driver-xwin plplot12-driver-cairo libshp-dev \
         libcurl4-gnutls-dev
 
-If you are compiling from source packages you must also install the
+Please note that package names may be different, depending on your distribution.
+If you are compiling from a Debian source packages you must also install the
 required build tools:
 
     apt-get install build-essential fakeroot devscripts debhelper \
         javahelper dh-autoreconf
 
-Example compilation:
-    ...
-
-Example installation:
-    ...
+If you have questions regarding the detailed procedure, do not hesitate to
+contact the author of the AIRTOOLS software.
 
 
 ## Documentation
 
 Documentation is available under the `/usr/share/doc/airtools-doc/` directory
-after successful installation of the binary packages. The same content is
-visible on GitHub's
+after successful installation of the binary packages. The most up-to-date
+content is always found on GitHub's
 [doc directory](doc/).
 
 

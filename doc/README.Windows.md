@@ -51,7 +51,7 @@ live system (do not install it).
 
 Notes on XUbuntu Linux: the application menu is activated by the top-left
 icon. The shutdown-button is located on that menu at bottom right position.
-For additional helpful documentation please visit http://docs.xubuntu.org/1604/.
+For additional helpful documentation please visit http://docs.xubuntu.org/.
 
 
 ## 5. Install airtools
