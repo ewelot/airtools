@@ -1,6 +1,6 @@
-% Anleitung zur Kometen-Fotometrie mit AIRTOOLS
+% Anleitung zur Kometen-Fotometrie mit AIRTOOLS (v2.2)
 % Thomas Lehmann
-% Januar 2018
+% Juni 2018
 
 
 # Einführung
@@ -469,6 +469,10 @@ F-ratio:
 :   Öffnungsverhältnis f/D bzw. Blende.
 Camera model:
 :   Modellbezeichnung der Kamera.
+Camera and Sensor keys:
+:   ICQ Schlüssel für [Kamera](https://cobs.si/help?page=ccd_type)
+    und [Sensor](https://cobs.si/help?page=ccd_chip), getrennt durch das
+    Zeichen /, z.B. für Canon 6D: CDS/CFC.
 Camera rotation:
 :   Rotationswinkel der Kamera in Grad (Norden oben = 0°, Norden links = 90°)
 Rawbits:

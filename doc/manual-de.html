@@ -5,14 +5,14 @@
   <meta http-equiv="Content-Style-Type" content="text/css" />
   <meta name="generator" content="pandoc" />
   <meta name="author" content="Thomas Lehmann" />
-  <title>Anleitung zur Kometen-Fotometrie mit AIRTOOLS</title>
+  <title>Anleitung zur Kometen-Fotometrie mit AIRTOOLS (v2.2)</title>
   <style type="text/css">code{white-space: pre;}</style>
 </head>
 <body>
 <div id="header">
-<h1 class="title">Anleitung zur Kometen-Fotometrie mit AIRTOOLS</h1>
+<h1 class="title">Anleitung zur Kometen-Fotometrie mit AIRTOOLS (v2.2)</h1>
 <h2 class="author">Thomas Lehmann</h2>
-<h3 class="date">Januar 2018</h3>
+<h3 class="date">Juni 2018</h3>
 </div>
 <div id="TOC">
 <ul>
@@ -101,10 +101,11 @@
 <h3 id="linux-installations-medium"><span class="header-section-number">3.1.2</span> Linux Installations-Medium</h3>
 <p>Linux gibt es in sehr unterschiedlichen Ausprägungen, wobei das Betriebssystem und ein großer Teil von Anwendungssoftware gebündelt als sogenannte Distribution angeboten wird. Prinzipiell lässt sich die AIRTOOLS-Software auf einer beliebigen Linux-Distribution installieren, da alle benötigten Komponenten auch im Quellcode verfügbar sind. Um jedoch den Installationsaufwand zu minimieren, wird die Verwendung einer Linux-Version empfohlen, für die alle Programme als Binärpakete verfügbar sind (sie sind somit kompiliert und leicht installierbar bzw. deinstallierbar). Dies sind zur Zeit die 64bit Versionen von</p>
 <ul>
+<li>Ubuntu 18.04 “Bionic” (und Varianten wie Xubuntu)</li>
 <li>Ubuntu 16.04 “Xenial” (und Varianten wie Xubuntu)</li>
 <li>Debian 9 “Stretch”</li>
 </ul>
-<p>In der weiteren Anleitung wird Xubuntu Linux (<a href="https://xubuntu.org/" class="uri">https://xubuntu.org/</a>) in der Version 16.04 LTS (64bit) verwendet. Sie müssen die entsprechende ISO-Image Datei aus dem Download-Bereich herunterladen (aktuell z.B. <a href="http://ftp.uni-kl.de/pub/linux/ubuntu-dvd/xubuntu/releases/16.04/release/xubuntu-16.04.3-desktop-amd64.iso">xubuntu-16.04.3-desktop-amd64.iso</a>).</p>
+<p>In der weiteren Anleitung wird Xubuntu Linux (<a href="https://xubuntu.org/" class="uri">https://xubuntu.org/</a>) in der Version 16.04 LTS (64bit) verwendet. Sie müssen die entsprechende ISO-Image Datei aus dem Download-Bereich herunterladen (aktuell z.B. <a href="http://ftp.uni-kl.de/pub/linux/ubuntu-dvd/xubuntu/releases/16.04/release/xubuntu-16.04.4-desktop-amd64.iso">xubuntu-16.04.4-desktop-amd64.iso</a>).</p>
 <h3 id="linux-live-system-als-virtualbox-vm"><span class="header-section-number">3.1.3</span> Linux Live-System als VirtualBox VM</h3>
 <p>Die meisten (großen) Linux-Distributionen bieten ihre Software mittlerweise als Live-System an, d.h. das Betriebssystem und die Anwendungen befinden sich auf einem bootbaren Medium (CD, DVD, ISO-Datei). Nach dem Booten dieses Mediums ist das Linux Live-System voll funktionsfähig und kann beliebig getestet werden. Bei Bedarf kann das laufende System auf eine Festplatte installiert werden.</p>
 <p>So funktioniert das auch mit der Xubuntu ISO-Datei, die in einer VirtualBox VM direkt als Bootmedium verwendet werden kann. Dazu sind folgende Schritte notwendig:</p>
@@ -283,6 +284,9 @@
 </dd>
 <dt>Camera model:</dt>
 <dd>Modellbezeichnung der Kamera.
+</dd>
+<dt>Camera and Sensor keys:</dt>
+<dd>ICQ Schlüssel für <a href="https://cobs.si/help?page=ccd_type">Kamera</a> und <a href="https://cobs.si/help?page=ccd_chip">Sensor</a>, getrennt durch das Zeichen /, z.B. für Canon 6D: CDS/CFC.
 </dd>
 <dt>Camera rotation:</dt>
 <dd>Rotationswinkel der Kamera in Grad (Norden oben = 0°, Norden links = 90°)
