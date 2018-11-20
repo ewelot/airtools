@@ -3,19 +3,27 @@
 ########################################################################
 #   airtools_launcher.sh [-h]
 #
-#   launcher GUI to help startup of airtools
+#   launcher GUI to ease startup of airtools
 #
 ########################################################################
-VERSION="1.6"
-VINFO="T. Lehmann, Jun. 2018"
+VERSION="1.8"
+VINFO="T. Lehmann, Oct. 2018"
 PINFO="\
     options:
       h          show this help text
 "
 CHANGELOG="
-    TODO
+    1.8  - 22 Oct 2018
+        * removed hard-coded expansion of PATH variable
+
+    1.7  - 24 Sep 2018
+        * sync with airtools release 2.3
+        * launcher log, application ini files and global parameter files are
+            now stored in a version specific config directory
+        * added field 'flip' to camera setup form (new column in camera.dat)
+
     1.6  - 11 Jun 2018
-        * added field in camera setup form (new column in camera.dat)
+        * added field 'camchip' to camera setup form (new column in camera.dat)
 
     1.5  - 05 Jan 2018
         * modified few logging messages
@@ -58,10 +66,12 @@ CHANGELOG="
 #--------------------
 #   user definitions
 #--------------------
+AIRTOOLS_RELEASE=2.3
 datadir=/usr/share/airtools
-ini=$HOME/.airtools.ini
-log=$HOME/airtools.log
-rc=.airtoolsrc
+confdir=$HOME/.airtools/${AIRTOOLS_RELEASE}
+ini=$confdir/airtools.conf  # general application settings
+log=$confdir/launcher.log   # launcher log file
+rc=.airtoolsrc          # definitions (env variables) in project directory
 
 
 #--------------------
@@ -178,14 +188,16 @@ lastproject=\"$d\"
 lasttmpdir=\"$tmpdir\"
 lastsite=\"$lastsite\"
 lastcamera=\"$lastcamera\"" >> $tmp1
-    test ! -e $ini &&
-        echo "# wrinting $ini" &&
-        mv $tmp1 $ini &&
-        return
-    ! diff -q $tmp1 $ini > /dev/null &&
-        echo "# updating $ini" &&
-        mv $tmp1 $ini &&
-        cat $ini
+    if [ ! -e $ini ]
+    then
+        echo "# wrinting $ini"
+        mv $tmp1 $ini
+    else
+        ! diff -q $tmp1 $ini > /dev/null &&
+            echo "# updating $ini" &&
+            mv $tmp1 $ini &&
+            cat $ini
+    fi
     rm -f $tmp1
     return
 }
@@ -246,6 +258,8 @@ fi
 #--------------------
 #   checkings
 #--------------------
+test ! -d $confdir && mkdir -p $confdir
+
 # start logging
 exec > >(tee -a $log)
 exec 2>&1
@@ -257,14 +271,6 @@ test "$projectdir" && test ! -d "$projectdir" &&
     echo "ERROR: projectdir $projectdir does not exist." >&2 && exit 1
 test "$projectdir" && test ! -e "$projectdir/$rc" &&
     echo "ERROR: invalid projectdir $projectdir" >&2 && exit 1
-
-# prepend PATH to include local bin directories
-for p in $HOME/bin/home $HOME/bin
-do
-    if [ -d "$p" ] && [[ ":$PATH:" != *":$p:"* ]]; then
-        PATH="$p${PATH:+":$PATH"}"
-    fi
-done
 
 ! type -p airfun.sh > /dev/null 2>&1 &&
     error "missing function definition file airfun.sh
@@ -343,9 +349,10 @@ do
 
     # locate sites.dat
     sitesdat=""
-    for d in $lastwdir $basedir /usr/local/share/airtools $datadir
+    for d in $lastwdir $confdir $basedir /usr/local/share/airtools $datadir
     do
-        test -d $d && test -e $d/sites.dat && sitesdat=$d/sites.dat && break
+        test -d $d && test -e $d/sites.dat && sitesdat=$d/sites.dat &&
+            echo "# using $sitesdat" && break
     done
 
     # get list of available sites
@@ -384,7 +391,7 @@ create a new project by filling in the lower entries of this form\n"
     echo "# values=$values"
     test -z "$values" && echo "# launcher stoped (form canceled)" && exit 1
 
-    # evaluate if form is completed
+    # evaluate fields and check if form is completed
     projectdir=$(echo $values | cut -d '|' -f2 | grep -v null)
     test -z "$projectdir" && projectdir=$(echo $values | cut -d '|' -f3 | grep -v null)
     if [ "$projectdir" ]
@@ -439,12 +446,13 @@ done
 test "$has_arg_pdir" || save_ini $ini
 
 
-# copy metadata files to basedir
+# copy metadata files to confdir
 for f in refcat.dat sites.dat camera.dat
 do
     for d in /usr/local/share/airtools $datadir
     do
-        test ! -e $basedir/$f && test -e $d/$f && cp -p $d/$f $basedir
+        test ! -e $confdir/$f && test -e $d/$f && cp -p $d/$f $confdir &&
+            echo "# copy $d/$f to $confdir"
     done
 done
 
@@ -452,7 +460,7 @@ done
 for f in refcat.dat sites.dat camera.dat
 do
     test -e $projectdir/$f &&
-        diff -q $basedir/$f $projectdir/$f >/dev/null && continue
+        diff -q $confdir/$f $projectdir/$f >/dev/null && continue
     # TODO: try merging of files if header line is identical (same fields)
     test -e $projectdir/$f && test -e $projectdir/$rc && continue
     if [ -e $projectdir/$f ]
@@ -461,7 +469,7 @@ do
         echo "WARNING: moving old $projectdir/$f to $old"
         mv $projectdir/$f $projectdir/$old
     fi
-    cp -p $basedir/$f $projectdir/$f
+    cp -p $confdir/$f $projectdir/$f
 done
 
 # check if current site exists
@@ -542,12 +550,12 @@ then
             formOK=1
     done
     
-    # saving new site
+    # saving new site (to both current project and confdir)
     line=$(echo $sid $site $tdiff $long $lat $alt | awk '{
         x=$3; if(x>0) {x="+"x}
         printf("%-7s %-11s 1   %-5s %7.2f   %6.2f  %4d",
             $1, $2, x, $4, $5, $6)}')
-    echo "$line" >> $basedir/sites.dat
+    echo "$line" >> $confdir/sites.dat
     echo "$line" >> $projectdir/sites.dat
     
     lastsite="$site (ID=$sid)"
@@ -771,6 +779,7 @@ then
     fratio=""
     camera=""
     camchip=""  # added in v1.6
+    flip=""     # added in v1.7
     rot=""
     rawbits=""
     satur=""
@@ -793,6 +802,7 @@ three values for focal length, aperture and f-ratio must be specified):\n"
             --field="F-ratio (f/d):"            "$fratio" \
             --field="Camera model:"             "$camera" \
             --field="Camera and sensor keys:"   "$camchip" \
+            --field="Flip image top-down (1=yes):"  "$flip" \
             --field="Camera rotation / ° :"     "$rot" \
             --field="Rawbits:"                  "$rawbits" \
             --field="Saturation:"               "$satur" \
@@ -839,35 +849,39 @@ three values for focal length, aperture and f-ratio must be specified):\n"
         # camchip
         camchip=$(echo $values | cut -d '|' -f6 | tr ' ' '/')
         test -z "$camchip" && camchip="-"
+        # flip is either 0=no or 1=yes
+        flip=$(echo $values | cut -d '|' -f7 | tr -d -c '[01]')
+        test -z "$flip" && flip=0
+        
         # rot must be number
-        x=$(echo $values | cut -d '|' -f7 | tr ',' '.')
+        x=$(echo $values | cut -d '|' -f8 | tr ',' '.')
         is_number "$x" && rot=$x && x=""
         test "$x" && adderr "Rotation $x is not a number"
         # rawbits must be number
-        x=$(echo $values | cut -d '|' -f8)
+        x=$(echo $values | cut -d '|' -f9)
         is_number "$x" && rawbits=$x && x=""
         test "$x" && adderr "Rawbits $x is not a number"
         # satur must be number
-        x=$(echo $values | cut -d '|' -f9)
+        x=$(echo $values | cut -d '|' -f10)
         is_number "$x" && satur=$x && x=""
         test "$x" && adderr "Saturation $x is not a number"
         # gain must be number
-        x=$(echo $values | cut -d '|' -f10 | tr ',' '.')
+        x=$(echo $values | cut -d '|' -f11 | tr ',' '.')
         is_number "$x" && gain=$x && x=""
         test "$x" && adderr "Gain $x is not a number"
         # pixscale must be number
-        x=$(echo $values | cut -d '|' -f11 | tr ',' '.')
+        x=$(echo $values | cut -d '|' -f12 | tr ',' '.')
         is_number "$x" && pixscale=$x && x=""
         test "$x" && adderr "Pixel scale $x is not a number"
         # magzero must be number
-        x=$(echo $values | cut -d '|' -f12 | tr ',' '.')
+        x=$(echo $values | cut -d '|' -f13 | tr ',' '.')
         is_number "$x" && magzero=$x && x=""
         test "$x" && adderr "Mag zero point $x is not a number"
         
         # keep selected items of ttypelist, ctypelist
-        x=$(echo $values | cut -d '|' -f13)
-        ttypelist=$(select_item "$ttypelist" "$x")
         x=$(echo $values | cut -d '|' -f14)
+        ttypelist=$(select_item "$ttypelist" "$x")
+        x=$(echo $values | cut -d '|' -f15)
         ctypelist=$(select_item "$ctypelist" "$x")
 
         echo "# tel=$tel flen=$flen aperture=$aperture fratio=$fratio camera=$camera pixscale=$pixscale"
@@ -879,23 +893,23 @@ three values for focal length, aperture and f-ratio must be specified):\n"
     telid=$tel
 
     # ttype, ctype
-    case "$(echo $values | cut -d '|' -f13)" in
+    case "$(echo $values | cut -d '|' -f14)" in
         Reflector)  ttype="L";;
         Refractor)  ttype="R";;
         Photo\ Lens) ttype="A";;
         *)          ttype="L";;
     esac
-    ctype=$(echo $values | cut -d '|' -f14)
+    ctype=$(echo $values | cut -d '|' -f15)
     
     # saving new camera
-    line=$(echo $tel $flen $aperture $fratio $camera $camchip $rot $rawbits $satur \
+    line=$(echo $tel $flen $aperture $fratio $camera $camchip $flip $rot $rawbits $satur \
         $gain $pixscale $magzero $ttype $ctype | awk '{
-        printf("%-6s %4d   %4d   %4.1f   %-10s %-7s %3d  %2d %6d  ",
-            $1, $2, $3, $4, $5, $6, $7, $8, $9)
+        printf("%-6s %4d   %4d   %4.1f   %-10s %-7s %4d %3d  %2d %6d  ",
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         printf("%5.2f  %6.2f    %4.1f    %s   %s",
-            $10, $11, $12, $13, $14)
+            $11, $12, $13, $14, $15)
         }')
-    echo "$line" >> $basedir/camera.dat
+    echo "$line" >> $confdir/camera.dat
     echo "$line" >> $projectdir/camera.dat
     
     # save ini

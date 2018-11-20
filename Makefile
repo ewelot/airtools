@@ -1,6 +1,6 @@
 
 PACKAGE = airtools
-VERSION = 2.2
+VERSION = $(shell cat VERSION)
 
 # installation prefix
 prefix	= /usr/local
@@ -16,7 +16,8 @@ IMAGESDIR	= $(DOCDIR)/images
 IMAGES	= doc/images/*
 
 BIN 	= dcraw-tl pnmtomef pnmccdred pnmcombine pnmrowsort
-BINSH 	= airfun.sh aircmd.sh airtools_launcher.sh
+BINSH 	= airtools airtools-cli airfun.sh aircmd.sh
+JAR		= airtools-gui.jar
 ANALYSIS = airds9.ana
 DESKTOP	= airtools.desktop
 
@@ -58,6 +59,7 @@ install: all
 	install -m 0755 -d $(DATADIR)
 	install -m 0644 -p $(DATA) $(DATADIR)
 	install -m 0644 -p $(ANALYSIS) $(DATADIR)
+	install -m 0644 -p $(JAR) $(DATADIR)
 	install -m 0755 -d $(APPDIR)
 	install -m 0644 -p $(DESKTOP) $(APPDIR)
 	install -m 0755 -d $(DOCDIR)
@@ -72,3 +74,7 @@ tarball:
 	tar czf $(PACKAGE)_$(VERSION).orig.tar.gz -h --exclude="*/.git" \
 		$(PACKAGE)-$(VERSION))
 
+source:	tarball
+	debuild -i -us -uc -S
+	rm ../$(PACKAGE)_$(VERSION)*_source.*
+	rm debian/files

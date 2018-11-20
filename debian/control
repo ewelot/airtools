@@ -2,14 +2,14 @@ Source: airtools
 Section: science
 Priority: optional
 Maintainer: Thomas Lehmann <t_lehmann@freenet.de>
-Build-Depends: debhelper (>= 9)
+Build-Depends: debhelper (>= 9), javahelper (>=0.25), libnetpbm10-dev, libjpeg-dev
 Standards-Version: 3.9.8
 Homepage: https://github.com/ewelot/airtools
 
 Package: airtools
 Architecture: any
-Depends: airtools-core, airtools-doc, cfitsio-examples (>=0.2), saods9 | saods9-bin,
-	missfits, scamp, sextractor, skymaker, stiff, swarp, stilts,
+Depends: airtools-core (>=3.0~beta1), airtools-doc, saods9 | saods9-bin, stilts, aladin,
+	missfits, scamp, sextractor, skymaker, stiff, swarp,
 	${misc:Depends}
 Description: Astronomical Image Reduction TOOLSet
  AIRTOOLS is a collection of programs to aim at astronomical image reduction
@@ -20,8 +20,9 @@ Description: Astronomical Image Reduction TOOLSet
 Package: airtools-core
 Architecture: any
 Depends: imagemagick, graphicsmagick, gnuplot-x11, librsvg2-bin, potrace,
-	plplot12-driver-cairo | plplot-driver-cairo, exiftool, bc, curl, wget, gawk, yad,
-	xpa-tools, wcstools,
+	plplot12-driver-cairo | plplot-driver-cairo, exiftool, bc, curl, wget,
+	gawk, yad, cfitsio-examples (>=0.3), libcfitsio-bin,
+	xpa-tools, wcstools, default-jre | java-runtime, openjfx,
 	${shlibs:Depends}, ${misc:Depends}
 Suggests: airtools
 Description: Astronomical Image Reduction TOOLSet - Core components
@@ -43,4 +44,4 @@ Description: Astronomical Image Reduction TOOLSet - Documentation
  shell functions (bash) in a single file airfun.sh. GUI functionality is
  provided by means of analysis tasks for the (external) SAOImage DS9 viewer.
  .
- This package contains some user documentation.
+ This package contains the user documentation.

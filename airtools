@@ -1,0 +1,45 @@
+#!/bin/bash
+
+########################################################################
+#   airtools [-h] <args>
+#
+#   a wrapper around airtools-gui.jar
+#
+########################################################################
+VERSION="0.1"
+VINFO="T. Lehmann, Nov. 2018"
+PINFO="\
+    options:
+      h          show this help text
+      args       program arguments passed over to java program
+"
+CHANGELOG="
+    0.1  - 10 Nov 2018
+        * initial version
+"
+
+
+test "$1" == "-h" &&
+    echo $(basename $0)"   $VERSION   $VINFO" >&2 &&
+    printf "$PINFO" &&
+    exit 1
+
+# find program jar file
+jar=airtools-gui.jar
+datadir=/usr/share/airtools
+prog=$datadir/$jar
+test -e $prog || prog=$HOME/bin/$jar
+test -e $prog || prog=$HOME/bin/home/$jar
+
+# set Java 8 runtime
+# (currently there are problems using Java 11 which is the default java
+# on Ubuntu 18.04)
+JAVA_HOME=$(update-alternatives --list java | grep -E "java-8|jdk-8|jre-8" | head -1 | \
+    sed -e 's,/bin/java$,,')
+test -z "$JAVA_HOME" &&
+    echo "ERROR: unable to find Java 8 runtime." >&2 &&
+    exit 255
+
+# start java program
+$JAVA_HOME/bin/java -jar $prog "$@"
+exit 0
