@@ -14,9 +14,30 @@
 # - in order to use SAOImage DS9 analysis tasks (via AIexamine) you must
 #   have installed files airds9.ana and aircmd.sh
 ########################################################################
-AI_VERSION="3.4"
+AI_VERSION="4.0a1"
 : << '----'
 CHANGELOG
+    TODO:
+    - install feh and use it as default image viewer ?
+    - bgmap smoothing box size should depend on image size
+    - camera.dat: store bayer filter matrix order for dslr images
+
+    4.0a1 - 17 Dec 2018
+        * new requirements: parallel, gnuplot 5
+        * AIbgdiff, AIstack: increased bgzero default from 3000 to 10000
+        * AIbgdiff bugfix: prefer calibrated ppm image over pgm image
+        * AIbgdiff: new option -p to fit plane instead of surface to
+            diff image
+        * AInoise bugfix: skip lines having type=a in AI_SETS
+        * AIstack: do not write info about each input file to header anymore
+        * AIphotcal: fit function reversed, resulting in slope=1/old value
+            and color transformation coeffizient=-1*old value, the latter is
+            now stored in AP_CTRAx (instead of AP_CVALx), changed format of
+            residuals data file
+        * AIplot: added option -q to suppress output from fit
+        * AIpreview: make use of GNU parallel
+        * ds9cmd bggradient: added third parameter fittype (plane|surface)
+
     3.4 - 23 Oct 2018
         * AIccd: return nonzero value if error occurs on any single image set
         * AIimlist: added option -r to check for entry of images in reg.dat
@@ -1576,7 +1597,7 @@ AIcheck_ok () {
     # wcstools
     #   imhead sethead sky2xy xy2sky newfits delwcs
     for p in dcraw-tl gm convert rsvg-convert potrace exiftool gnuplot curl wget \
-             ds9 xpaget xpaset \
+             ds9 xpaget xpaset parallel \
              pnmcombine pnmccdred pnmtomef pnmrowsort \
              imcopy imarith imlist imstat fitscopy listhead \
              imhead sethead sky2xy xy2sky newfits delhead delwcs \
@@ -8119,8 +8140,6 @@ regstat () {
     test "$reg" == "-" && cat /dev/stdin > $tmpreg1 && reg=$tmpreg1
     test ! -f "$img" &&
         echo "ERROR: image file $img not found." >&2 && return 255
-    ! is_pnm $img &&
-        echo "ERROR: $img is not a valid image file." >&2 && return 255
     #! is_reg "$reg" &&
     #    echo "ERROR: $reg is not a valid region file." >&2 && return 255
     
@@ -8207,8 +8226,18 @@ _regstat () {
         echo "ERROR: region outside image." >&2 && return 255
 
     # create subimage, trim region file, create and apply mask image
-    test "$AI_DEBUG" && echo "imcrop -1 $img $dx $dy $xmin $ymin > $tmpim1" >&2
-    imcrop -1 $img $dx $dy $xmin $ymin > $tmpim1
+    test "$AI_DEBUG" && echo "imcrop -1 <img> $dx $dy $xmin $ymin" >&2
+    if is_pnm $img
+    then
+        imcrop -1 $img $dx $dy $xmin $ymin > $tmpim1
+    else
+        if is_fits $img
+        then
+            meftopnm $img | imcrop -1 - $dx $dy $xmin $ymin > $tmpim1
+        else
+            echo "ERROR: $img is not a valid image file." >&2 && return 255
+        fi
+    fi
     reg2reg $reg $img $tmpim1 ${dx}x${dy}+${xmin}+${ymin} > $tmpreg1
     reg2pbm $tmpim1 $tmpreg1 > $tmpmask
     if [ "$badreg" ]
@@ -12480,9 +12509,10 @@ AIplot () {
     local printfile # if set the plot is saved to printfile
     local gpcmd     # gnuplot commands inserted before plotting
     local title
+    local quiet
     local showhelp
     local i
-    for i in $(seq 1 10)
+    for i in $(seq 1 11)
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-a" && a10k=1 && shift 1
@@ -12494,6 +12524,7 @@ AIplot () {
         test "$1" == "-o" && printfile="$2" && shift 2
         test "$1" == "-t" && title="$2" && shift 2
         test "$1" == "-g" && gpcmd="$2" && shift 2
+        test "$1" == "-q" && quiet=1 && shift 1
     done
     
     local dat="$1"      # datafile
@@ -12589,6 +12620,7 @@ AIplot () {
     fi
     echo "" >> $tmp2
     test "$printfile" && echo "set output '$printfile'" >> $tmp2
+    test "$quiet" && echo "set fit quiet" >> $tmp2
     
     # set plot title
     if [ -z "$title" ]
@@ -12641,7 +12673,7 @@ AIplot () {
     cat $tmp2 | gnuplot -p > $log 2>&1
     if [ $? -eq 0 ]
     then
-        test -z "$nofit" &&
+        test -z "$nofit" && test -z "$quiet" &&
             lnum=$(grep -n "After .* iterations the fit converged" fit.log | \
                 tail -1 | cut -d ":" -f1) &&
             sed -ne "$lnum,\$p" fit.log
@@ -12675,10 +12707,11 @@ AIpreview () {
     local contrast=${3:-"100"}     # contrast scaling
     local dcrawopts=${AI_DCRAWOPTS:-""}
     local tmp1=$(mktemp -d /tmp/tmp_preview_$day.XXXXXX)
-    local tmpimg=$(mktemp /tmp/tmp_img.XXXXXX.pnm)
-    local tmpcrop=$(mktemp /tmp/tmp_crop.XXXXXX.pnm)
-    local tmpdat=$(mktemp /tmp/tmp_tmp1.XXXXXX.dat)
-    local exifdat=$tmp1/exif.dat
+    local tmpscript=$(mktemp /tmp/tmp_script_$day.XXXXXX)
+    local tmpimg
+    local tmpcrop
+    local tmpdat
+    local imlist
     local flat
     local f
     local num
@@ -12711,20 +12744,31 @@ AIpreview () {
     esac
     test -z "$dcrawopts" && test "$flat" && dcrawopts="-R 4950 3284 0 0"
 
-    echo $tmp1
-    #gthumb $tmp1 &
-    geeqie $tmp1 &
-    for f in $(ls $rdir/*.{pef,PEF,fits,FITS,cr2,CR2,raf,RAF} 2>/dev/null)
-    do
-        num=$(basename ${f%.*} | sed -e 's/^[^0-9]*//; s/[^0-9]*$//')
-        test "$nlist" && ! echo "$nlist" | grep -qw $num && continue
-        test -f $tmp1/$num.png && continue
+    imlist=$(ls $rdir/*.{pef,PEF,fits,FITS,cr2,CR2,raf,RAF} 2>/dev/null)
+    test -z "$imlist" &&
+        echo "ERROR: no images to process" >&2 &&
+        return 255
+    echo '#!/bin/bash
+        f=$1
+        
+        nlist="'$nlist'"
+        tmp1='$tmp1'
+        contrast='$contrast'
+        dcrawopts="'$dcrawopts'"
+        flat="'$flat'"
+        
+        . $(type -p airfun.sh) > /dev/null 2>&1
+        num=$(basename ${f%.*} | sed -e '\''s/^[^0-9]*//; s/[^0-9]*$//'\'')
+        tmpimg=$(mktemp /tmp/tmp_img.XXXXXX.pnm)
+        tmpcrop=$(mktemp /tmp/tmp_crop.XXXXXX.pnm)
+        tmpdat=$(mktemp /tmp/tmp_tmp1.XXXXXX.dat)
+        test "$nlist" && ! echo "$nlist" | grep -qw $num && exit 0
+        test -f $tmp1/$num.png && exit 0
 
         is_fits $f && meftopnm $f | pnmflip -tb | \
             convert - -normalize -gamma 2 -level 3%,80% -depth 8 $tmp1/$num.png &&
-            continue
-        AI_TZOFF=1 img_info $f >> $exifdat
-        black=$(tail -1 $exifdat | awk '{printf("%s", $9)}')
+            exit 0
+        black=$(AI_TZOFF=1 img_info $f | tail -1 | awk '\''{printf("%s", $9)}'\'')
         fbopts=""
         test "$flat" && fbopts="-F $flat"
         test "$black" && test "$black" != "-" && fbopts="$fbopts -k $((black/4))"
@@ -12735,16 +12779,16 @@ AIpreview () {
             imcrop $tmpimg 70 > $tmpcrop
             (cd /tmp
                 AIbgmap -q -m $tmpcrop 64
-                AIval -a ${tmpcrop/.pgm/.bgm1.pgm} | awk '{printf("%s\n", $2)}'
+                AIval -a ${tmpcrop/.pgm/.bgm1.pgm} | awk '\''{printf("%s\n", $2)}'\''
                 rm -f ${tmpcrop/.pgm/.bgm1.pgm}
             ) | sort -n > $tmpdat
             n=$(cat $tmpdat | wc -l)
             md=$(head -$((n*50/100)) $tmpdat | tail -1)
-            low=$(head -$((n*30/100))  $tmpdat | tail -1 | awk -v m=$md '{print 2*$1-m}')
-            high=$(echo $contrast | awk '{x=8000/$1; printf("%.0f", x*x)}')
+            low=$(head -$((n*30/100))  $tmpdat | tail -1 | awk -v m=$md '\''{print 2*$1-m}'\'')
+            high=$(echo $contrast | awk '\''{x=8000/$1; printf("%.0f", x*x)}'\'')
             rm -f $tmpcrop $tmpdat
             echo $low $md $high >&2
-            #convert $tmpimg -level $((low-md*$max/2000-50)),$((high+md*$max/300+400)) -gamma 2.5 -depth 8 $tmp1/$num.png
+            #convert $tmpimg -level $((low-md*max/2000-50)),$((high+md*max/300+400)) -gamma 2.5 -depth 8 $tmp1/$num.png
             convert $tmpimg -level $((low-md*3/contrast-50)),$((high+md*20/contrast+400)) -gamma 2.2 -depth 8 $tmp1/$num.png
         else
             dcraw-tl -c -r 1 1 1 1 -q 0 -4 -t 0 $fbopts $dcrawopts -o 0 $f | \
@@ -12757,19 +12801,26 @@ AIpreview () {
             ) | sort -n > $tmpdat
             n=$(cat $tmpdat | wc -l)
             md=$(head -$((n*50/100)) $tmpdat | tail -1)
-            low=$(head -$((n*15/100))  $tmpdat | tail -1 | awk -v m=$md '{print 2*$1-m}')
-            high=$(head -$((n*75/100)) $tmpdat | tail -1 | awk -v m=$md '{print 2*$1-m}')
+            low=$(head -$((n*15/100))  $tmpdat | tail -1 | awk -v m=$md '\''{print 2*$1-m}'\'')
+            high=$(head -$((n*75/100)) $tmpdat | tail -1 | awk -v m=$md '\''{print 2*$1-m}'\'')
             rm -f $tmpcrop $tmpdat
             echo $low $md $high >&2
-            #convert $tmpimg -level $((low-md*$max/2000-50)),$((high+md*$max/300+400)) -gamma 2.2 -depth 8 $tmp1/$num.png
+            #convert $tmpimg -level $((low-md*max/2000-50)),$((high+md*max/300+400)) -gamma 2.2 -depth 8 $tmp1/$num.png
             convert $tmpimg -level $((low-md*3/contrast-50)),$((high+md*20/contrast+400)) -gamma 2.2 -depth 8 $tmp1/$num.png
         fi
         ln -s $f $tmp1
         false && dcraw-tl -c -t 0 -q 0 $dcrawopts $f | ppm2gray - | \
             convert - -normalize -level 2%,98% -gamma $gam -depth 8 $tmp1/$num.png &&
         ln -s $f $tmp1
-        test -f $tmpimg && rm $tmpimg
-    done
+        rm -f $tmpimg $tmpcrop $tmpdat
+    ' > $tmpscript
+    chmod u+x $tmpscript
+    ls -l $tmpscript
+
+    echo $tmp1
+    #gthumb $tmp1 &
+    geeqie $tmp1 &
+    echo "$imlist" | parallel -j -1 $tmpscript {}
     return
 }
 
@@ -14831,10 +14882,13 @@ END     " > $ahead
                 #   if still below match try with rot180 and small posmaxerr/anglemaxerr
                 #   if still below match try with rot180 and large posmaxerr/anglemaxerr
                 has_poor_match=$(echo $nsrc $nmatch | awk '{r=$2/$1; x=1
-                    if ($1>100 && r>0.25) x=""
-                    if ($1>50 && r>0.35) x=""
-                    if ($1>20 && r>0.5) x=""
-                    if ($1<=20) x=""
+                    if ($1>500 && r>0.18) x=""
+                    if ($1>200 && r>0.20) x=""
+                    if ($1>100 && r>0.24) x=""
+                    if ($1>50 && r>0.28) x=""
+                    if ($1>30 && r>0.35) x=""
+                    if ($1>14 && r>0.5) x=""
+                    if ($1<=14 || $2<10) x=""
                     print x
                 }')
                 rot180=$has_poor_match
@@ -15199,6 +15253,7 @@ AIbgdiff () {
     local do_use_nref       # use nref instead of mean image (default until v2.2.2)
     local do_all_mean       # include images which have a bad region mask when
                             # creating mean image
+    local do_plane          # fit diff image by plane instead of surface
     local nmax=11           # max. number of images to use
     local i
     for i in 1 2 3 4 5 6
@@ -15208,11 +15263,12 @@ AIbgdiff () {
         test "$1" == "-k" && do_keepdiff=1 && shift 1
         test "$1" == "-r" && do_use_nref=1 && shift 1
         test "$1" == "-a" && do_all_mean=1 && shift 1
+        test "$1" == "-p" && do_plane=1 && shift 1
         test "$1" == "-n" && nmax=$2 && shift 2
     done
     local setname=${1:-""}
     local bsize=${2:-"128"}
-    local bgzero=${3:-"3000"}
+    local bgzero=${3:-"10000"}
     local diffdir=${4:-"bgvar"}
     local sfitdat="bgsfit.dat"
     local sdat=${AI_SETS:-"set.dat"}
@@ -15242,7 +15298,7 @@ AIbgdiff () {
     local filter
 
     test "$showhelp" &&
-        echo "usage: AIbgdiff [-b] [-k] [-r|-a] [-n nmax|$nmax] [set] [bsize|$bsize] [bgzero|$bgzero] [diffdir|$diffdir]" >&2 &&
+        echo "usage: AIbgdiff [-b] [-k] [-r|-a] [-n nmax|$nmax] [-p] [set] [bsize|$bsize] [bgzero|$bgzero] [diffdir|$diffdir]" >&2 &&
         return 1
     test -d "$diffdir" || mkdir "$diffdir"
 
@@ -15262,8 +15318,8 @@ AIbgdiff () {
         (! is_integer "$n1" || ! is_integer "$n2" || ! is_integer "$nref") && continue
 
         inext=""
-        test -f $tdir/$nref.ppm && inext="ppm"
         test -f $tdir/$nref.pgm && inext="pgm"
+        test -f $tdir/$nref.ppm && inext="ppm"
         test -z "$inext" &&
             echo "ERROR: set $sname has no ref image $nref.{pgm,ppm}." >&2 && continue
 
@@ -15390,14 +15446,23 @@ AIbgdiff () {
                     test $? -ne 0 && return 255
                 fi
             else
-                if [ -f $diffdir/$nref.bad.png ] && [ 1 -eq 0 ] # disabled in v2.2.3
+                if [ -f $diffdir/$num.bad.reg ]
                 then
-                    gm convert $diffdir/$nref.bad.png -resize ${w}x${h}\! \
+                    reg2pbm $tmpref $diffdir/$num.bad.reg | \
+                    gm convert - -resize ${w}x${h}\! \
                         -threshold 10% -negate -depth 16 $inext:- | \
                         pnmarith -min $bgm - > $tmpim
                     test $? -ne 0 && return 255
                 else
-                    cp $bgm $tmpim
+                    if [ -f $diffdir/$nref.bad.png ] && [ 1 -eq 0 ] # disabled in v2.2.3
+                    then
+                        gm convert $diffdir/$nref.bad.png -resize ${w}x${h}\! \
+                            -threshold 10% -negate -depth 16 $inext:- | \
+                            pnmarith -min $bgm - > $tmpim
+                        test $? -ne 0 && return 255
+                    else
+                        cp $bgm $tmpim
+                    fi
                 fi
             fi
             if [ "$AI_DEBUG" ]
@@ -15405,7 +15470,12 @@ AIbgdiff () {
                 mv $tmpim ${tmpim/im2/$num}
             else
                 # surface fit, print coeffs to $sfitdat and partly to stderr
-                AIsfit $tmpim > $diffdir/$num.bgdiff.$inext 2> $tmpdat
+                if [ "$do_plane" ]
+                then
+                    AIsfit -p $tmpim > $diffdir/$num.bgdiff.$inext 2> $tmpdat
+                else
+                    AIsfit $tmpim > $diffdir/$num.bgdiff.$inext 2> $tmpdat
+                fi
                 test $? -ne 0 &&
                     echo "ERROR during: AIsfit $tmpim" >&2 &&
                     rm -f $diffdir/$num.bgdiff.$inext \
@@ -15485,6 +15555,7 @@ AIbgmap () {
     local mult=${5:-1}      # intensity multiplier
     local tdir=${AI_TMPDIR:-"/tmp"}
     local conf=$(mktemp "$tdir/tmp_conf_XXXXXX.dat")
+    local tmpxml=$(mktemp "$tdir/tmp_sex_XXXXXX.xml")
     local tmpmask=$(mktemp "$tdir/tmp_mask_XXXXXX.pbm")
     local tmp1=$(mktemp "$tdir/tmp_tmp1_XXXXXX.pnm")
     local tmpnofit=$(mktemp "$tdir/tmp_tmpnofit_XXXXXX.pnm")
@@ -15580,7 +15651,7 @@ AIbgmap () {
         sex -d > $conf
         for c in $clist
         do
-            sex -c $conf -parameters_name $fields \
+            sex -c $conf -xml_name $tmpxml -parameters_name $fields \
                 $param -back_size $bsize -back_filtersize $msize \
                 -checkimage_type "background minibackground" \
                 -checkimage_name "$tdir/bg.$b.$c.fits $tdir/bgm.$b.$c.fits" \
@@ -15593,9 +15664,9 @@ AIbgmap () {
             
             # bg stddev
             test "$bgsd" && bgsd=$bgsd","
-            bgsd="$bgsd"$(stilts tpipe ofmt=text sex.xml cmd=transpose | \
+            bgsd="$bgsd"$(stilts tpipe ofmt=text $tmpxml cmd=transpose | \
                 grep -w Background_StDev | awk '{printf("%.1f", $4)}')
-            rm -f sex.xml
+            rm -f $tmpxml
         done
         case $inext in
             ppm)    test ! "$do_minibg_only" && rgb3toppm $tdir/bg.$b.red.pgm $tdir/bg.$b.grn.pgm $tdir/bg.$b.blu.pgm \
@@ -16575,7 +16646,7 @@ AIstack () {
     local badpix            # badpix bitmask (ignore white pixels)
     local ctype="average"   # combine_type
     local resamptype="bilinear" # resampling type (e.g. lanczos3, bilinear)
-    local bgdiffzero=3000   # must match the bgzero value used by AIbgdiff to
+    local bgdiffzero=10000  # must match the bgzero value used by AIbgdiff to
                             # create bgvar/*.bgm1.* images
     local i
     for i in $(seq 1 18)
@@ -16668,7 +16739,7 @@ AIstack () {
     test "$badpix" && test ! -f "$badpix" &&
         echo "ERROR: badpix file $badpix not found." >&2 && return 255
 
-    param="-write_fileinfo Y -mem_max $mem -combine_bufsize $mem -resample_dir $wdir"
+    param="-mem_max $mem -combine_bufsize $mem -resample_dir $wdir"
     param="$param -blank_badpixels Y -fscale_keyword XYZ"
     if [ "$do_subtract_bg" ]
     then
@@ -17444,6 +17515,7 @@ AIphotmatch () {
 # TODO: deal with image orientation pa!=0 when computing extinction correction
 # for coord. trans ref.: http://star-www.st-and.ac.uk/~fv/webnotes/chapter7.htm
 AIphotcal () {
+    # note: as of airfun version 4 it requires gnuplot version 5
     local showhelp
     local color="V"     # color band name (V|B|R)
     local citerm=""     # color index term (e.g. B-V or V-R) 
@@ -17506,11 +17578,14 @@ AIphotcal () {
     local yoff=0
     local apcolumn
     local refcolumn
-    local ctcolumn  # id of column used by color term (diff to refcolumn)
+    local ct1column  # id of column used by color term (minuend)
+    local ct2column  # id of column used by color term (subtrahend)
+    local amcolumn=10
     local gapcorr
-    local bvmd=0
+    local refmd
+    local colormd=0
     local nstars
-    local apmagmd
+    # local apmagmd
     local w
     local h
     local c
@@ -17573,7 +17648,6 @@ AIphotcal () {
     # check gnuplot version
     gpversion=$(gnuplot -V | awk '{printf("%s", $2)}')
     case "$gpversion" in
-        4*) ;;
         5*) ;;
         *)  echo "ERROR: unsupported gnuplot version $gpversion." >&2
             return 255
@@ -17588,14 +17662,10 @@ AIphotcal () {
     esac
     # set columns of aperture photometry file to use in color index term
     case "$citerm" in
-        B-V) test $color == "B" && ctcolumn=8;
-            test $color == "V" && ctcolumn=7;;
-        V-R) test $color == "R" && ctcolumn=8;;
-        *)  test "$citerm" && echo "WARNING: not using color term $citerm." >&2;;
+        B-V) ct1column=7; ct2column=8;;
+        V-R) ct1column=8; ct2column=9;;
+        *)  test "$citerm" && echo "ERROR: unknown color term $citerm." >&2 && return 255;;
     esac
-    test "$citerm" && test -z "$ctcolumn" &&
-        echo "WARNING: no ctcolumn for color=$color and citerm=$citerm." >&2 &&
-        citerm="" 
 
     # determine magzero
     texp=""
@@ -17890,8 +17960,11 @@ AIphotcal () {
         done
         yrange=$(kappasigma $tmp2 2 | awk '{l=$1-5*$2-0.05; h=$1+4*$2+0.05
             printf("%.2f:%.2f", h, l)}')
-        AIplot -o x.$setname.apcorr.png -p -t "Large Aperture Correction of Stars (m_{r$r}-m_{r$aprad}, $setname)" \
+        str=$setname.$catalog.$color.apcorr
+        AIplot -p -o x.$str.png -t "Large Aperture Correction of Stars (m_{r$r}-m_{r$aprad}, $setname)" \
             -g "set xlabel 'mag'; set ylabel 'dmag'; set grid" $tmp2 1 2 "" "" "[][$yrange]" 
+        (test -f phot/$str.png && diff -q x.$str.png phot/$str.png >/dev/null) || \
+            cp -p x.$str.png phot/$str.png
     fi
     
     # if mlim is not set, use reasonable limit on faint end based
@@ -17925,12 +17998,14 @@ AIphotcal () {
         # TODO allow mlim with 2 values
         grep -v "^#" phot/$setname.$catalog.xphot.dat | head -$nlim | \
             grep -vEw "^${skip// / |^} " | \
-            awk -v lim=$mlim -v ca=$apcolumn -v cr=$refcolumn -v cc=$ctcolumn '{
-                if ($ca>lim || $cr=="-" || $cc=="-") next
+            awk -v lim=$mlim -v ca=$apcolumn -v cr=$refcolumn -v cc1=$ct1column -v cc2=$ct2column '{
+                if ($ca>lim || $cr=="-" || $cc1=="-" || $cc2=="-") next
                 print $0}' > $tmp1
-        bvmd=$(cat $tmp1 | awk -v cr=$refcolumn -v cc=$ctcolumn '{
-            printf("%f\n", $cc-$cr)}' | median - 1)
-        echo "# bvmd=$bvmd" >&2
+        refmd=$(cat $tmp1 | awk -v ref=$refcolumn '{
+            printf("%f\n", $ref)}' | median - 1)
+        colormd=$(cat $tmp1 | awk -v cc1=$ct1column -v cc2=$ct2column '{
+            printf("%f\n", $cc1-$cc2)}' | median - 1)
+        echo "# refmd=$refmd colormd=$colormd" >&2
     else
         grep -v "^#" phot/$setname.$catalog.xphot.dat | head -$nlim | \
             grep -vEw "^${skip// / |^} " | \
@@ -17939,7 +18014,7 @@ AIphotcal () {
                 print $0}' > $tmp1
     fi
     nstars=$(cat $tmp1 | wc -l)
-    apmagmd=$(median $tmp1 $apcolumn)
+    #apmagmd=$(median $tmp1 $apcolumn)
 
     # add column 10 with relative altitude in degrees
     # TODO: replace column 10 with airmass
@@ -17954,13 +18029,17 @@ AIphotcal () {
     fi
     
     # gnuplot fitting
-    # TODO: remove next line, rework to use correct color index term
-    test "$ctcolumn" || ctcolumn=$refcolumn
+    # e.g. map = a + b*(V-Vmd)     + c*((B-V)-(B-V)md) + e*(am-ammd)
+    #      map = a + b*(ref-refmd) + c*(color-colormd) + e*(am-ammd)
+    # map ... measured mag in aperture using magzero from camera.dat (dependent variable)
+    # ref ... reference catalog magnitude of closest color band (independent variable x)
+    # color ... reference catalog color index (independant variable y)
+    # am  ... airmass at time of observation
+    # note about 'using' clause: the last column reference is dependant variable
     echo "# gather statistics
     set fit quiet
     set fit errorvariables
-    stats '$tmp1' using $refcolumn noout
-    a=STATS_mean
+    a=$refmd
     b=1
     c=0.01; c_err=99    # until 171118: c=0.00000001
     e=0.01; e_err=99    # until 171118. e=0.00000001
@@ -17968,104 +18047,40 @@ AIphotcal () {
     case $fittype in
         0)  # no color, no ext
             echo "
-    f(x) = a + b*(x-$apmagmd)
-    fit f(x)   '$tmp1' using $apcolumn:$refcolumn via a,b"   >> $tmpgp
+    f(x) = a + b*(x-$refmd)
+    fit f(x)   '$tmp1' using $refcolumn:$apcolumn via a,b"   >> $tmpgp
             ;;
         1|3)  # color
-            if [ "$color" == "B" ]
-            then
-                echo "
-    f(x,y) = a + b*(x-$apmagmd) + c*(y-$bvmd)" >> $tmpgp
-                case $gpversion in
-                    4*) echo "\
-    fit f(x,y) '$tmp1' using $apcolumn:(\$$refcolumn-\$$ctcolumn):$refcolumn:(1) via a,b,c" >> $tmpgp
-                        ;;
-                    5*) echo "\
-    fit f(x,y) '$tmp1' using $apcolumn:(\$$refcolumn-\$$ctcolumn):$refcolumn via a,b,c" >> $tmpgp
-                        ;;
-                esac
-            else
-                echo "
-    f(x,y) = a + b*(x-$apmagmd) + c*(y-$bvmd)" >> $tmpgp
-                case $gpversion in
-                    4*) echo "\
-    fit f(x,y) '$tmp1' using $apcolumn:(\$$ctcolumn-\$$refcolumn):$refcolumn:(1) via a,b,c" >> $tmpgp
-                        ;;
-                    5*) echo "\
-    fit f(x,y) '$tmp1' using $apcolumn:(\$$ctcolumn-\$$refcolumn):$refcolumn via a,b,c" >> $tmpgp
-                        ;;
-                esac
-            fi
+            echo "
+    f(x,y) = a + b*(x-$refmd) + c*(y-$colormd)
+    fit f(x,y) '$tmp1' using $refcolumn:(\$$ct1column-\$$ct2column):$apcolumn via a,b,c" >> $tmpgp
             ;;
         2)  # ext
             echo "
-    f(x,y) = a + b*(x-$apmagmd) + e*y" >> $tmpgp
-                case $gpversion in
-                    4*) echo "\
-    fit f(x,y) '$tmp1' using $apcolumn:10:$refcolumn:(1) via a,b,e" >> $tmpgp
-                        ;;
-                    5*) echo "\
-    fit f(x,y) '$tmp1' using $apcolumn:10:$refcolumn via a,b,e" >> $tmpgp
-                        ;;
-                esac
+    f(x,z) = a + b*(x-$refmd) + e*z
+    fit f(x,z) '$tmp1' using $refcolumn:$amcolumn:$apcolumn via a,b,e" >> $tmpgp
             ;;
         99) # color + ext
-            # note: fitting 3 independent variables in gnuplot 4 is not supported
-            # but check with http://gnuplot.sourceforge.net/demo/fit.html
             echo "
-    f(x,y,z) = a + b*(x-$apmagmd) + c*(y-$bvmd) + e*z
-    fit f(x,y,z) '$tmp1' using $apcolumn:(\$7-\$8):10:$refcolumn:(1) via a,b,c,e" >> $tmpgp
+    f(x,y,z) = a + b*(x-$refmd) + c*(y-$colormd) + e*z
+    fit f(x,y,z) '$tmp1' using $refcolumn:(\$$ct1column-\$$ct2column):$amcolumn:$apcolumn via a,b,c,e" >> $tmpgp
             ;;
     esac
     echo "out=sprintf(\"n=%d  rms=%.3f  a=%.3f  b=%.3f  c=%.3f  e=%.6f\", \
-        FIT_NDF, FIT_STDFIT, a-c*$bvmd, b, c, e)
+        FIT_NDF, FIT_STDFIT, a-b*$refmd-c*$colormd, b, c, e)
     print out
     
     # write coefficients to text file
     set print 'x.gnuplotout.txt'
     print FIT_NDF, FIT_STDFIT
-    print \"a \", a-c*$bvmd, a_err
+    print \"a \", a-b*$refmd-c*$colormd, a_err
     print \"b \", b, b_err
     print \"c \", c, c_err
     print \"e \", e, e_err
-    
-    # create check plot
-    # fitted data points (old)
-    set xlabel 'mag (r=$aprad)'
-    set ylabel '$color'
-    set yrange [] reverse
-    #plot '$tmp1' using $apcolumn:(\$$refcolumn-e*\$10-c*(\$7-\$8)) \
-    #    title '$setname', f(x)-c*$bvmd title 'linear fit'
-    
-    # residuals
-    set terminal x11 font sans enhanced
-    set xlabel 'mag'
-    #set xrange [] reverse
-    set ylabel 'mag - $color ($catalog)'
-    set yrange [] reverse
-    set offsets graph 0.02, graph 0.02, graph 0.03, graph 0.03
-    set grid
-    set title 'Photometric error (aprad=$aprad, $setname, $catalog)'
-    #plot '$tmp1' using $apcolumn:(\$$apcolumn+a-$apmagmd - (\$$refcolumn-e*\$10-c*(\$$ctcolumn-\$$refcolumn-$bvmd))) \
-        title ''
-    
-    # write residuals (b==1) to text file
-    set table '$tmpres'
-    plot '$tmp1' using $apcolumn:(\$$refcolumn-a+$apmagmd-\$$apcolumn-e*\$10-c*(\$$ctcolumn-\$$refcolumn-$bvmd))
-    unset table
-    #show variables all
     " >> $tmpgp
     cat $tmpgp | gnuplot -p 2>&1
-    
-    # plot residuals
-    grep -v "^#" $tmpres | grep "[0-9]" | awk '{printf("%f %f\n", $1, -1*$2)}' | AIplot -o x.$setname.$catalog.png -p \
-        -t "Photometric error (aprad=$aprad, $setname, $catalog)" \
-        -g "set xlabel 'mag'; set ylabel 'mag - $color ($catalog)'; set yrange [] reverse" \
-        - 1 2
-     diff -q x.$setname.$catalog.png phot/$setname.$catalog.resid.png >/dev/null ||
-        cp -p x.$setname.$catalog.png phot/$setname.$catalog.resid.png
    
-    # get results from fit
+    # get coefficients/errors from fit
     magrms=$(head -1 x.gnuplotout.txt | awk '{if (NF>=2) printf("%.3f", $2)}')
     afit=$(grep "^a " x.gnuplotout.txt | awk '{if (NF>=3) printf("%.3f,%.3f", $2, $3)}')
     bfit=$(grep "^b " x.gnuplotout.txt | awk '{if (NF>=3) printf("%.3f,%.3f", $2, $3)}')
@@ -18079,34 +18094,113 @@ AIphotcal () {
                 grep "^e " x.gnuplotout.txt | \
                 awk '{printf("  %s= %7.3f +- %.3f\n", $1, $2, $3)}';;
     esac
-    #grep "^a .*%)$" fit.log | tail -1
-    #grep "^b .*%)$" fit.log | tail -1
-    #test $fittype == "color" && grep "^c .*%)$" fit.log | tail -1
-    #test $fittype == "ext"   && grep "^e .*%)$" fit.log | tail -1
-    echo "apmagmd=$apmagmd" >&2
-
-    # paste residuals into data file
-    grep -v "^#" $tmpres | grep "[0-9]" | \
-        awk '{printf("%.2f/%.2f\n", $1, -1*$2)}' | paste $tmp1 - > $tmp2
-    diff -q   $tmp2 phot/$setname.$catalog.resid.dat >/dev/null ||
-        cp -p $tmp2 phot/$setname.$catalog.resid.dat
-    r=$(echo $aprad | awk '{print $1+2}')
-    xy2reg $setname.$inext phot/$setname.$catalog.resid.dat "" "" $r "" "" "" 11 > x.$setname.$catalog.reg
-    
-    # TODO: if requested fit extinction
-    if [ "$zangle" ] && [ $fittype -ne 2 ]
-    then
-        echo "# please check for extinction:"
-        echo "# AIexamine -w $setname.wcs.head $setname.$inext x.$setname.$catalog.reg &   # rot=$rot"
-        echo "# AIplot phot/$setname.$catalog.resid.dat 10 12"
-        #efit=$(grep "^e " x.gnuplotout.txt | awk '{if (NF>=3) printf("%.3f,%.3f\n", $2, $3)}')
-    fi
-
     
     # determine true magzero for large aperture photometry
-    magzero=$(echo $magzero ${afit#,*} $apmagmd $gapcorr | \
-        awk '{printf("%.2f", $1+$2-($3+$4))}')
-    echo "magzero=$magzero"
+    x=$(echo $magzero ${afit#,*} ${bfit#,*} $refmd 0        | awk '{
+        printf("%.2f", $1-$2-($3-1)*$4-$5)}')
+    echo "# magzero (stars) = $x"
+    x=$(echo $magzero ${afit#,*} ${bfit#,*} $refmd $gapcorr | awk '{
+        printf("%.2f", $1-$2-($3-1)*$4-$5)}')
+    echo "# magzero (comet) = $x"
+    magzero=$x
+    
+    # create different kinds of "residuals"
+    # 1. to check linearity (assume b=1)
+    # 2. to view color term (assume c=1)
+    # 3. to view extinction (assume e=1)
+    # output: id x y  apmag refinstr  color airmass  resid res1 res2 res3
+    #    col: 1  2 3   4     5         6     7        8     9    10   11
+    echo "# id      x       y        apmag refinstr  color am     res   reslin rescol resext" > $tmpres
+    cat $tmp1 | awk -v cmag=$apcolumn -v cref=$refcolumn -v rmd=$refmd \
+        -v cc1=$ct1column -v cc2=$ct2column -v cmd=$colormd \
+        -v cam=$amcolumn \
+        -v a=${afit%,*} -v b=${bfit%,*} -v c=${cfit%,*} -v e=${efit%,*} '{
+            refinstr=a+b*$cref
+            if (c!="") refinstr+=c*($cc1-$cc2)
+            if (e!="") refinstr+=e*$cam
+            reslin=$cmag-refinstr+(b-1)*($cref-rmd)
+            rescol=0
+            if (c!="") rescol=$cmag-refinstr+c*($cc1-$cc2-$cmd)
+            resext=0
+            if (e!="") resext=$cmag-refinstr+e*$cam
+            printf("%-9s %7.2f %7.2f  %6.3f %6.3f  %6.3f %4.2f  %6.3f %6.3f %6.3f %6.3f\n",
+                    $1, $2, $3,   $cmag, refinstr,  $cc1-$cc2, $cam,  $cmag-refinstr, reslin, rescol, resext)
+        }' >> $tmpres
+    #echo $tmp1; echo $tmpgp; echo $tmpres
+    #return
+    
+    # save residuals to permanent data file
+    str=$setname.$catalog.$color.resid
+    (test -f phot/$str.dat && diff -q $tmpres phot/$str.dat >/dev/null) || \
+        cp -p $tmpres phot/$str.dat
+    r=$(echo $aprad | awk '{print $1+2}')
+    xy2reg $setname.$inext phot/$setname.$catalog.$color.resid.dat "" "" $r "" "" "" 9 > x.$setname.$catalog.reg
+    
+    # plot residuals
+    # extinction
+    if [ $fittype -eq 2 ] || [ $fittype -eq 3 ]
+    then
+        str=$setname.$catalog.$color.ext
+        grep -v "^#" $tmpres | AIplot -q -o x.$str.png \
+            -t "Extinction (aprad=$aprad, $setname, $catalog)" \
+            -g "set xlabel 'air mass'; set ylabel 'dmag'; set yrange [] reverse" \
+            - 7 11
+        (test -f phot/$str.png && diff -q x.$str.png phot/$str.png >/dev/null) || \
+            cp -p x.$str.png phot/$str.png
+    fi
+    # color term
+    str=$setname.$catalog.$color.color
+    grep -v "^#" $tmpres | AIplot -q -o x.$str.png \
+        -t "Color term (aprad=$aprad, $setname, $catalog)" \
+        -g "set xlabel '$citerm'; set ylabel 'dmag'; set yrange [] reverse" \
+        - 6 10
+    (test -f phot/$str.png && diff -q x.$str.png phot/$str.png >/dev/null) || \
+        cp -p x.$str.png phot/$str.png
+    # linearity
+    str=$setname.$catalog.$color.lin
+    grep -v "^#" $tmpres | AIplot -q -p -o x.$str.png \
+        -t "Photometric error (aprad=$aprad, $setname, $catalog)" \
+        -g "set xlabel 'mag'; set ylabel 'mag - $color ($catalog)'; set yrange [] reverse" \
+        - 4 9
+    (test -f phot/$str.png && diff -q x.$str.png phot/$str.png >/dev/null) || \
+        cp -p x.$str.png phot/$str.png
+    # residuals
+    false && (
+    str=$setname.$catalog.$color.resid
+    grep -v "^#" $tmpres | AIplot -q -o x.$str.png \
+        -t "Residuals (aprad=$aprad, $setname, $catalog)" \
+        -g "set xlabel 'mag'; set ylabel 'mag - $color ($catalog)'; set yrange [] reverse" \
+        - 4 8
+    (test -f phot/$str.png && diff -q x.$str.png phot/$str.png >/dev/null) || \
+        cp -p x.$str.png phot/$str.png
+    )
+
+    # search for multiple matches of the same star
+    # skip2 ... reference star matches multiple stars in image
+    # skip3 ... multiple reference stars match same star in image
+    skip2=$(grep -v "^#" phot/$setname.$catalog.xphot.dat | cut -d ' ' -f1 | sort | awk '{
+        if($1==last)print $1;last=$1}')
+    skip3=$(grep -v "^#" phot/$setname.$catalog.xphot.dat | sort -k2,3 | awk '{
+        s=$2" "$3; if(s==last)print lastid" "$1;last=s;lastid=$1}')
+    (test "$skip2" || test "$skip3") && echo "ambigeous star matches:" >&2 &&
+        echo $skip2 $skip3 | tr ' ' '\n' | sort -u | tr '\n' ' ' | sed -e 's/$/\n/' >&2
+
+    # show possible outliers
+    if [ $(cat phot/$setname.$catalog.$color.resid.dat | wc -l) -ge 9 ]
+    then
+        rescol=9
+        set - $(grep -v "^#" phot/$setname.$catalog.$color.resid.dat | tr '/' ' ' | \
+            kappasigma - $rescol)
+        dv=$(echo $1 | awk '{printf("%.2f", $1)}')
+        x=$(echo $2 | awk '{printf("%.2f", 4*$1)}')
+        grep -v "^#" phot/$setname.$catalog.$color.resid.dat | tr '/' ' ' | \
+                awk -v rcol=$rescol -v dv=$dv -v lim=$x '{
+                    x=$rcol+dv; if((x<-1*lim)||(x>lim)){printf("%s dm=%5.2f\n", $0, x)}
+                }' > $tmp2
+        test -s "$tmp2" && echo "outliers (mean mag-ref=$dv, rejection limit=$x)" >&2 &&
+            cat $tmp2 >&2 &&
+            cat $tmp2 | awk 'BEGIN{printf("# idlist:")}{printf(" %s", $1)}END{printf("\n")}'
+    fi
 
 
     # saving results to header keywords
@@ -18174,35 +18268,39 @@ AIphotcal () {
         AP_NMAX$pidx="$nlim            / Max. number of reference stars" \
         AP_NFIT$pidx="$nstars          / Number of valid reference stars" \
         AP_ARAD$pidx="$aprad           / Aperture radius in pix" \
-        AP_MMAG$pidx="$apmagmd         / Measured instrumental star mag (median)" \
-        AP_RMAG$pidx="${afit%,*}       / Reference catalog mag" \
-        AP_MERR$pidx="${afit#*,}       / Mag error" \
+        AP_RMAG$pidx="$refmd           / Reference catalog mag (median)" \
+        AP_DMAG$pidx="${afit%,*}       / Mag offset from MAGZERO" \
+        AP_DMER$pidx="${afit#*,}       / Mag offset error" \
         AP_SLOP$pidx="${bfit%,*}       / Slope of catalog mag vs. apphot mag" \
         AP_SLER$pidx="${bfit#*,}       / Slope error" \
         AP_MCOR$pidx="$gapcorr         / Mag correction for large aperture" \
         AP_MZER$pidx="$magzero         / Mag zero point, corrected for large aperture" \
         AP_MRMS$pidx="$magrms          / Mag residual rms"
         
-        if [ "$cfit" ]
+        if [ "${cfit/,/}" != "$cfit" ]
         then
             set_header $head \
         AP_CIND$pidx="$citerm          / Photometric reference color index" \
-        AP_CVAL$pidx="${cfit%,*}       / Color transformation coefficient" \
-        AP_CERR$pidx="${cfit#*,}       / Color transformation coefficient error"
+        AP_CIMD$pidx="$colormd         / Color index of reference stars (median)" \
+        AP_CTRA$pidx="${cfit%,*}       / Color transformation coefficient" \
+        AP_CTER$pidx="${cfit#*,}       / Color transformation coefficient error"
         else
             set_header $head \
         AP_CIND$pidx="" \
-        AP_CVAL$pidx="" \
-        AP_CERR$pidx=""
+        AP_CIMD$pidx="" \
+        AP_CTRA$pidx="" \
+        AP_CTER$pidx=""
         fi
         
-        if [ "$efit" ]
+        if [ "${efit/,/}" != "$efit" ]
         then
             set_header $head \
+        AP_AMMD$pidx="$ammd            / Airmass of reference stars (median)" \
         AP_EXCO$pidx="${efit%,*}       / Extinction coefficient" \
         AP_EXER$pidx="${efit#*,}       / Extinction coefficient error"
         else
             set_header $head \
+        AP_AMMD$pidx="" \
         AP_EXCO$pidx="" \
         AP_EXER$pidx=""
         fi
@@ -18224,34 +18322,6 @@ AIphotcal () {
             set_header $head \
         AP_MLIM$pidx=""
         fi
-    fi
-    
-
-    # search for multiple matches of the same star
-    # skip2 ... reference star matches multiple stars in image
-    # skip3 ... multiple reference stars match same star in image
-    skip2=$(grep -v "^#" phot/$setname.$catalog.xphot.dat | cut -d ' ' -f1 | sort | awk '{
-        if($1==last)print $1;last=$1}')
-    skip3=$(grep -v "^#" phot/$setname.$catalog.xphot.dat | sort -k2,3 | awk '{
-        s=$2" "$3; if(s==last)print lastid" "$1;last=s;lastid=$1}')
-    (test "$skip2" || test "$skip3") && echo "ambigeous star matches:" >&2 &&
-        echo $skip2 $skip3 | tr ' ' '\n' | sort -u | tr '\n' ' ' | sed -e 's/$/\n/' >&2
-
-    # show possible outliers
-    if [ $(cat phot/$setname.$catalog.resid.dat | wc -l) -ge 9 ]
-    then
-        rescol=12
-        set - $(grep -v "^#" phot/$setname.$catalog.resid.dat | tr '/' ' ' | \
-            kappasigma - $rescol)
-        dv=$(echo $1 | awk '{printf("%.2f", $1)}')
-        x=$(echo $2 | awk '{printf("%.2f", 4*$1)}')
-        grep -v "^#" phot/$setname.$catalog.resid.dat | tr '/' ' ' | \
-                awk -v rcol=$rescol -v dv=$dv -v lim=$x '{
-                    x=$rcol+dv; if((x<-1*lim)||(x>lim)){printf("%s dm=%5.2f\n", $0, x)}
-                }' > $tmp2
-        test -s "$tmp2" && echo "outliers (mean mag-ref=$dv, rejection limit=$x)" >&2 &&
-            cat $tmp2 >&2 &&
-            cat $tmp2 | awk 'BEGIN{printf("# idlist:")}{printf(" %s", $1)}END{printf("\n")}'
     fi
 
     
@@ -19134,10 +19204,14 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
         echo "# coregion=$coregion" >&2
         # add 1/2 psf size (sampled to orig pixscale) around coregion
         x=$(identify $starpsf | cut -d " " -f3 | cut -d "x" -f1)
-        whxy=$(echo "$coregion" | tr '+x' ' ' | awk -v x=$x -v scale=$scale '{
+        whxy=$(echo "$coregion" | tr '+x' ' ' | awk -v x=$x -v scale=$scale -v h=$h -v w=$w '{
             pw=1+2*int(x/scale/2)
-            printf("%d %d %d %d", $1+pw, $2+pw, $3-pw/2, $4-pw/2)}')
-        # TODO: check for negative value
+            x1=$3-pw/2; if (x1<0) x1=0
+            y1=$4-pw/2; if (y1<0) y1=0
+            x2=$1+$3+pw/2; if (x2>w) x2=w
+            y2=$2+$4+pw/2; if (y2>h) x2=h
+            printf("%d %d %d %d", x2-x1+1, y2-y1+1, x1, y1)}')
+        echo "# whxy=$whxy"
 
         # comet mask
         if [ "$badreg" ]
@@ -19615,6 +19689,7 @@ AInoise () {
         (echo "$ltime" | grep -q "^#") && continue
         test "$setname" && test "$setname" != "$sname" && continue
         test -z "$setname" && test "$intype" && test "$type" != "$intype" && continue
+        test "$type" == "a" && continue
         (! is_integer "$n1" || ! is_integer "$n2") && continue
         
         # check if output file exists
@@ -20176,6 +20251,7 @@ ds9cmd () {
     local object
     local script
     local isok
+    local fittype
     local retval
     
     case $cmd in
@@ -20386,12 +20462,8 @@ ds9cmd () {
                     echo "ERROR: missing $set.head" >&2 && echo >&2 && return 255
 
                 # determine approx. image center
-                ra=$(get_header -q $img RA | tr ' ' ':')
-                test -z "$ra" && ra=$(get_header -q $img OBJCTRA | tr ' ' ':')
-                test -z "$ra" && ra=$(get_header -q $img AI_CORA)
-                dec=$(get_header -q $img DEC | tr ' ' ':')
-                test -z "$dec" && dec=$(get_header -q $img OBJCTDEC | tr ' ' ':')
-                test -z "$dec" && dec=$(get_header -q $img AI_CODEC)
+                set - $(imcoord $set) "" ""
+                ra=$1; dec=$2
                 (test -z "$ra" || test -z "$dec") &&
                     echo "ERROR: missing image center coordinates" >&2 &&
                     echo >&2 && return 255
@@ -20466,7 +20538,7 @@ ds9cmd () {
                 
                 test "$north" && north="-n $north"
                 str="AI_MAGZERO=$mzero AIwcs $opts -q -f $north $set $catalog \"$maglim\" $thres"
-                echo "#" $str >&2
+                echo "#" $str >&2co01.bgm10res.ppm
                 eval $str
                 if [ $? -eq 0 ] && [ -s $set.wcs.head ]
                 then
@@ -20478,8 +20550,13 @@ ds9cmd () {
                 ;;
         bggradient) img=$1
                 bgmult=$2
-                echo "running bggradient \"$img\" $bgmult"
-
+                fittype=${3:-"plane"}
+                echo "running bggradient \"$img\" $bgmult $fittype"
+                
+                # fittype option for AIbgmap
+                opts="-p"
+                test "$fittype" == "surface" && opts="-s"
+                
                 # get image name
                 if [ -z "$img" ]
                 then
@@ -20553,7 +20630,7 @@ ds9cmd () {
                     AIbgmap -stats -x 75 -q ../$set.$ext 64 1 ../$mask $bgmult)
                 else
                     (cd bgcorr
-                    AIbgmap -p -d -m -x 75 -q ../$set.$ext 64 1 ../$mask $bgmult)
+                    AIbgmap $opts -d -m -x 75 -q ../$set.$ext 64 1 ../$mask $bgmult)
                     test $? -ne 0 &&
                         echo "ERROR: bggradient failed" \
                             "(hint: lower bgmult to avoid saturation)" >&2 &&

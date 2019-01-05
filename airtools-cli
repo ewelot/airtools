@@ -13,8 +13,8 @@
 #       AO_AMASK in _astrometry
 #
 ########################################################################
-VERSION="0.8"
-VINFO="T. Lehmann, Oct. 2018"
+VERSION="0.9"
+VINFO="T. Lehmann, Jan. 2019"
 PINFO="\
     options:
       -h            show this help text
@@ -28,13 +28,28 @@ PINFO="\
       task          run given task    
 "
 CHANGELOG="
-    TODO: make use of -o option to force overwriting of results
+    TODO (CLI):
         improve checkings at start of task (valid entries in set.dat, e.g. telid)
         flats: check flat variation between images
         lights: first check if all images in a set are processed already
-        register: issue a warning if unable to determine dmag
-        costack: apply bg subtraction if bggradient already exists
         bgvar, register: when plotting get nlist from bgdiff.dat or reg.dat
+        costack: apply bg subtraction if bggradient already exists
+    TODO (GUI):
+        all imred tasks: allow to overwrite results
+        add task to check calibrated images and optionally define bad region masks
+        register: optionally allow for a second pass using -p
+        add a task for cosmics detection
+        stack: optionally create a mosaic covering the whole field
+
+    0.9 - 04 Jan 2018
+        * bgvar: changed default background fitting in AIbgdiff from surface fit
+            to a plane for better stability in case of large offsets between
+            images where extended bright sources are in the field of view
+        * darks: by default run stats for new images only,
+            use AI_EXCLUDE to discard images
+
+    0.9a1 - 03 Dec 2018
+        * bgvar, stack, costack: increased bgzero from 3000 to 10000
 
     0.8 - 29 Oct 2018
         * task darks: create noise image for larger sets (n>=15)
@@ -306,7 +321,7 @@ _imageinfo () {
 }
 
 _darks () {
-    # use AO_DEXCL to skip some images from master dark
+    # use AI_EXCLUDE to skip some images from master dark
     # TODO: make dkmn a temp file
     #       compute stats only for new images
     #       determine dark varition only for new sets
@@ -316,6 +331,9 @@ _darks () {
     local scale
     local flip
     local opts
+    local nlist
+    local exlist
+    local fname
     
     slist=$(AIsetinfo -b | awk '{if($4=="d"){print $2}}')
     test "$setname" && slist=$setname
@@ -330,16 +348,36 @@ _darks () {
             return 255
     done
     
-    echo "# Creating Master darks ..."
-    (test -z "$TASKMODE" || test "$TASKMODE" == "nodisplay") &&
-        AI_EXCLUDE="" AImstat -v -c $slist > mstat.dk.dat
+    msg="# Computing statistics of dark images ..."
+    if [ -z "$TASKMODE" ] || [ "$TASKMODE" == "nodisplay" ]
+    then
+        for set in $slist
+        do
+            nlist="$(echo $(AI_EXCLUDE="" AIimlist -n $set "" raw))"
+            exlist=""
+            for num in $nlist
+            do
+                fname=$(get_rawfile $num)
+                test -s mstat.dk.dat &&
+                    grep -q "^$(basename $fname) " mstat.dk.dat &&
+                    exlist="$(echo $exlist $num)"
+            done
+            test "$nlist" == "$exlist" && continue
+            test "$msg" && echo $msg && msg=""
+            AI_EXCLUDE="$exlist" AImstat -v -c $set >> mstat.dk.dat
+        done
+    fi
     test ! -s mstat.dk.dat && return 255
     test "$TASKMODE" != "nodisplay" &&
         AIplot -o $AI_TMPDIR/x.darkvalue.png -t "Dark value per image" -p mstat.dk.dat 2 5
+
+    msg="# Creating Master darks ..."
     (test -z "$TASKMODE" || test "$TASKMODE" == "nodisplay") && for set in $slist
     do
         # if necessary add option -r to remove row pattern
-        AI_EXCLUDE="$AO_DEXCL" AIdark $set
+        test -f $set.pgm && continue
+        test "$msg" && echo $msg && msg=""
+        AIdark $set
         test $? -ne 0 && return 255
     done
     (test -z "$TASKMODE" || test "$TASKMODE" == "statusall") &&
@@ -349,12 +387,14 @@ _darks () {
         sleep 3)
     
     # dark variation (using first dark as reference)
-    echo "# Estimate dark variation ..."
+    msg="# Estimate dark variation ..."
     #pnmcombine dk06.pgm dk09.pgm dk11.pgm dk12.pgm dkmn.pgm     # T05 bias
     #pnmcombine dk01.pgm dk02.pgm dkmn.pgm
     tellist=$(AIsetinfo -c | grep -w d | awk '{printf("%s\n", tolower($12))}' | sort -u)
     (test -z "$TASKMODE" || test "$TASKMODE" == "nodisplay") && for tel in $tellist
     do
+        test -f dk.var10.$tel.pgm && continue
+        test "$msg" && echo $msg && msg=""
         set - $(AIsetinfo -c | grep -w d | \
             awk -v t=$tel '{if(tolower($12)==t){print $0}}' | sort -n -k9,9 | tail -1)
         test -f dkmn.pgm && rm dkmn.pgm
@@ -406,19 +446,19 @@ _darks () {
     # dark noise estimation (per pixel)
     (test -z "$TASKMODE" || test "$TASKMODE" == "nodisplay") && for set in $slist
     do
-        nimg=$(AI_EXCLUDE="$AO_DEXCL" AIsetinfo $set | awk '{print $9}')
-        test $nimg -lt 15 && continue
+        nimg=$(AIsetinfo $set | awk '{print $9}')
+        test $nimg -lt 12 && continue
         echo "# estimate dark noise in $set, nimg=$nimg"
         grep -v "^#" set.dat | awk -v s=$set '{
             if ($2==s) printf("%s n%s\n", $1, substr($0,7))}' > $AI_TMPDIR/x.nset.dat
-        AI_SETS=$AI_TMPDIR/x.nset.dat AI_EXCLUDE="$AO_DEXCL" AInoise n$set
+        AI_SETS=$AI_TMPDIR/x.nset.dat AInoise n$set
         rm -f ndk??.mn.pgm
     done
     
     # show some stats of darks
     for set in $slist
     do
-        nimg=$(AI_EXCLUDE="$AO_DEXCL" AIsetinfo $set | awk '{print $9}')
+        nimg=$(AIsetinfo $set | awk '{print $9}')
         mn=$(AImstat -c $set.pgm | cut -d ' ' -f5)
         sd=""
         test -e n$set.sd.pgm && sd=$(AImstat -c n$set.sd.pgm | cut -d ' ' -f5)
@@ -535,7 +575,6 @@ _lights () {
 
 _bgvar () {
     local slist
-    local bgzero
     local bgcol
     local suffix
     local set
@@ -560,7 +599,6 @@ _bgvar () {
     echo "# Estimate background variation ..."
 
     sleep 3
-    bgzero=3000
     if [ -z "$TASKMODE" ] || [ "$TASKMODE" == "nodisplay" ]
     then
         # recognize already processed set
@@ -590,10 +628,10 @@ _bgvar () {
     
         if [ "$doit" ]
         then
-            AIbgdiff -k -a $AO_BGVAR "$setname" "" $bgzero >> bgdiff.dat
+            AIbgdiff -k -a -p $AO_BGVAR "$setname" >> bgdiff.dat
             test $? -ne 0 && return 255
-            #AIbgdiff -k -a le01 "" $bgzero >> bgdiff.dat
-            #AIbgdiff -k "" 64 $bgzero >> bgdiff.dat    # small images
+            #AIbgdiff -k -a le01 >> bgdiff.dat
+            #AIbgdiff -k "" 64 >> bgdiff.dat    # small images
         fi
     fi
     test $(head -1 bgdiff.dat | wc -w) -gt 14 && bgcol=16   # rgb in 15 16 17
@@ -736,7 +774,6 @@ _stack () {
     # normal stacking for all sets (default: resampling_type lanczos3)
     # DSLR with fwhm < 2.8pix use: -r bilinear
     # CCD  with fwhm < 2.5pix use: -r bilinear
-    # if bgzero != 3000 use -bg $bgzero (see 05__background_variation)
     # TODO: exclude some outliers where AIregister might have failed, e.g.
     #   where nmag=0
     slist=$(AIsetinfo -b | awk '{if($4=="o"){print $2}}')
@@ -786,7 +823,7 @@ _stack () {
                 continue
             #test ${set:0:2} == "sk" && ctype=median
             stackopts="$AO_STACK"
-            echo "# running: AIstack $stackopts $bopts -t $ctype -r $rtype $set"
+            echo "# running: AIstack" $stackopts $bopts -t $ctype -r $rtype $set
             AIstack $stackopts $bopts -t $ctype -r $rtype $set
             test $? -ne 0 && retval=255
             test "$stackopts" && set_header $set.head AO_STACK="$stackopts"
@@ -979,8 +1016,8 @@ _astrometry () {
 
             # search radius on the sky
             radius=$(imsize $ststack | awk -v p=$pixscale '{printf("%.1f", 0.5*sqrt($1*$1+$2*$2)*p/3600)}')
-            cpulim=120
-            test ${radius%.*} -gt 4 && cpulim=300
+            cpulim=300
+            test ${radius%.*} -gt 4 && cpulim=600
             
             # options for solve-field
             line=$(imcoord $set 2>/dev/null)
@@ -1146,7 +1183,7 @@ _costack () {
         omove=$3
         # if necessary add -bz 5000
         stackopt=$(get_header -q $set.head AO_STACK)
-        echo "# running: AIstack $stackopt $params -o \"_m\" -c $set.$ext -m $omove@$oxy $set"
+        echo "# running: AIstack" $stackopt $params -o \"_m\" -c $set.$ext -m $omove@$oxy $set
         AIstack $stackopt $params -o "_m" -c $set.$ext -m $omove@$oxy $set
         test $? -ne 0 && return 255
         set_header ${set}_m.head OBJECT=$target
@@ -1186,7 +1223,7 @@ _load_stacks () {
             echo "WARNING: missing WCS header file $set.wcs.head"
         costack=$(get_header $set.head AI_COMST)
         test -z "$costack" &&
-            eche "WARNING: missing comet stack for set $set"
+            echo "WARNING: missing comet stack for set $set"
         test "$costack" && test ! -f $costack &&
             echo "WARNING: missing comet stack $costack for set $set"
         
