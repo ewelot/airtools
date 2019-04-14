@@ -1,3 +1,29 @@
+airtools (3.0-1) experimental; urgency=medium
+
+  * Update to airfun.sh version 4.0
+
+ -- Thomas Lehmann <t_lehmann@freenet.de>  Sun, 14 Apr 2019 20:34:31 +0200
+
+airtools (3.0~beta3-1) experimental; urgency=medium
+
+  * Added bayer2rgb
+  * dcraw-tl: fix wrong offsets for images captured by pktriggercord
+
+ -- Thomas Lehmann <t_lehmann@freenet.de>  Wed, 27 Mar 2019 20:15:20 +0100
+
+airtools (3.0~beta2-2) experimental; urgency=medium
+
+  * Minor changes in package dependencies and recommends
+
+ -- Thomas Lehmann <t_lehmann@freenet.de>  Wed, 20 Mar 2019 21:40:21 +0100
+
+airtools (3.0~beta2-1) experimental; urgency=medium
+
+  * Update to airfun.sh version 4.0a4
+  * Rename of command line interface to airtools-cli
+
+ -- Thomas Lehmann <t_lehmann@freenet.de>  Sat, 16 Mar 2019 09:48:33 +0100
+
 airtools (3.0~beta1-1) experimental; urgency=medium
 
   * Update to airfun.sh version 3.4

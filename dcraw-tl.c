@@ -8982,6 +8982,9 @@ void CLASS identify()
     { height  = 3122;   width  = 4684; filters = 0x16161616; top_margin = 2; }
   if (raw_height == 3284 && !strncmp(model,"K-5",3))
     { left_margin = 10; width  = 4950; filters = 0x16161616; }
+  /* TL: lines added to correctly deal with raw images captured by tktriggercord */
+  if (raw_height == 3344 && !strncmp(model,"K-5",3))
+    { left_margin = 10; width  = 4950; filters = 0x16161616; }
   if (raw_height == 3300 && !strncmp(model,"K-50",4))
     { height  = 3288,   width  = 4952;  left_margin = 0;  top_margin = 12; }
   if (raw_height == 3664 && !strncmp(model,"K-S",3))

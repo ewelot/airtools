@@ -15,9 +15,9 @@ DOCS	= README* doc/README* doc/*txt doc/manual-de.html
 IMAGESDIR	= $(DOCDIR)/images
 IMAGES	= doc/images/*
 
-BIN 	= dcraw-tl pnmtomef pnmccdred pnmcombine pnmrowsort
+BIN 	= bayer2rgb dcraw-tl pnmtomef pnmccdred pnmcombine pnmrowsort
 BINSH 	= airtools airtools-cli airfun.sh aircmd.sh
-JAR		= airtools-gui.jar
+JAR	= airtools-gui.jar
 ANALYSIS = airds9.ana
 DESKTOP	= airtools.desktop
 
@@ -34,6 +34,9 @@ LIBPNM = -lm -lnetpbm
 	$(CC) $(CFLAGS) -c $<
 
 all:	$(BIN)
+
+bayer2rgb: bayer2rgb.c bayer.o
+	$(CC) $(CFLAGS) -o $@ bayer.o bayer2rgb.c -lm
 
 dcraw-tl: dcraw-tl.c
 	$(CC) $(CFLAGS) -o $@ dcraw-tl.c $(LIBDCRAW)
