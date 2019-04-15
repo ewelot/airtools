@@ -17076,6 +17076,7 @@ swarp -subtract_back Y -center_type manual -center \"$rad,$ded\" \
 
 # start Aladin sky atlas
 AIaladin () {
+    # TODO: implement [-n north] [-W width/deg] [-H height/deg]
     local showhelp
     local north             # pa of celestial north pole
     local width             # initial field width in degrees
@@ -17111,8 +17112,8 @@ AIaladin () {
     local x
     
     (test "$showhelp" || test $# -lt 1 || test $# -gt 3) &&
-        echo "usage: AIaladin [-n north] [-W width/deg] [-H height/deg] <setname |" &&
-        echo "         ra dec | comet uttime/hh:mm | comet utdate/yyyy-mm-dd uttime/hh:mm>" >&2 &&
+        echo "usage: AIaladin [-a] <setname |" \
+            "ra dec | comet uttime/hh:mm | comet utdate/yyyy-mm-dd uttime/hh:mm>" >&2 &&
         return 1
 
     # single parameter: setname
@@ -17171,7 +17172,7 @@ AIaladin () {
         test "$labelpos" &&
             catlayer=3 &&
             script="$script; draw red tag($labelpos $label,60,30,bigcircle,16)" &&
-            script="$script; set @2 opacity=30"
+            script="$script; set @2 opacity=40"
         test "$apass" &&
             script="$script; get VizieR(II/336/apass9) $ra $dec 60'" &&
             script="$script; set @$catlayer opacity=5; set @$catlayer size=3"
