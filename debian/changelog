@@ -1,3 +1,9 @@
+airtools (3.0-1.1) experimental; urgency=medium
+
+  * Removed modification of mimetypes during postinstall
+
+ -- Thomas Lehmann <t_lehmann@freenet.de>  Tue, 16 Apr 2019 15:48:12 +0200
+
 airtools (3.0-1) experimental; urgency=medium
 
   * Update to airfun.sh version 4.0

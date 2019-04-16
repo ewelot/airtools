@@ -29,14 +29,6 @@ case "$1" in
         then
             # install desktop icon
             su - $duser -c "xdg-desktop-icon install --novendor $dfile"
-        
-            # open FITS header files .head using mousepad
-            mfile=mimeapps.list
-            cdir=.config
-            ldir=.local/share/applications
-            su - $duser -c "test -d $ldir || mkdir -p $ldir"
-            su - $duser -c "test -e $ldir/$mfile || ln -s ~/$cdir/$mfile ~/$ldir/$mfile"
-            su - $duser -c "xdg-mime default mousepad.desktop image/fits"
         fi
     ;;
 
