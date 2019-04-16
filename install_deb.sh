@@ -34,6 +34,14 @@ sleep 3
 test "$DEBUG" && echo packages=$packages && set -x || true
 
 # determine download url depending on distribution name
+echo "# Current Linux distribution:"
+lsb_release -idrc
+dist=$(lsb_release -s -c)
+# mapping linuxmint to ubuntu distribution it is based on
+test "$dist" == "tessa" && dist=bionic &&
+    echo "# mapping to ubuntu $dist"
+sleep 3
+
 dist=$(lsb_release -s -c)
 url=https://github.com/ewelot/airtools-deb.git
 ddir=/opt/airtools-deb/$dist
