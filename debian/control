@@ -8,7 +8,7 @@ Homepage: https://github.com/ewelot/airtools
 
 Package: airtools
 Architecture: any
-Depends: airtools-core (=3.0-1), saods9 | saods9-bin, stilts,
+Depends: airtools-core (>=3.0), saods9 | saods9-bin, stilts,
 	missfits, scamp, sextractor, skymaker, stiff, swarp,
 	${misc:Depends}
 Recommends: airtools-doc, aladin, darktable
