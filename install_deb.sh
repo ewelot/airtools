@@ -41,8 +41,6 @@ dist=$(lsb_release -s -c)
 test "$dist" == "tessa" && dist=bionic &&
     echo "# mapping to ubuntu $dist"
 sleep 3
-
-dist=$(lsb_release -s -c)
 url=https://github.com/ewelot/airtools-deb.git
 ddir=/opt/airtools-deb/$dist
 test ! -d $ddir && mkdir -p $ddir
