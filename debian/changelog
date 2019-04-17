@@ -1,3 +1,9 @@
+airtools (3.0-1.2) experimental; urgency=medium
+
+  * Added more dependencies (e.g. astrometry.net)
+
+ -- Thomas Lehmann <t_lehmann@freenet.de>  Wed, 17 Apr 2019 18:04:24 +0200
+
 airtools (3.0-1.1) experimental; urgency=medium
 
   * Removed modification of mimetypes during postinstall
