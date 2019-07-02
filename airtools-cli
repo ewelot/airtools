@@ -1,28 +1,27 @@
 #!/bin/bash
 
 ########################################################################
-#   airtools-cli [-h] [-p projectdir] [-s setname] <task1> <task2> ...
+#   airtools-cli [-h] [-p projectdir] [-s setname] <task> [parameters]
 #
 #   AIRTOOLS Tasks CLI
 #   note: the following environment variables may be used
-#       AO_DEXCL in _darks
 #       AO_FLATS in _flats
 #       AO_LIGHT in _lights
 #       AO_BGVAR in _bgvar
 #       AO_REGIS in _register
 #       AO_STACK in _stack and _costack
-#       AO_AMASK in _astrometry
+#       AO_AMASK and AO_ACCOO in _astrometry
 #
 ########################################################################
-VERSION="1.0a2"
-VINFO="T. Lehmann, Mar. 2019"
+VERSION="1.0a5"
+VINFO="T. Lehmann, Jun. 2019"
 PINFO="\
     options:
       -h            show this help text
       -p projectdir start from projectdir (default: cwd) 
       -s setname    limit processing to given image set
-      -c cmd        run the given command
-      -m mode       control task operation (execute certain code blocks)
+      -c cmd        run the given user command
+      -m mode       control task operation (execute limited code blocks)
       -o            overwrite previous results without warning
       -q            lower amount of output messages
     parameters:
@@ -30,21 +29,28 @@ PINFO="\
 "
 CHANGELOG="
     TODO (CLI):
-        load_stacks: deal with corrupted links
-        improve checkings at start of task (valid entries in set.dat, e.g. telid)
-        darks: deal with different binnings at the same telescope
-            fix: re-compute noise image and var image if dark image is newer
-        flats: check flat variation between images
-        lights: first check if all images in a set are processed already
+        load_images: handle set name parameter
         bgvar: deal with selected image sets
+        load_stacks: deal with corrupted links to header files
+
+        improve checkings at start of imred tasks (valid entries in set.dat,
+            e.g. telid)
+        darks: deal with different binnings at the same telescope
+          fix: re-compute noise image and var image if dark image is newer
+        flats: check flat variation between images
         costack: apply bg subtraction if bggradient already exists
-    TODO (GUI):
-        new/open project: clear image set and expert options
-        add current working dir to PATH
-        all imred tasks: allow to overwrite results
-        add task to check calibrated images and allow to define bad region masks
-        add a task for cosmics detection
-        stack: optionally create a mosaic covering the whole field
+
+    1.0a5 - 17 Jun 2019
+        * added ds9cmd wrapper for comet extraction tasks
+
+    1.0a4 - 15 May 2019
+        * imageinfo: enhanced to support newer naming scheme of fits files
+        * load_stacks: wait for images to be loaded
+        * new task: ds9cmd
+
+    1.0a3 - 24 Apr 2019
+        * bgvar: bugfix: corrected typo in plot filename
+        * new task: load_images
 
     1.0a2 - 01 Mar 2019
         * lights: allow to overwrite default parameters passed to AIccd by
@@ -124,7 +130,7 @@ rcfile=.airtoolsrc
 #--------------------
 shorthelp ()
 {
-    echo "usage: $(basename $0) [-h] [-p projectdir] [-m mode] [-o] <task1> <task2> ..."
+    echo "usage: $(basename $0) [-h] [-p projectdir] [-m mode] [-o] <task> [params]"
 }
 
 longhelp ()
@@ -287,6 +293,7 @@ _imageinfo () {
     local extlist
     local ext
     local msg
+    local flist
     
     msg="# Collecting image information ..."
     extlist=$(cd $AI_RAWDIR/ && find * -type f | sed -e 's,.*\.,,' | sort -u | \
@@ -321,7 +328,8 @@ _imageinfo () {
                 test $tel == "16" && tel=T16
                 test $tel == "jbl08" && tel=T68
                 echo "# scanning fits files for $tel ..."
-                map_rawfiles -x $AI_RAWDIR/${tel,,}*.{fits,fit.zip} >> rawfiles.dat
+                flist=$(find $AI_RAWDIR \( -name "*fit.zip" -or -name "*fits" \) -not -name "calib*" | grep -iw $tel)
+                map_rawfiles -x $flist >> rawfiles.dat
                 test $? -ne 0 && return 255
             done
         else
@@ -679,7 +687,7 @@ _bgvar () {
             filter="${filter}^$num"
         done
         title="$tel: Average background per image"
-        grep -wE "$filter" bgdiff.dat | AIplot -o $AI_TMPDIR/x.$tel.fwhm.png -t "$title" -p - 2 $bgcol
+        grep -wE "$filter" bgdiff.dat | AIplot -o $AI_TMPDIR/x.$tel.bg.png -t "$title" -p - 2 $bgcol
     done
     
     # show changing gradient only
@@ -1081,8 +1089,7 @@ _astrometry () {
         
         # check for north angle
         north=$(get_header -q $set.head AI_NPA)
-        test $? -ne 0 && do_solve_field=1 &&
-            echo "WARNING: missing (approx.) north angle in $set.head" >&2
+        test $? -ne 0 && do_solve_field=1
         
         
         # run solve-field if necessary
@@ -1200,6 +1207,9 @@ _astrometry () {
         test $? -ne 0 && retval=255 &&
             echo "ERROR: AIwcs failed (see $wcslog)" &&
             test -e $set.wcs.head && mv $set.wcs.head x.$set.wcs.failed.head
+        # TODO: if AIwcs failed check ncat: e.g. get_header -e LDAC_OBJECTS wcs/sa01.ucac-4.dat NAXIS2
+        #   if it is > 3*nimg limit to 2*nimg, otherwise limit to 40% of ncat
+        #   unfortunately the catalog file does not fill the mag column (it is always 0)
     done
     
     # display results
@@ -1292,14 +1302,18 @@ _load_stacks () {
     local ststack
     local costack
     local ext
+    local idststack
+    local idcostack
+
     slist=$(AIsetinfo -b | awk '{if($4=="o"){print $2}}')
     test "$setname" && slist=$setname
     test -z "$slist" && return
-    msg="# Launch SAOImage AIRTOOLS for comet extraction and photometry ..."
+    msg="# Launch SAOImage AIRTOOLS ..."
     (test -z "$TASKMODE" || test "$TASKMODE" == "normal") && for set in $slist
     do
         #test $retval -ne 0 && continue
-        echo "$msg" && msg=""
+        #echo "$msg"
+        msg=""
         ststack=""
         ext=""
         test -f $set.pgm && ststack=$set.pgm && ext="pgm"
@@ -1308,11 +1322,11 @@ _load_stacks () {
             error "missing star stack for set $set"
         test ! -e $set.head &&
             error "missing header file $set.head"
-        test ! -f $set.wcs.head &&
-            echo "WARNING: missing WCS header file $set.wcs.head"
+        #test ! -f $set.wcs.head &&
+        #    echo "WARNING: missing WCS header file $set.wcs.head"
         costack=$(get_header $set.head AI_COMST)
-        test -z "$costack" &&
-            echo "WARNING: missing comet stack for set $set"
+        #test -z "$costack" &&
+        #    echo "WARNING: missing comet stack for set $set"
         test "$costack" && test ! -f $costack &&
             echo "WARNING: missing comet stack $costack for set $set"
         
@@ -1321,17 +1335,98 @@ _load_stacks () {
             ststack=${ststack%.*}.bgs.$ext
         test "$costack" && test -f ${costack%.*}.bgs.$ext &&
             costack=${costack%.*}.bgs.$ext
+        # TODO: replace corrupted header files
         test ! -e ${ststack%.*}".head" &&
             ln -s $set.head ${ststack%.*}".head"
         test "$costack" && test ! -e ${costack%.*}".head" &&
             ln -s $set.head ${costack%.*}".head"
 
-        # TODO: check for running SAOImage AIRTOOLS
-        # TODO: load images only if not already loaded
-        AIexamine $ststack $costack &
-        sleep 5
+        # check for running SAOImage AIRTOOLS
+        xpaaccess -c -t "2,2" AIRTOOLS > /dev/null
+        if [ $? -eq 0 ]
+        then
+            # start SAOImage and load frames
+            echo "# loading $ststack $costack ..."
+            AIexamine $ststack $costack &
+            idstack=$(wait_for_frame $ststack)
+        else
+            # append frames to a runnung SAOImage if not already loaded
+            idststack=$(get_frameno $ststack)
+            test "$costack" && idcostack=$(get_frameno $costack)
+            if [ -z "$idststack" ]
+            then
+                echo "# loading $ststack ..."
+                AIexamine $ststack &
+                idststack=$(wait_for_frame $ststack)
+            fi
+            test "$costack" && if [ -z "$idcostack" ]
+            then
+                echo "# loading $costack ..."
+                AIexamine $costack &
+                idcostack=$(wait_for_frame $costack)
+            fi
+            #echo "idststack=$idststack"
+            xpaset -p AIRTOOLS frame $idststack
+        fi
     done < set.dat
     return 0
+}
+
+_ds9cmd () {
+    # note: all tasks related to comet photometry must start with set name or image
+    #   image - bggradient
+    #   set   - psfextract, cometextract, manualdata, photcal
+    local set=$2
+    local msg="# ds9cmd $@"
+    local ststack
+    local fid
+
+    echo "$msg"
+    # determine name of star stack
+    test -f "$set" && ststack=$set
+    if [ -z "$ststack" ]
+    then
+        ! is_setname "$set" &&
+            error "unknown image set $set"
+        test -f $set.bgs.ppm && ststack=$set.bgs.ppm
+        test -z "$ststack" && test -f $set.bgs.pgm && ststack=$set.bgs.pgm
+        test -z "$ststack" && test -f $set.ppm && ststack=$set.ppm
+        test -z "$ststack" && test -f $set.pgm && ststack=$set.pgm
+        test -z "$ststack" &&
+            error "missing star stack for set $set"
+        test ! -e $set.head &&
+            error "missing header file $set.head"
+    fi
+    # check for running SAOImage AIRTOOLS
+    xpaaccess -c -t "2,2" AIRTOOLS > /dev/null
+    if [ $? -eq 0 ]
+    then
+        # load star stack
+        echo "# loading $ststack ..."
+        AIexamine $ststack &
+        fid=$(wait_for_frame $ststack)
+    fi
+
+    false && (
+    # display star stack
+    fid=$(get_frameno $ststack)
+    if [ -z "$fid" ]
+    then
+        echo "# loading $ststack ..."
+        AIexamine $ststack &
+        wait_for_frame $ststack
+    else
+        # activate frame $fid
+        case "$1" in
+            aladindss)
+                xpaset -p AIRTOOLS frame $fid
+                ;;
+        esac
+    fi
+    )
+    
+    ds9cmd "$@"
+    return $?
 }
 
 _remove () {
@@ -1342,38 +1437,136 @@ _remove () {
     local num
     local ext
     local f
+    local tmp1=$(mktemp "/tmp/tmp1_$$_XXXXXX.dat")
+
     #slist=$(AIsetinfo -b | awk '{if($4=="o"){print $2}}')
     test "$setname" && slist=$setname
     test -z "$slist" &&
         error "you must provide at least one set name."
     for set in $slist
     do
-        nlist="$nlist $(AIimlist -n $set)"
+        AIsetinfo -b $set
     done
-    test -z "$nlist" && echo "# no processed images found" && return
+    for set in $slist
+    do
+        nlist="$nlist $(AI_EXCLUDE="" AIimlist -x -n $set)"
+    done
     
     for num in $nlist
     do
-        f=bgvar/$num.bgm1.ppm;   test -e $f && echo "removing $f" && rm $f
-        f=bgvar/$num.bgm1.pgm;   test -e $f && echo "removing $f" && rm $f
-        f=bgvar/$num.bgdiff.ppm; test -e $f && echo "removing $f" && rm $f
-        f=bgvar/$num.bgdiff.pgm; test -e $f && echo "removing $f" && rm $f
-        f=measure/$num.src.dat;  test -e $f && echo "removing $f" && rm $f
-        f=measure/$num.src.head; test -e $f && echo "removing $f" && rm $f
-        f=$AI_TMPDIR/$num.ppm;   test -e $f && echo "removing $f" && rm $f
-        f=$AI_TMPDIR/$num.pgm;   test -e $f && echo "removing $f" && rm $f
-    done
-    echo "Please remove entries from bgdiff.dat bgsfit.dat reg.dat:"
-    for set in $slist
+        f=bgvar/$num.bgm1.ppm;   test -e $f && echo "rm $f"
+        f=bgvar/$num.bgm1.pgm;   test -e $f && echo "rm $f"
+        f=bgvar/$num.bgdiff.ppm; test -e $f && echo "rm $f"
+        f=bgvar/$num.bgdiff.pgm; test -e $f && echo "rm $f"
+        f=measure/$num.src.dat;  test -e $f && echo "rm $f"
+        f=measure/$num.src.head; test -e $f && echo "rm $f"
+        f=$AI_TMPDIR/$num.ppm;   test -e $f && echo "rm $f"
+        f=$AI_TMPDIR/$num.pgm;   test -e $f && echo "rm $f"
+    done | sort > $tmp1
+    for num in $nlist
     do
-        AIsetinfo -b $set
-    done
+        test -s bgdiff.dat && echo "sed -i '/^$num.bgdiff/d' bgdiff.dat"
+        test -s bgsfit.dat && echo "sed -i '/^$num /d' bgsfit.dat"
+        test -s reg.dat    && echo "sed -i '/^$num /d' reg.dat"
+    done >> $tmp1
+    if [ -s $tmp1 ]
+    then
+        echo "Run: bash $tmp1"
+    else
+        echo "No files to remove."
+        rm $tmp1
+    fi
     return 0
 }
 
 
 #-------------------------
 #   miscellaneous tools
+#-------------------------
+__load_images () {
+    # library function called by _imexa_calib and _imexa_raw
+    # loading calibrated or raw images in SAOImage AIRTOOLS window
+    # pass list of image numbers as arguments
+    local raw   # if set use raw images instead of calibrated images
+    test "$1" == "-r" && raw=1 && shift 1
+    local slist
+    local set
+    local msg
+    local imlist
+    local n
+    local last
+    local fid
+    local retval=0
+    local tmp1=$(mktemp "/tmp/tmp1_$$_XXXXXX.dat")
+    local tmp2=$(mktemp "/tmp/tmp2_$$_XXXXXX.dat")
+
+    slist=$(AIsetinfo -b | awk '{if($4=="o"){print $2}}')
+    test "$setname" && slist=$setname
+    test -z "$slist" && rm -f $tmp1 $tmp2 && return
+    msg="# Searching images ..."
+    for set in $slist
+    do
+        test $retval -ne 0 && continue
+        test "$msg" && echo $msg && msg=""
+        test -z "$raw" && AIimlist $set >> $tmp2
+        test    "$raw" && AIimlist $set "" raw >> $tmp2
+    done
+    ! test -s $tmp2 && echo "WARNING: no images found" >&2 &&
+        rm -f $tmp1 $tmp2 && return
+    # extract number and filename, sort unique entries
+    cat $tmp2 | awk '{printf("%s %s\n", $2, $3)}' | sort -u > $tmp1
+    if [ "$1" ]
+    then
+        mknlist $@ | sort > $tmp2
+        test $? -ne 0 && return 255
+        imlist=$(join $tmp1 $tmp2 | awk '{print $2}')
+        test -z "$imlist" && echo "WARNING: no matching image numbers" >&2 &&
+            rm -f $tmp1 $tmp2 && return
+    else
+        imlist=$(cat $tmp1 | awk '{print $2}')
+    fi
+    n=$(echo $imlist | wc -w)
+    last=$(echo $imlist | awk '{print $NF}')
+    echo "# Loading $n images ..."
+    test ! -d bgvar && mkdir bgvar # to allow storage of bad region files
+
+    # check for running SAOImage AIRTOOLS
+    xpaaccess -c -t "2,2" AIRTOOLS > /dev/null
+    if [ $? -eq 0 ]
+    then
+        # start SAOImage and load frames
+        echo "# loading $ststack ..."
+        AIexamine $imlist &
+        fid=$(wait_for_frame $last)
+    else
+        # append frames to a runnung SAOImage
+        AIexamine $imlist &
+    fi
+
+    rm -f $tmp1 $tmp2
+    return 0
+}
+
+_imexa_calib () {
+    # examine calibrated images
+    __load_images "$@"
+}
+
+_imexa_raw () {
+    # examine calibrated images
+    __load_images -r "$@"
+}
+
+_usercmd () {
+    echo "# Execute: $usercmd" "$@"
+    echo "nargs=$#"
+    $usercmd "$@"
+    return $?
+}
+
+
+#-------------------------
+#   diagnostic tools
 #-------------------------
 _status () {
     echo "# Processing info and diagnostic files ..."
@@ -1387,17 +1580,35 @@ _status () {
     return 0
 }
 
-_usercmd () {
-    echo "# Execute: $usercmd"
-    $usercmd
-    return $?
-}
-
 _check () {
     echo "# running checks ..."
     echo "# PATH=$PATH"
     AIcheck
 }
+
+_args () {
+    local i=1
+    echo "# airtools-cli: args" $@
+    while test "$1"
+    do
+        echo "$i:  _"$1"_"
+        i=$((i+1))
+        shift 1
+    done
+
+    echo "# AO_ARGS = _${AO_ARGS}_"
+    test -z "$AO_ARGS" && return 0
+    set - ${AO_ARGS}
+    i=1
+    while test "$1"
+    do
+        echo "$i:  _"$1"_"
+        i=$((i+1))
+        shift 1
+    done
+    return 0
+}
+
 
 
 #--------------------
@@ -1420,14 +1631,14 @@ do
         m)  TASKMODE="$OPTARG";;
         c)  usercmd="$OPTARG";;
         q)  quiet=1;;
-        h)  longhelp; echo; tasklist="help";;
+        h)  longhelp; echo; task="help";;
         \?) shorthelp; exit -1;;
     esac
 done
 shift `expr $OPTIND - 1`
 
 # display additional info if requested
-if [ "$tasklist" == "help" ]
+if [ "$task" == "help" ]
 then
     echo "\
 Available AIRTOOLS tasks:
@@ -1445,6 +1656,8 @@ Comet extraction and photometry:
     load_stacks - load stacked images
 
 Miscellaneous tools:
+    imexa_calib - load calibrated images
+    imexa_raw   - load raw images
     status      - check previous results"
     exit 0
 fi
@@ -1466,8 +1679,9 @@ if [ $# -lt 1 ] && [ -z "$usercmd" ]
 then
     shorthelp; exit -1
 fi
-tasklist=$@
-test "$usercmd" && tasklist="usercmd"
+task=$1
+shift 1
+test "$usercmd" && task="usercmd"
 #test "$AI_DEBUG" && echo "# tasts=$tasklist mode=$TASKMODE" >&2
 
 
@@ -1568,18 +1782,15 @@ do
     ! is_setname $set && error "Unknown image set $set."
 done
 
-# Run tasks
-for task in $tasklist
-do
-    test "$task" != "imageinfo" && test "$task" != "usercmd" &&
-        test ! -e "set.dat" &&
-        error "Missing file set.dat."
+# Run task
+test "$task" != "imageinfo" && test "$task" != "usercmd" &&
+    test ! -e "set.dat" &&
+    error "Missing file set.dat."
 
-    echo "# Running task $task ($(date +'%H:%M')) ..."
-    _$task
-    errcode=$?
-    test -z "$errcode" && error "Missing return code from task."
-done
-test "$errcode" == "0" && echo "# tasks finished at $(date +'%H:%M')"
+echo "# Running task $task ($(date +'%H:%M')) ..."
+_$task "$@"
+errcode=$?
+test -z "$errcode" && error "Missing return code from task."
+test "$errcode" == "0" && echo "# task finished at $(date +'%H:%M')"
 
 exit $errcode

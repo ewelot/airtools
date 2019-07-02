@@ -6,11 +6,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdint.h>
 #include <math.h>
 #include <pnm.h>
 
 #define write_card(s)    fwrite( s, sizeof(char), 80, stdout )
-
 
 int
 main( argc, argv )
@@ -120,10 +120,10 @@ main( argc, argv )
             color = PPM_GETR( *xP );
         else
             color = PNM_GET1( *xP );
-        color = color - fits_bzero;
-        if ( bitpix == 16 )
+        if ( bitpix == 16 ) {
+            color ^= 1UL << 15;  /* toggle highest bit to subtract fits_bzero */
             putchar( ( color >> 8 ) & 0xff );
-
+        }
         putchar( color & 0xff );
       }
     }
@@ -178,12 +178,12 @@ main( argc, argv )
       for ( row = rows-1; row >= 0; row-- ) {
         xelrow = xels[row];
         for ( col = 0, xP = xelrow; col < cols; ++col, ++xP ) {
-          color = PPM_GETG( *xP );
-          color = color - fits_bzero;
-          if ( bitpix == 16 )
-            putchar( ( color >> 8 ) & 0xff );
-
-          putchar( color & 0xff );
+            color = PPM_GETG( *xP );
+            if ( bitpix == 16 ) {
+                color ^= 1UL << 15;  /* toggle highest bit to subtract fits_bzero */
+                putchar( ( color >> 8 ) & 0xff );
+            }
+            putchar( color & 0xff );
         }
       }
 
@@ -236,12 +236,12 @@ main( argc, argv )
       for ( row = rows-1; row >= 0; row-- ) {
         xelrow = xels[row];
         for ( col = 0, xP = xelrow; col < cols; ++col, ++xP ) {
-          color = PPM_GETB( *xP );
-          color = color - fits_bzero;
-          if ( bitpix == 16 )
-            putchar( ( color >> 8 ) & 0xff );
-
-          putchar( color & 0xff );
+            color = PPM_GETB( *xP );
+            if ( bitpix == 16 ) {
+                color ^= 1UL << 15;  /* toggle highest bit to subtract fits_bzero */
+                putchar( ( color >> 8 ) & 0xff );
+            }
+            putchar( color & 0xff );
         }
       }
 

@@ -1,3 +1,18 @@
+airtools (3.1~alpha2-1) experimental; urgency=medium
+
+  * Several small improvements added to airtools-gui and airtools-cli
+
+ -- Thomas Lehmann <t_lehmann@freenet.de>  Tue, 02 Jul 2019 22:14:38 +0200
+
+airtools (3.1~alpha1-1) experimental; urgency=medium
+
+  * Program airtools-gui is now bundled with the OpenJfx runtime library.
+    The corresponding dependency has been removed.
+  * All major tasks related to comet extraction and photometry moved from
+    airds9.ana to airtools-cli and are now available in airtools-gui.
+
+ -- Thomas Lehmann <t_lehmann@freenet.de>  Fri, 07 Jun 2019 13:13:45 +0200
+
 airtools (3.0-1.2) experimental; urgency=medium
 
   * Added more dependencies (e.g. astrometry.net)
