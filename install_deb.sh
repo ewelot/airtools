@@ -6,10 +6,10 @@
 trap 'echo ERROR: program aborted on line $LINENO.; exit -1' ERR
 
 # create log file
-touch /tmp/install.log
-chmod a+r /tmp/install.log
-exec >  >(tee -ia /tmp/install.log)
-exec 2> >(tee -ia /tmp/install.log >&2)
+touch install.log
+chown 1000:1000 install.log
+exec >  >(tee -ia install.log)
+exec 2> >(tee -ia install.log >&2)
 
 # process command line options
 pkglist="airtools-core airtools airtools-doc"
@@ -103,6 +103,22 @@ do
     done
     printf "\n"
 done
+# handle openjfx package peculiarities in Ubuntu 18.04
+if [ $dist == "bionic" ]
+then
+    v=$(apt-cache policy openjfx | sed -e 's,^ *,,' | grep "^8" | cut -d ' ' -f1)
+    if [ "$v" ]
+    then
+        echo "
+Installing JavaFX8 and pinning packages ..."
+        sleep 3
+        apt-get -y install libopenjfx-jni=$v libopenjfx-java=$v openjfx=$v
+        for p in libopenjfx-jni libopenjfx-java openjfx
+        do
+            echo $p hold | dpkg --set-selections
+        done
+    fi
+fi
 echo "
 Installing $packages ..."
 sleep 3
