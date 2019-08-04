@@ -1,6 +1,6 @@
 % Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v3.1)
 % Thomas Lehmann
-% Draft, July/August 2019
+% Draft, August 2019
 
 \pagebreak
 
@@ -52,22 +52,23 @@ welcome.
 
 Good luck and clear skies!
 
-Thomas Lehmann, Weimar (Germany) - 2019 July 31
+Thomas Lehmann, Weimar (Germany)
 
 \pagebreak
 
 
+
 # Installation
 
-The AIRTOOLS software requires to be installed on a Linux operating system,
+The AIRTOOLS software must be installed on a Linux operating system,
 which is not commonly used in the amateur astronomy community. There exist
 several approaches on how to fullfill this requirement:
 
 - use a dedicated Linux computer or
 - configure your computer for dual booting of either Windows (or OS/X) or Linux
   or
-- set up a virtualization software which runs Linux in an encapsulated
-  application on your Windows (or OS/X) computer
+- set up a virtualization software which runs the entire Linux OS in an
+  encapsulated application on your Windows (or OS/X) computer
 
 We will focus on the third approach as it is probably the most convenient way
 of running Linux on Windows or OS/X hosts. Once the Linux OS is up and running
@@ -191,23 +192,13 @@ available updates of currently installed packages. Again, those updates
 are not required right now
 
 
-## Installing VirtualBox Guest Additions
-The Guest Additions are designed to be installed inside a virtual machine after
-the guest operating system has been installed. They consist of device drivers
-and system applications that optimize the guest operating system for better
-performance and usability. For installation you must first boot the guest OS,
-then go to the virtual machine's menu "Devices" and press "Install Guest
-Additions CD Image". After restarting the Linux guest (see next section about
-how to do it) you may adjust the guest
-window size and effectively the screen size of the Linux desktop as needed.
-
-
 ## Xubuntu Desktop Basics
-On the top of the desktop screen there is the (dark) desktop panel. If you
+On the top of the desktop screen there is a (dark) desktop panel. If you
 click on the small icon on the left of this panel (it uses the Xubuntu logo
 which mimics the head of a mouse) the main application menu pops up. From there
-you can start programs, tweak several desktop settings. The "Log out" icon
-locates at bottom-right of the menu and additionally may be used to shutdown
+you can start programs, tweak several desktop settings, log out and shutdown
+the virtual Linux system. Note the lovation of the "Log out" icon
+at bottom-right of the menu, which is also used to shutdown
 or restart the Linux OS. Get familiar with how to start the
 web browser and the file manager and how to shutdown the Linux OS.
 
@@ -219,6 +210,35 @@ connection) because all communication to the real devices of the host computer
 is transparently handled by the VirtualBox drivers.
 
 
+## Installing VirtualBox Guest Additions
+The Guest Additions are designed to be installed inside a virtual machine after
+the guest operating system has been installed. They consist of device drivers
+and system applications provided by Oracle VirtualBox that optimize the guest
+operating system for better performance and usability.
+
+For installation you must
+
+- Boot the guest OS.
+- Go to the virtual machine's menu "Devices" and press "Install Guest
+  Additions CD Image". A new CD icon appears on the Linux desktop and a
+  few seconds later the Linux file manager is showing the contents of the
+  Guest Additions virtual CD.
+- Open a terminal window using "File" menu of the file manager and select
+  "Open Terminal Here".
+- From the command line of the terminal run the following command
+  (you will be asked to provide your password):
+  `sudo apt-get install build-essential`
+- Start installation by entering the command:
+  `sudo sh VBoxLinuxAdditions.run`
+- If installation has finished close the terminal window and eject the
+  virtual CD by using the eject button next to the CD symbol in the file
+  manager.
+- Finally you must reboot the Linux guest.
+
+After a restart of the Linux virtual machine you may adjust the guest window
+size and effectively the screen size of the Linux desktop as needed.
+
+
 ## Installing the AIRTOOLS software
 The AIRTOOLS project is hosted at <https://github.com/ewelot/airtools> where
 you can find the latest source code and documentation. Pre-compiled binary
@@ -227,9 +247,10 @@ and can easily be installed by the following steps:
 
 - Download the
   [install script](https://github.com/ewelot/airtools/raw/master/install_deb.sh)
-  by pressing the right mouse button on this link and selecting `Save Link As`
-- Open the file manager (e.g. double-click the "Home" icon on the desktop)
-- Open the "Downloads" folder which should contain the previously downloaded file `install_deb.sh`
+  by pressing the right mouse button on this link and selecting "Save Link As".
+- Open the file manager (e.g. double-click the "Home" icon on the desktop).
+- Open the "Downloads" folder which should contain the previously downloaded file
+  `install_deb.sh`.
 - Open the "File" menu of the file manager and choose "Open Terminal Here". A new
   terminal window will pop up, ready to enter commands to be executed.
 - Enter the following command to start the install script (you will be prompted
@@ -239,7 +260,8 @@ Upon first installation of the AIRTOOLS software the script will download many
 other required software packages from the official Xubuntu repository. This
 might take a few minutes depending on the bandwidth of your internet
 connection. At the end of the installation you will receive some log messages
-about success (or failure) in the terminal window.
+about success (or failure) in the terminal window. A log file is created for
+later reference and a new icon is showing up on your Linux desktop.
 
 
 ## Updating the AIRTOOLS software
@@ -247,11 +269,283 @@ An update of the AIRTOOLS software is issued the same way as the initial
 installation but should complete much faster (due to much smaller amount of
 downloads).
 
+\pagebreak
 
 # The AIRTOOLS Graphical User Interface
 
+TODO
+
+\pagebreak
+
 # The first AIRTOOLS Project
 
+## What is a Project?
+
+When observing during a clear night, many different exposures are taken,
+usually of different targets. It is common practice that an observation of a
+single target consists of multiple bracketed exposures. Serious observers
+are capturing calibration frames (darks, flats) as well. It is possible
+that different instruments (telescopes, filters, cameras) are used. All
+these images of a single night will be analyzed in a single AIRTOOLS
+project. Consequently, the project directory itself (and related ones) must
+have the date of observation used as part of its name. It is good practice
+to use the date at the beginning of the night.
+
+The following directories are related to a project:
+
+Project directory:
+:   It stores all config files of this project, results
+    from image reduction and analysis (images, plots, data tables) and
+    log files. After finishing a project this directory should be saved, e.g.
+    to an external disk drive.
+Raw directory:
+:   Used for all the individual raw images as created by your
+    image asquisition system, both light frames and calibration images related
+    to the project.
+Temporary directory:
+:   Used to store individual calibrated images of the
+    project which are used by several different AIRTOOLS analysis tasks as well
+    as temporary files created during those tasks.
+    This directory may be savely deleted when the project is finished.
+
+
+## Setting up the first Project
+
+Upon first start of the AIRTOOLS software the base directories for the
+the three above mentioned storage places must be defined. Each new project
+will later create a new subdirectory below these places.
+
+Next, the setup for the first project must be configured. Select the
+date of observation. This will be used to make initial suggestions for
+names of the project directory, raw directory and temporary directory.
+It is allowed to modify those names, e.g. append a letter. E.g. you
+might want to repeat the image reduction of a given night using other
+parameters without interferring the original analysis. In that case
+you could use the same raw directory name but different names for the
+project and temporary directories.
+
+Further settings are:
+
+Parameter files:
+:   Every project will use parameter files for certain
+    configurations. Some of these files are rarely modified and therefore
+    can be copied over from the last project. Modifying this default
+    behaviour is almost never required.
+Site:
+:   Enter the name of your observatory site as it is used in
+    the parameter file `sites.dat` later on (see below).
+TZoff:
+:   Enter the time zone offset with respect to UT in hours. Use the
+    value which corresponds to the time of observation written to the header
+    of your raw images. If your data acquisition system stores UT then you
+    need to enter 0 here.
+
+
+## Parameter Files
+
+The different image acquisition systems used by amateurs do normally write
+some meta data about telescope, camera etc. to image headers. Those data is
+required by any image reduction and analysis software. Unfortunately, keyword
+names and the format of their values is not standardized in any way.
+
+We therefore decided to supply most redundant data by means of parameter
+files - simple text files, structured in a tabular way. The first line in the
+file is used to define the columns (name of parameters). Anything that appears
+after the `#` sign in any other line is considered a comment and will be
+ignored. Each line describes a separate entry and each parameter value is made
+by a single word. In some places you are allowed to use the character `-` to
+indicate an unknown value.
+
+At first the information about your observatory site must be added to the
+corresponding parameter file `sites.dat`. From the AIRTOOLS application's
+"Edit" menu
+select "Edit Site Parameters". This will start a simple text editor (called
+*mousepad*). The parameter file should have a few entries already, which can
+be used as reference when adding a new line for your site. The column
+description is as follows:
+
+ID:
+:   This is a unique short identifier for your site (three letters)
+location:
+:   A unique single word for the name of your observatory location. The
+    previously used entry of the observatory site during project setup must
+    match one of these.
+long:
+:   Geographic longitude in degrees, negative for a location east of Greenwich
+    meridian.
+lat:
+:   Geographic latitude in degrees, negative for a locations south of the
+    equator.
+alt:
+:   Altitude of your observatory in meters.
+
+Save your edits and close the text editor.
+
+The next information you have to provide is those of the instrumentation
+you have used. Open the parameter file `camera.dat` by selecting "Edit" and
+"Edit Camera Parameters". Each combination of telescope and camera must have
+a dedicated entry. Use the existing sample entries as a reference for your
+newly added lines. The columns used are:
+
+tel:
+:   Unique identifier for the telescope and camera, using 3-6 alphanumeric
+    characters.
+flen:
+:   Folal length of the telescope or camera lens in mm.
+aperture:
+:   Open aperture of the telescope or camera lens in mm.
+fratio:
+:   F-ration of the telescope or camera, that is `flen/aperture`.
+camera:
+:   Camera model, used for your convenience only
+camchip:
+:   Camera and sensor keys used in final ICQ records of a comet measurement.
+    Refer to the lists of [camera keys](https://cobs.si/help?page=ccd_type)
+    and [sensor keys](https://cobs.si/help?page=ccd_chip). Both values have to
+    be provided in a single word, using the character `/` as a delimiter. If
+    you for example have used a Canon 6D DSLR for imaging then the correct
+    entry would be `CDS/CFC`.
+flip:
+:   Indicate if the image data is flipped top-down (1) or not (0). Essentially
+    this describes the order and interpretation of FITS data: If the FITS
+    file is organized in such a way that the data of the bottom image row comes
+    first and that of the top-most row latest then it is considered unflipped
+    and the other way it is flipped. It seems that MaximDL stores data in a
+    flipped manner. 
+rot:
+:   If the camera is rotated with respect to the sky coordinate system then you
+    should provide a value different from 0. If true north is left on your
+    image then use a value of 90. A rough approximation is sufficient. 
+rawbits:
+:   Original bitdepth or number of bits per pixel in a single color channel.
+    Note that at start of the image reduction the counts (ADU, intensities) are
+    scaled up to the 16-bit range where needed.
+satur:
+:   Saturation value. Strictly speeking the upper counts (ADU) for which the
+    camera response is linear (proportional to the illumination intensity) must
+    be provided. We need the value after scaling up to the 16-bit range, e.g. if
+    you are using a consumer DSLR where response is linear up to 2/3 of its
+    dynamic range then you should enter a value of 40000 approximately.
+gain:
+:   Anzahl der Elektronen je ADU. Wenn nicht bekannt, dann kann als Schätzwert 1
+    eingesetzt werden.
+pixscale:
+:   Größe des Bildpunktes am Himmel in Bogensekunden.
+magzero:
+:   Schätzwert für Helligkeitsnullpunkt, d.h. die Sternhelligkeit, die bei 1
+    Sekunde Belichtungszeit eine Intensität von 1 Count (ADU) erzeugen würde.
+ttype:
+:   Auswahl des Teleskop-Typs: Reflector, Refractor, Photo Lens
+ctype:
+:   Auswahl des Kameratyps: CCD, DSLR
+
+Save your edits and close the text editor. Remember that for any
+subsequent new project you will be able to copy over those parameter files.
+You only need to add a new observatory site or instrument it is is not
+previously used and defined. 
+
+
+## Raw Images and Image Set Definition
+
+Now it is time to copy your raw images to the project's raw directory
+within the Linux file system. There are different solutions to handle
+the file transfer between the host operating system and a VirtualBox
+guest. We suggest using an external USB pen drive or USB disk for
+this purpose.
+
+Use the file manager of your host OS to copy the raw image files to the
+USB disk. Wait until all data have been completely written to disk.
+From the running Linux virtual machine locate the "Devices"
+menu entry on the VirtualBox VM menu at the top of the window. Select
+"USB" and you will see a list of USB devices from which you need to
+identify and select the USB disk. After a few seconds a new USB disk
+icon will apear on the virtual Linux desktop and little after the
+file manager window pops up. Use the common copy-and-paste feature
+to copy your raw images from the USB disk to the appropriate raw
+directory of the current project. Finally push the eject button on
+the USB device entry of the file manager and close it.
+
+You are now going to start the first AIRTOOLS task. By pressing the
+"Extract basic image info" the program reads meta data of all raw
+image files. At the end an editor window pops up which shows an
+overview of relevant data for each image. Please note the first
+column which consists of a 4-digit image number associated with
+each single raw image. Images are referenced by this number
+throughout the reduction process.
+
+Now it is time to group the individual images to form "image sets".
+An image set is a number of images of the same type and target, e.g. a
+sequence of dark exposures with a given exposure time or a bracketed
+series of exposures of a comet. All image sets of the project are
+described in a parameter file called `set.dat` which must be
+created by yourself. From the AIRTOOLS application's main menu select
+"Edit" and "Edit Image Set Definitions". Enter lines similar to the following
+example:
+
+~~~
+    # 190329
+    # Newton 400 mm f=1040 mm
+    # Canon 5D MkII (CDS), ISO 800, MaximDL
+
+    # UT
+    # h:m set  target type texp n1 n2   nref dark flat tel
+    20:30 dk01 bias     d   1 0001 0010 -    -    -    N16C
+    00:03 dk02 dark     d 300 0011 0016 -    -    -    N16C
+    07:49 sk01 flat     f   1 0017 0022 -    dk01 -    N16C
+    00:14 co01 2017K2   o 300 0023 0026 0024 dk02 sk01 N16C
+~~~
+
+The syntax is as follows: everything after the character `#` is considered
+a comment. Each line (uncommented and non-empty) defines an image set
+using at least 11 fields (words separated by spaces) which are:
+
+h:m:
+:   The local time at start of observation (approximation only, not used by
+    the program)
+set:
+:   The name given to the image set. We do recommend the following scheme:
+    Use the first two letters to denote the image type, where "dk" is for
+    darks (and bias exposures) and "sk" for sky flats, "co" might be used
+    for a comet observation. Any other deep sky target could use two (or
+    three) letters from the constellation it belongs to. After the letters
+    use a two-digit running number, so the image set of the first comet
+    target would be named `co01`, the second `co02` and so on. The
+    set name is used in many places later on, e.g. in the file names of
+    computed stacks and other result files.
+target:
+:   Short name of the target observed (up to 8 characters).
+type:
+:   Type of images (1 character): d=dark/bias, f=flat, o=lights, a=addition
+    (continuation) of a previously defined image set. If you for some reason
+    would like to exclude a series of images from the analysis (e.g. a focus
+    sequence) but keep the information about those files for your record
+    then use the character `-` in place of the image type.
+texp:
+:   Exposure time of a single exposure in seconds.
+n1:
+:   Number of the first image of the set.
+n2:
+:   Number of the last image of the set.
+nref:
+:   Number of the image which is used as a reference image for stacking,
+    typically it should be close to the middle of the bracketed sequence.
+    Not used for darks and flats.
+dark:
+:   Name of the master dark (image set name) used for calibration.
+flat:
+:   Name of the master flat used for calibration.
+tel:
+:   Identifier of the instrument (telescope/camera) used. This must match
+    a valid entry in `camera.dat`.
+
+A note about master calibration images. It is not required and
+not convenient to capture darks and flats in every night. After you have
+collected some calibration sets and build some master files by AIRTOOLS
+it is common practice to reuse them later on. This can be done by simply
+copying them over from older project directories to the current one
+using the file manager.
+
+\pagebreak
 
 # Image Reduction
 
