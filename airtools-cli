@@ -13,8 +13,8 @@
 #       AO_AMASK and AO_ACCOO in _astrometry
 #
 ########################################################################
-VERSION="1.0a5"
-VINFO="T. Lehmann, Jun. 2019"
+VERSION="1.0"
+VINFO="T. Lehmann, Aug. 2019"
 PINFO="\
     options:
       -h            show this help text
@@ -28,17 +28,10 @@ PINFO="\
       task          run given task    
 "
 CHANGELOG="
-    TODO (CLI):
-        load_images: handle set name parameter
-        bgvar: deal with selected image sets
-        load_stacks: deal with corrupted links to header files
-
-        improve checkings at start of imred tasks (valid entries in set.dat,
-            e.g. telid)
-        darks: deal with different binnings at the same telescope
-          fix: re-compute noise image and var image if dark image is newer
-        flats: check flat variation between images
-        costack: apply bg subtraction if bggradient already exists
+    1.0   - 16 Aug 2019
+        * register: bugfix: correctly capture exit code of the first comand in
+            a pipe
+        * load_images: deal with setname used as parameter
 
     1.0a5 - 17 Jun 2019
         * added ds9cmd wrapper for comet extraction tasks
@@ -760,7 +753,8 @@ _register () {
             #AIregister -p au01 | tee -a reg.dat
             # rewrite AIregister using: type rvm | (head -1 ; dd of=/dev/null)
             AIregister $AO_REGIS $set | tee -a reg.dat
-            test $? -ne 0 && retval=255
+            test ${PIPESTATUS[0]} -ne 0 && retval=255
+            echo "DEBUG: AI_VERSION=$AI_VERSION retval=$retval"
 
             # find images where registration failed, e.g. due to large center offset
             # and try registration using relaxed constraints on allowed offsets
@@ -782,6 +776,7 @@ _register () {
                 for set in $failedlist
                 do
                     AIregister -m 0.6 -p $set "" 0.06 | tee -a reg.dat
+                    test ${PIPESTATUS[0]} -ne 0 && retval=255
                 done
             fi
 
@@ -1501,7 +1496,7 @@ __load_images () {
     local tmp2=$(mktemp "/tmp/tmp2_$$_XXXXXX.dat")
 
     slist=$(AIsetinfo -b | awk '{if($4=="o"){print $2}}')
-    test "$setname" && slist=$setname
+    test "$1" && is_setname $1 && slist=$1 && shift 1
     test -z "$slist" && rm -f $tmp1 $tmp2 && return
     msg="# Searching images ..."
     for set in $slist
@@ -1553,13 +1548,13 @@ _imexa_calib () {
 }
 
 _imexa_raw () {
-    # examine calibrated images
+    # examine raw images
     __load_images -r "$@"
 }
 
 _usercmd () {
     echo "# Execute: $usercmd" "$@"
-    echo "nargs=$#"
+    test "$AI_DEBUG" && echo "nargs=$#"
     $usercmd "$@"
     return $?
 }
@@ -1682,7 +1677,6 @@ fi
 task=$1
 shift 1
 test "$usercmd" && task="usercmd"
-#test "$AI_DEBUG" && echo "# tasts=$tasklist mode=$TASKMODE" >&2
 
 
 #--------------------

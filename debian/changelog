@@ -1,3 +1,12 @@
+airtools (3.1~alpha3-1) experimental; urgency=medium
+
+  * Removed OpenJFX runtime library from airtools-gui.jar, handle Ubuntu 18.04
+    openjfx package peculiarities by the install script
+  * Added dependency on openjdk-8 and openjfx
+  * Added documentation
+
+ -- Thomas Lehmann <t_lehmann@freenet.de>  Thu, 01 Aug 2019 20:47:01 +0200
+
 airtools (3.1~alpha2-1) experimental; urgency=medium
 
   * Several small improvements added to airtools-gui and airtools-cli

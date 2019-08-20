@@ -17,6 +17,7 @@ IMAGES	= doc/images/*
 
 BIN 	= bayer2rgb dcraw-tl pnmtomef pnmccdred pnmcombine pnmrowsort
 BINSH 	= airtools airtools-cli airfun.sh aircmd.sh
+BINPY	= airfun.py
 JAR	= airtools-gui.jar
 ANALYSIS = airds9.ana
 DESKTOP	= airtools.desktop
@@ -58,7 +59,7 @@ clean:
 	rm -f $(BIN)
 
 install: all
-	install -m 0755 -p $(BIN) $(BINSH) $(BINDIR)
+	install -m 0755 -p $(BIN) $(BINSH) $(BINPY) $(BINDIR)
 	install -m 0755 -d $(DATADIR)
 	install -m 0644 -p $(DATA) $(DATADIR)
 	install -m 0644 -p $(ANALYSIS) $(DATADIR)

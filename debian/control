@@ -24,7 +24,7 @@ Architecture: any
 Depends: imagemagick, graphicsmagick, netpbm, gnuplot-x11, librsvg2-bin, exiv2,
  potrace, plplot12-driver-cairo | plplot-driver-cairo, exiftool, bc, curl, wget,
  gawk, yad, parallel, python3-ephem, cfitsio-examples (>=0.3),
- libcfitsio-bin, xpa-tools, wcstools, default-jre | java-runtime,
+ libcfitsio-bin, xpa-tools, wcstools, openjdk-8-jre | openjdk-8-jdk, openjfx
  ${shlibs:Depends}, ${misc:Depends}
 Suggests: airtools
 Description: Astronomical Image Reduction TOOLSet - Core components

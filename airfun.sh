@@ -14,9 +14,19 @@
 # - in order to use SAOImage DS9 analysis tasks (via AIexamine) you must
 #   have installed files airds9.ana and aircmd.sh
 ########################################################################
-AI_VERSION="4.1a3"
+AI_VERSION="4.1"
 : << '----'
 CHANGELOG
+    4.1   - 16 Aug 2019
+        * AIregister: stop processing when important parameters or files are
+            missing instead of progressing to the next image set
+        * ds9cmd nostars: match any object within selected (red) regions
+        * itel2obs, get_itel_telid: adjusted to comply with newer entries in
+            iTelescope log files
+        * get_cobs: bugfix to correctly handle start date
+        * new functions: get_xephemdb gplinfit icqplot
+        * new dependency on airfun.py used by icqplot
+
     4.1a3 - 21 Jun 2019
         * AIregister: bugfix for low number of matched stars, now the
             registration is tried on rotated image as intented
@@ -4732,7 +4742,9 @@ get_itel_telid () {
         awk '{print $6}' | tr -d ',' | sort -u
     cat $logfiles | grep -E "Telescope is ACP|Image File Saved to" | tr '\->' ' ' | \
         awk '{
-            if ($3=="Telescope" && $7~/^T/) id=$7
+            if ($3=="Telescope") {
+                if ($7~/^T/) {id=$7} else if ($6~/^T/) {id=$6}
+            }
             if ($3=="Image" && $7!="p") id=$7
             sub(",","",id)
             if (id != lastid) print id
@@ -4799,8 +4811,12 @@ itel2obs () {
         do
             test "$(get_itel_telid $logfile)" != "$tel" && continue
             test $linkmode -ne 0 && echo "# $tel $logfile" >&2
+            test $linkmode -eq 0 && echo "# $tel $logfile"
             grep -iE "$filter" $logfile | \
-                grep -viE "slew|no focus|binning|exposure|p-Focus"
+                grep -viE "slew|no focus|binning|exposure|p-Focus" | \
+                grep -viE "Camera temperature in range" | \
+                grep -viE "Focus position count is within typical range" | \
+                grep -viE "Focus position count is out of typical focus range"
         done
     done > $tmp1
     test $linkmode -eq 0 && echo "#" $tellist
@@ -5745,7 +5761,7 @@ get_cobs () {
 
     local comet="$1"    # comet name, e.g. "2016 R2"
     local start=${2:-"$(date +"%F" -d 'now - 3 years')"}
-    local end
+    local end=$(date +"%F" -d 'now + 1 day')
     local interval
     local prog=http://www.cobs.si/analysis
     local x
@@ -5774,7 +5790,7 @@ get_cobs () {
         if($0~/^[1-2][0-9][0-9][0-9][A-Z][A-Z]*[0-9]/) {
             printf("%s %s", substr($0,1,4), substr($0,5))
         } else {printf("%s", $0)}}')
-    #   search in $tmpcdb and convert to fullname
+    # search in $tmpcdb and convert to fullname
     n=$(grep -w "$x" $tmpcdb | wc -l)
     test $n -ne 1 &&
         echo "ERROR: comet $x unknown to database $tmpcdb" >&2 &&
@@ -5786,9 +5802,11 @@ get_cobs () {
     # comet="C/2016 R2 (PANSTARRS)"
     par1="required_fields=COMET_FULLNAME&COMET_FULLNAME=${fullname}"
     par2="COMET_MPC=&PERIHELION_DATE=&PLOT_TYPE=Magnitude&OBSERVER=0&ASSOCIATION=0&SUBMIT=Get+Obs&COUNTRY=0"
-    interval="START_DATE=YYYY%2FMM%2FDD+hh%3Amm&H0=&N=&END_DATE=YYYY%2FMM%2FDD+hh%3Amm"
+    #interval="START_DATE=YYYY%2FMM%2FDD+hh%3Amm&H0=&N=&END_DATE=YYYY%2FMM%2FDD+hh%3Amm"
+    interval="START_DATE=${start//-/\/}+00:00&END_DATE=${end//-/\/}+00:00"
     
     url="${prog}?${par1}&${par2}&${interval}"
+    test "$AI_DEBUG" && echo "url=$url" >&2
     wget -O $tmp1 "$url"
     w3m -dump $tmp1 | awk '{
         if ($0~/^IIIYYYYMnL/) {ok=1}
@@ -6724,8 +6742,9 @@ icqlist () {
         b=$(basename $dir)
         ! is_number ${b:0:6} && continue
         test ${b:0:6} -lt $start && continue
-        test ! -e $dir/imred_$b.txt &&
-            echo "WARNING: file $dir/imred_$b.txt is missing." >&2 && continue
+        test ! -e $dir/imred_$b.txt && test "$AI_DEBUG" &&
+            echo "WARNING: file $dir/imred_$b.txt is missing." >&2
+        test ! -e $dir/imred_$b.txt && continue
         line=$(grep -nE "^[0-9][0-9]*__.*()" $dir/imred_$b.txt | tr ':' ' ' | awk '{
             if (found==1) {b=$1; found=0}
             if ($2~/__icq_data/) {a=$1; found=1}
@@ -7545,6 +7564,684 @@ regid () {
         return 1
     
     cat $reg | grep "# text={" | tr '}' ' ' | cut -d '{' -f2 | cut -d ' ' -f1
+}
+
+get_xephemdb () {
+    # download comets ephemeris database
+    local showhelp
+    local i
+    local source=mpc
+    for i in 1 2
+    do
+        (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
+        test "$1" == "-v" && source=vanbuitenen && shift 1
+    done
+    
+    local db=Soft03Cmt.edb
+    local ts
+ 
+    (test "$showhelp" || test $# -gt 0) &&
+        echo "usage: get_xephemdb [-v]" >&2 &&
+        return 1
+   
+    case $source in
+        mpc)
+            url="http://www.minorplanetcenter.net/iau/Ephemerides/Comets/Soft03Cmt.txt"
+            ;;
+        vanbuitenen)
+            echo "# unofficial database provided by http://astro.vanbuitenen.nl" >&2
+            url="http://astro.vanbuitenen.nl/cometelements?format=xephem"
+            ;;
+        *)  echo "ERROR: source url is not defined." >&2 && return 255
+            ;;
+    esac
+    if [ -f $db ]
+    then
+        ts=$(date +"%Y%m%d" -d "@$(stat -c "%Y" $db)")
+        mv $db ${db%.*}_$ts.${db##*.}
+    fi
+    wget -N -nH -O $db $url
+}
+
+
+gplinfit () {
+    # linear fit on data by using gnuplot
+    local dat=$1
+    local xc=$2
+    local yc=$3
+    local tmpdat=$(mktemp "/tmp/tmp_data_$$.XXXXXX.dat")
+    local xm
+    local ym
+    local retval
+    
+    cat $dat > $tmpdat
+    xm=$(mean $tmpdat $xc)
+    ym=$(mean $tmpdat $yc)
+    echo "# set fit quiet
+        set fit errorvariables
+        a = $ym; a0_err=99
+        b = 1.0; a1_err=99
+        f(x) = a + b*(x-$xm)
+        fit f(x) '$tmpdat' using $xc:$yc via a, b
+        
+        # write coefficients to stdout
+        set print '/dev/stdout'
+        print FIT_NDF, FIT_STDFIT
+        print \"a \", a-b*$xm, a_err
+        print \"b \", b, b_err
+        " | gnuplot -p
+    retval=$?
+    rm -f $tmpdat
+    return $retval
+}
+
+
+icqplot () {
+# plotting data from ICQ formatted data files
+    local showhelp
+    local i
+    local title         # plot title, e.g. "C/2014 Q2 (Lovejoy)  2014 - 2015"
+    local newmodel      # if set, plot additional model curve, format: <g>,<k>,<label>
+    local keypos="top left reverse Left invert" # e.g. "bottom right"
+    local kwidthadd     # additive correction to key area width
+    local size="5,3.8 " # w,h page size of output file (inches)
+    local xrange        # date range: YYYYMMDD:YYYYMMDD
+    local yrange        # mag range: min:max
+    local obslist       # list of observer id's with individual colored points
+    local do_plot_distance  # overplot solar distance
+    local do_mpcmodel   # if set then plot MPC model curve
+    local do_fit        # fit model curve m=M + 5*log(De) + 2.5*n*log(rs)
+    local ephemdb="Soft03Cmt.edb" # comets ephemeris database (XEphem format)
+    local outfile       # if set the plot is saved to the given file name
+
+    for i in $(seq 1 18)
+    do
+        (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
+        test "$1" == "-f" && do_fit=1       && shift 1
+        test "$1" == "-m" && do_mpcmodel=1  && shift 1
+        test "$1" == "-n" && newmodel="$2"  && shift 2
+        test "$1" == "-d" && do_plot_distance=1 && shift 1
+        test "$1" == "-o" && outfile="$2"   && shift 2
+        test "$1" == "-s" && size="$2"      && shift 2
+        test "$1" == "-t" && title="$2"     && shift 2
+        test "$1" == "-k" && keypos="$2"    && shift 2
+        test "$1" == "-w" && kwidthadd="$2" && shift 2
+        test "$1" == "-x" && xrange="$2"    && shift 2
+        test "$1" == "-y" && yrange="$2"    && shift 2
+        test "$1" == "-e" && ephemdb="$2"   && shift 2
+        test "$1" == "-i" && obslist="$2"   && shift 2
+    done
+    
+    local comet=$1
+    local icqdat=$2         # data file containing records in ICQ data format
+    local type=${3:-"mag"}  # type of plot: mag, hmag, coma, lcoma
+    
+    local tmpobs=$(mktemp "/tmp/tmp_obs_$$.XXXXXX.dat")
+    local tmpdat1=$(mktemp "/tmp/tmp_dat1_$$.XXXXXX.dat")
+    local tmpdat2=$(mktemp "/tmp/tmp_dat2_$$.XXXXXX.dat")
+    local tmpmpc=$(mktemp "/tmp/tmp_mpc_$$.XXXXXX.dat")
+    local tmpmodel=$(mktemp "/tmp/tmp_model_$$.XXXXXX.dat")
+    local tmpfit=$(mktemp "/tmp/tmp_fit_$$.XXXXXX.dat")
+    local tmpgp=$(mktemp "/tmp/tmp_gp_$$.XXXXXX.gp")
+    local cname
+    local cephem
+    local tp    # time of perihel (y/m/d.dd)
+    local rp    # perihel distance from sun
+    local fields
+    local n
+    local min
+    local max
+    local span
+    local xcol
+    local ycol
+    local term
+    local termopts
+    local font
+    local fsize
+    local incr
+    local xtics
+    local xticsfmt
+    local ptsize
+    local drange
+    local dinterval
+    local plotcmd
+    local color
+    local lcolor
+    local colors=('#E00000' '#3050FF' '#D0B040' '#60C840' '#90B0C8')
+    #local colors=('#A22700' '#3465A4' '#BD8B06' '#3E7C04' '#6A496F' '#018587')  # dark
+    local colors=('#E33434' '#5580D0' '#F3AB1D' '#6CC52C' '#AD7FA8' '#28D1D1' '#A0A0A0')  # bright
+    # #A22700 #3E7C04 #BD8B06 #3465A4 #6A496F #018587  # dark
+    # #F13D3D #7DCE2F #ECCD2A #739FCF #AD7FA8 #28D1D1  # bright
+    local ncol
+    local retval
+    local docviewer
+    local rms
+    local afit
+    local bfit
+    local str
+    local mpclabel
+    local fitlabel
+    local newlabel
+    local g
+    local k
+    local x
+    local pyprog    # full path to airfun.py
+
+    (test "$showhelp" || test $# -lt 1) &&
+        echo "usage: icqplot [-h] [-f] [-m] [-n <g,k,desc>] [-d]" \
+            "[-o outfile] [-s w,h|$size] [-t <plottitle>] [-k <keypos>] [-w <keywidth-add>]" \
+            "[-x YYYYMMDDstart:YYYYMMDDend] [-y ymin:ymax] [-e ephemdb|$ephemdb] [-i obsidlist]" \
+            "<comet> <icqdat> [plottype|$type]" >&2 &&
+        return 1
+    
+    test "$icqdat" && test ! -f "$icqdat" &&
+        echo "ERROR: ICQ observations data file $icqdat not found." >&2 && return 255
+    # TODO: check for ephemdb only if it is required
+    test ! -f "$ephemdb" &&
+        echo "ERROR: missing ephemerides database file $ephemdb." >&2 && return 255
+    test "$xrange" && test "$xrange" == "${xrange/:/}" && xrange=$xrange":"
+
+    # check for required python scripts
+    pyprog=$(which airfun.py)
+    test $? -ne 0 &&
+        echo "ERROR: missing python module airfun.py." >&2 && return 255
+    
+    # create icqdat if not specified on command line
+    if [ -z "$icqdat" ]
+    then
+        echo "# get data from observations in $(dirname $(pwd)) (last 360 days)" >&2 
+        if [ "$comet" != "${comet%P}" ]
+        then
+            icqlist -n 360 $(dirname $(pwd)) | grep -E "^[ ]*"${comet%P}" " > x.myobs.icq
+        else
+            icqlist -n 360 $(dirname $(pwd)) | grep -E "^   "${comet}" " > x.myobs.icq
+        fi
+        echo "# get data from COBS (last 5 years)" >&2
+        str=$(date --date='now -5 years' "+%Y-%m-%d")
+        get_cobs $comet $str > x.cobs.icq
+        cat x.myobs.icq x.cobs.icq > x.all.icq
+        icqdat="x.all.icq"
+    fi
+    # get comet ephemerides, perihel time and distance
+    if [ "${comet%P}" != "${comet}" ]
+    then
+        cephem=$(grep "^$comet/" $ephemdb | head -1)
+    else
+        cephem=$(grep "^./${comet:0:4} ${comet:4} " $ephemdb | head -1)
+    fi
+    test -z "$cephem" && echo "ERROR: comet $comet not found in $ephemdb" >&2 && return 255
+    rp=$(echo "$cephem" | awk -F "," '{
+        if($2=="e") {a=$6; e=$8; q=a*(1-e)}
+        if($2=="h") {a=$6; e=$8; q=a*(e-1)}
+        if($2=="p") {q=$6}
+        print q
+        }')
+    tp=$(echo "$cephem" | awk -F "," '{
+        if($2=="e") {a=$6; M=$9; E=$10; P=sqrt(a*a*a); T=E-M*P/0.9856076686}
+        if($2=="h" || $2=="p") {
+            t=$3
+            # first subfield until |
+            # mm/dd.dd/yyyy -> yyyy/mm/dd.dd
+            T=t
+        }
+        print T
+        }')
+    # TODO: convert tp to utdate string yyyy/mm/dd.dd
+    echo "# perihel: T=$tp r=$rp" >&2
+
+    # check file extension of outfile
+    test "$outfile" && str=${outfile##*.} &&
+        case ${str,,} in
+            png|eps|ps) ;;
+            *)  echo "ERROR: filetype of outfile is not supported." >&2 && return 255;;
+        esac
+
+    
+    # convert ICQ data file into CSV format
+    # fields: source, obsid, date, mag, coma, method, filter
+    # TODO: take type into account
+    fields="date,source,obsid,mag,coma,method,filter"
+    echo "$fields" > $tmpobs
+    cname=${comet%P}
+    grep "^[ ]*$cname[ ]*[0-9][0-9][0-9][0-9] " $icqdat | \
+    awk -v t=$type -v dstart="${xrange%:*}" -v dend="${xrange#*:}" '{
+        date=substr($0,12,4)""substr($0,17,2)""substr($0,20,5); gsub(/ /,"0",date)
+        if (dstart!="" && date<dstart) next
+        if (dend!=""   && date>dend)   next
+        
+        method=substr($0,27,1)
+        if (substr($0,28,1) == "[") next
+        mag=substr($0,29,5);  gsub(/ /,"",mag)
+        if (t~/mag/ && mag=="") next
+        if (mag=="") mag=-99        
+        coma=substr($0,50,5); gsub(/ /,"",coma);
+        if (t~/coma/ && coma=="") next
+        if (coma=="") coma=-99
+
+        # obsid might have more than 5 characters but if char 6 is I than a CCD record is present
+        obsid=substr($0,76,10)
+        gsub(/ .*/,"",obsid)
+        if (substr(obsid,6,1) == "I") obsid=substr(obsid,1,5)
+        if (obsid=="") obsid="unknown"
+        
+        # TODO: guess filter
+        filter="X"
+        
+        # TODO: code the source of observation data
+        source="obs"
+        
+        if (obsid=="unknown") printf("#")
+        printf("%s,%s,%s,%s,%s,%s,%s\n", date, source, obsid, mag, coma, method, filter)
+    }' >> $tmpobs
+    n=$(cat $tmpobs | grep -v "^#" | sed -e '1d' | wc -l)
+    test $n -eq 0 &&
+        echo "WARNING: no observation records found for comet $cname." >&2 &&
+        return 255
+    echo "# $n observations" >&2
+
+    # compute additional values (e.g. hmag, lcoma) using ephemerides
+    # position 1  2    3      4     5   6    7    8     9      10     11         12    13
+    # fields:  jd date source obsid mag hmag coma lcoma method filter log(r_sun) r_sun d_earth
+    python3 $pyprog addephem $tmpobs "$cephem" > $tmpdat1
+    echo "# addephem: returns $?" >&2
+    #cat $tmpdat1
+    
+    
+    # fit model parameters
+    if [ "$do_fit" ] && ([ "$type" == "mag" ] || [ "$type" == "hmag" ])
+    then
+        grep -v GON05 $tmpdat1 | \
+            gplinfit - 11 6 2>/dev/null | tee $tmpdat2
+        # get coefficients/errors from fit
+        rms=$(head -1  $tmpdat2 | awk '{if (NF>=2) printf("%.3f", $2)}')
+        echo "# rms=$rms" >&2
+        afit=$(grep "^a " $tmpdat2 | awk '{if (NF>=3) printf("%.3f,%.3f", $2, $3)}')
+        bfit=$(grep "^b " $tmpdat2 | awk '{if (NF>=3) printf("%.3f,%.3f", $2, $3)}')
+        grep "^a " $tmpdat2 | awk '{printf("  m0= %6.3f +- %.3f\n", $2, $3)}'
+        grep "^b " $tmpdat2 | awk '{printf("  n= %7.3f +- %.3f\n", $2/2.5, $3/2.5)}'
+    fi
+    
+    
+    # xrange and tics
+    if [ "$type" == "mag" ] || [ "$type" == "coma" ]
+    then
+        # x axis is date/time
+        xcol=2
+        # determine start, end and number of days
+        cat $tmpdat1 | awk '{printf("%s\n", $1)}' | LANG=C sort -n > $tmpdat2
+        min=$(head -1 $tmpdat2)
+        max=$(tail -1 $tmpdat2)
+        # apply xrange
+        test "$xrange" && test "${xrange%:*}" && min=$(ut2jd 12 ${xrange%:*})
+        test "$xrange" && test "${xrange#*:}" && max=$(ut2jd 12 ${xrange#*:})
+        span=$(echo $max $min | awk '{printf("%.0f", $1-$2+0.6)}')
+        echo "# time: min=$min  max=$max  span=$span" >&2
+        if [ "${xrange%:*}" ] && [ "${xrange#*:}" ]
+        then
+            # keep xrange if both begin and end are provided
+            min=${xrange%:*}
+        else
+            # add some margins (5% + 1day)
+            test "${xrange%:*}" || min=$(echo $min $span | awk '{print $1-0.05*$2-1}')
+            test "${xrange#*:}" || max=$(echo $max $span | awk '{print $1+0.05*$2+2}')
+            span=$(echo $max $min | awk '{printf("%.0f", $1-$2+0.5)}')
+            min=$(jd2ut $min | cut -d "." -f1 | tr -d '-')
+            max=$(jd2ut $max | cut -d "." -f1 | tr -d '-')
+            # set xrange
+            xrange=$min":"$max
+        fi
+        echo "# using xrange=$xrange" >&2
+
+        # set xtics "20110105", 1209600, "20110430"  # interval in seconds
+        # 1 month = 365.2425/12 days
+        incr=$(echo $span | awk -v y=365.2425 '{
+            x=$1/5; d=0
+            if (x<450) d=y
+            if (x<250) d=y/2
+            if (x<150) d=4*y/12
+            if (x<100) d=3*y/12
+            if (x<75)  d=2*y/12
+            if (x<45)  d=y/12
+            if (x<22)  d=14
+            if (x<11)  d=7
+            if (x<6.0) d=5
+            if (x<3.5) d=2
+            if (x<1.5) d=1
+            if (d>0) printf("%.1f", d)}')
+        xticsfmt="%Y"
+        if [ "$incr" ]
+        then
+            #echo "# incr=$incr" >&2
+            test ${incr%.*} -lt 300 && xticsfmt="%b \'%y"
+            #'
+            test ${incr%.*} -lt  70 && xticsfmt="%b"
+            test ${incr%.*} -lt  20 && xticsfmt="%b %d"
+            if [ ${incr%.*} -lt 150 ] && [ ${incr%.*} -gt 20 ]
+            then
+                # start tics at beginning of month
+                incr=$(echo $incr | awk -v s=$min '{
+                    a=int(s/100)*100+1
+                    printf("\"%d\",%d", a, $1*24*3600)}')
+            else 
+                incr=$(echo $incr | awk '{
+                    printf("%d", $1*24*3600)}')
+            fi
+        fi
+    else
+        # x axis is solar distance (using logscale)
+        xcol=12
+        # TODO: split into pre-/post-perihelion plots
+        cat $tmpdat1 | awk -v xcol=$xcol '{printf("%s\n", $xcol)}' | \
+            LANG=C sort -n > $tmpdat2
+        min=$(head -1 $tmpdat2)
+        max=$(tail -1 $tmpdat2)
+        span=$(echo $max $min | awk '{print $1/$2}')
+        echo "# r_sun: min=$min  max=$max  ratio=$span" >&2
+        # add some margins (5% of ratio)
+        min=$(echo $min $span | awk '{print $1/(exp(0.05*log($2)))}')
+        max=$(echo $max $span | awk '{print $1*(exp(0.05*log($2)))}')
+        span=$(echo $max $min | awk '{print $1/$2}')
+        # set xrange (reverse)
+        test "$xrange" && test "${xrange%:*}" == "" && xrange=$max$xrange
+        test "$xrange" && test "${xrange#*:}" == "" && xrange=$xrange$min
+        test -z "$xrange" && xrange=$max":"$min
+        echo "# xrange=$xrange" >&2
+
+        # set xtics
+        incr=$(echo $span | awk '{print exp(1/5*log($1))}')
+        #echo "# ~5 tics spaced by ratio $incr" >&2
+        if [ ${span%.*} -lt 3 ]
+        then
+            # place tics using linear spacing
+            xtics=$(echo $min $max | awk '{
+            m=($1+$2)/2
+            s=($2-$1)/4
+            l10=sprintf("%.0f", (log(s)/log(10))-0.5)
+            x=exp(l10*log(10))
+            l=log(s/x)
+            #printf("%f %f %f %f %.2f\n", m, s, l10, x, l)
+            if (l<0.7) {s=1*x} else {
+                if (l<1.4) {s=2*x} else {
+                    s=5*x}}
+            #printf("# %3d %3d  %s\n", $1, $2, s)
+            
+            i=0
+            for (x=s*int($1/s+0.9999); x<=$2; x=x+s) {
+                if (i>0) printf(", ")
+                printf("%s", x)
+                i++
+            }
+            printf("\n")
+            }')
+        else
+            # TODO: place tics using geometric spacing
+            xtics="(0.2, 0.25, 0.3, 0.4, 0.5, 0.7, 1, 1.5, 2, 2.5, 3, 4, 5, 7, 10)"
+        fi
+        xtics="("${xtics}")"
+        echo "# xtics=$xtics" >&2
+    fi
+    
+    # set ycol and title
+    case $type in
+        mag)
+                ycol=5
+                test -z "$title" && title="$comet - Magnitude"
+                ;;
+        hmag)
+                ycol=6
+                test -z "$title" && title="$comet - Heliocentric Magnitude"
+                ;;
+        coma)
+                ycol=7
+                test -z "$title" && title="$comet - Coma Diameter"
+                ;;
+        lcoma)
+                ycol=8
+                test -z "$title" && title="$comet - Linear Coma Diameter"
+                ;;
+    esac
+    
+    # create data for model light curves
+    # note: y column to plot is ycol-2
+    if [ "$newmodel" ]
+    then
+        g=$(echo $newmodel | cut -d ',' -f1)
+        k=$(echo $newmodel | cut -d ',' -f2)
+        newlabel=$(echo $newmodel | cut -d ',' -f3-)
+        test -z "$newlabel" &&
+            newlabel=$(echo $g $k | awk '{printf("Model: m_0=%s n=%s", $1, $2)}')
+        # note: skip first and last 3 point
+        python3 $pyprog mkephem "$cephem" ${xrange%:*} ${xrange#*:} $g $k | \
+            grep -v "^#" | sed -e '1,3 d' | head -n -3 > $tmpmodel
+    fi
+    if [ "$do_mpcmodel" ] || [ "$do_plot_distance" ]
+    then
+        g=$(echo "$cephem" | awk -F ',' '{x=$(NF-1); sub(/^[a-z ]*/,"",x); printf("%s", x)}')
+        k=$(echo "$cephem" | awk -F ',' '{x=$NF; sub(/^[a-z ]*/,"",x); printf("%s", x)}')
+        mpclabel=$(echo $g $k | awk '{printf("MPC Model: m_0=%s n=%s", $1, $2)}')
+        # note: skip first and last 3 point
+        python3 $pyprog mkephem "$cephem" ${xrange%:*} ${xrange#*:} | \
+            grep -v "^#" | sed -e '1,3 d' | head -n -3 > $tmpmpc
+    fi
+    if [ "$afit" ]
+    then
+        g=$(echo $afit | awk -F ',' '{print $1}')
+        k=$(echo $bfit | awk -F ',' '{print $1/2.5}')
+        fitlabel=$(LANG=C printf "Model Fit: m_0=%.1f n=%.1f" $g $k)
+        # note: skip first and last 3 point
+        echo "# command: python3 $pyprog mkephem \"$cephem\" ${xrange%:*} ${xrange#*:} $g $k" >&2
+        python3 $pyprog mkephem "$cephem" ${xrange%:*} ${xrange#*:} $g $k | \
+            grep -v "^#" | sed -e '1,3 d' | head -n -3 > $tmpfit
+        test $? -ne 0 &&
+            echo "# command: python3 $pyprog mkephem \"$cephem\" ${xrange%:*} ${xrange#*:} $g $k" >&2
+    fi
+    
+
+    # initialize plot
+    echo "# plot size=$size" >&2
+    test -z "$outfile" && outfile=$comet.$type.$(date +'%y%m%d').eps
+    str=${outfile##*.}
+    case ${str,,} in
+        png)    term=pngcairo
+                termopts="enhanced dashlength 1.5"
+                font="sans"; fsize=13
+                size=$(echo $size | awk -F ',' '{printf("%.0f,%.0f", $1*150, $2*150)}')
+                ;;
+        *)      term=postscript
+                termopts="enhanced eps color blacktext dashlength 2.0"
+                font=""
+                fsize=$(echo ${size#,*} | awk '{printf("%.0f", sqrt($1)*7)}')
+                ;;
+    esac
+
+    # correct width of background behind key labels
+    x=0
+    (test "$do_mpcmodel" || test "$newmodel" || test "$afit") && x=-15
+    kwidthadd=$((kwidthadd + x))
+    
+    # pngcairo:
+    #outfile=$comet.$obs.$(date +'%y%m%d').png
+    #size="700,480"; fsize=11
+    #test "$do_big" && size="900,600"; fsize=12
+    cat <<EOF > $tmpgp
+#set term pngcairo size $size font "Arial,$fsize" enhanced
+set term $term size $size font "$font,$fsize" $termopts
+set output "$outfile"
+set border lw 1
+set xtics nomirror
+set ytics nomirror
+set grid lc rgb '#808080'
+#set key $keypos samplen 1 spacing 1.0 font "Arial,$((fsize-2))"
+set key opaque ${keypos//_/ } height +0.5 width ${kwidthadd//_/ } samplen 2.5 spacing 1.2 font "$font,$((fsize-2))"
+set title '${title//_/ }' font ",$((fsize+4))"
+#set datafile separator " "
+EOF
+
+    # add xrange, xtics according to $type
+    # TODO: hmag, lcoma should have 2 plots splitted at perihel using different xranges
+    xticsfmt="%b %y"
+    if [ "$type" == "mag" ] || [ "$type" == "coma" ]
+    then
+        echo "set xdata time
+set timefmt '%Y%m%d'
+set xtics $incr format '$xticsfmt'
+#set arrow from '$peri', graph 0.98 to '$peri', graph 1 nohead
+#set label 'P' at '$peri', graph 0.95 center" >> $tmpgp
+        test "$xrange" && echo "set xrange ['${xrange%:*}':'${xrange#*:}']" >> $tmpgp
+        echo "set xlabel 'Date'" >> $tmpgp
+    else
+        test "$xrange" && echo "set xrange [$xrange]" >> $tmpgp
+        echo "set log x" >> $tmpgp
+        echo "set xtics $xtics" >> $tmpgp
+        echo "set xlabel 'r_{sun} / AU'" >> $tmpgp
+    fi
+
+    # add yrange according to $type
+    case $type in
+        mag)
+                echo "set yrange [$yrange] reverse" >> $tmpgp
+                echo "set ylabel 'mag' offset 1" >> $tmpgp
+                ;;
+        hmag)
+                echo "set yrange [$yrange] reverse" >> $tmpgp
+                echo "set ylabel 'mag' offset 1" >> $tmpgp
+                ;;
+        coma)
+                echo "set yrange [$yrange]" >> $tmpgp
+                echo "set ylabel 'arcmin' offset 1" >> $tmpgp
+                ;;
+        lcoma)
+                echo "set yrange [$yrange]" >> $tmpgp
+                echo "set ylabel 'km' offset 1" >> $tmpgp
+                ;;
+    esac
+    if [ "$do_plot_distance" ]
+    then
+        # solor dist. at column 6
+        drange=$(minmax $tmpmpc 6 | awk '{d=$2-$1; printf("%f:%f", $1-0.1*d, $2+0.1*d)}') 
+        dinter=$(echo $drange | awk -F ':' '{dr=$2-$1; x=0.1
+            if(dr>0.6)  x=0.2
+            if (dr>1.5) x=0.5
+            if (dr>3)   x=1
+            print x}')
+        echo "set y2range [$drange]" >> $tmpgp
+        echo "set y2label 'r_{sun} / AU' offset -1" >> $tmpgp
+        echo "set y2tics $dinter" >> $tmpgp
+    fi
+    
+    # setting point size depending on number of points
+    ptsize=1.4
+    test $n -gt 20 && ptsize=1.3
+    test $n -gt 100 && ptsize=1.2
+
+
+    # check observers for valid observations
+    if [ "$obslist" ]
+    then
+        str=$obslist
+        x=$(for str in $(echo $obslist | tr ',' '\n')
+        do
+            cut -d ' ' -f4 $tmpdat1 | grep -qw $str
+            if [ $? -eq 0 ]
+            then
+                echo $str
+            else
+                echo "# WARNING: no observations for $str" >&2
+            fi
+        done)
+        obslist=$(echo $x | tr ' ' ',')
+    fi
+    
+    # plotting of all data
+    i=$(echo $obslist | tr ',' '\n' | wc -l)
+    ncol=${#colors[@]}
+    color=${colors[i%ncol]}
+    color=${colors[ncol-1]}
+    str="others"
+    plotcmd="plot"
+    test -z "$obslist" && str="" && color="#4060D0" # "#6080C8"
+    # TODO: better plot only data not matching obslist
+    echo "\
+$plotcmd '$tmpdat1'  using $xcol:$ycol \\" >> $tmpgp
+    test "$str" && echo "\
+        title '$str' pt 6 ps $ptsize lc rgb '$color' \\" >> $tmpgp
+    test -z "$str" && echo "\
+        notitle pt 7 ps $ptsize lc rgb '$color' \\" >> $tmpgp
+        plotcmd="    ,"
+
+    # plotting of data from observers in obslist
+    i=$(echo $obslist | tr ',' '\n' | wc -l)
+    test "$obslist" && for str in $(echo $obslist | tr ',' '\n' | tac)
+    do
+        i=$((i-1))
+        echo "\
+$plotcmd '$tmpdat1'  using $xcol:(stringcolumn(4) eq '$str' ? \$$ycol : 1/0) \\
+        title '$str' pt 7 ps $ptsize lc rgb '${colors[i%ncol]}' \\" >> $tmpgp
+    done
+
+    # plotting heliocentric distance   
+    # TODO: use right axis 
+    if [ "$do_plot_distance" ]
+    then
+        lcolor="#00AA00"
+        echo "\
+$plotcmd '$tmpmpc'  using $xcol:6 \\
+        title 'Distance' lw 1 lc rgb '$lcolor' dt '-' with lines axes x1y2 \\" >> $tmpgp
+
+    fi
+
+    # plotting model curves
+    if [ -s $tmpmodel ] # newmodel
+    then
+        lcolor="#90B0C8"
+        echo "\
+$plotcmd '$tmpmodel'  using $xcol:$((ycol-2)) \\
+        title '$newlabel' lw 1 lc rgb '$lcolor' dt '-' with lines \\" >> $tmpgp
+
+    fi
+    if [ "$do_mpcmodel" ]
+    then
+        lcolor="#DBAE4B"
+        echo "\
+$plotcmd '$tmpmpc'  using $xcol:$((ycol-2)) \\
+        title '$mpclabel' lw 1 lc rgb '$lcolor' dt '-' with lines \\" >> $tmpgp
+
+    fi
+    if [ -s $tmpfit ]
+    then
+        lcolor="#90B0C8"
+        #test -z "$obslist" && lcolor=$color
+        echo "\
+$plotcmd '$tmpfit'  using $xcol:$((ycol-2)) \\
+        title '$fitlabel' lw 2 lc rgb '$lcolor' with lines \\" >> $tmpgp
+
+    fi
+    
+    # running gnuplot
+    echo "" >> $tmpgp
+    cat $tmpgp | gnuplot -p
+    retval=$?
+    if [ $retval -eq 0 ]
+    then
+        # show plot
+        #docviewer="evince"
+        docviewer="xdg-open"
+        ps uxaw | grep -vw grep | grep -q "$USER .* $docviewer $outfile" || \
+            (echo "# displaying $outfile ..." >&2; $docviewer $outfile 2>/dev/null &)
+    fi
+
+    if true || [ "$AI_DEBUG" ] || [ $retval -ne 0 ]
+    then
+        echo "obs:     $tmpobs" >&2
+        echo "data:    $tmpdat1" >&2
+        test -s $tmpfit   && echo "fit:     $tmpfit" >&2
+        test -s $tmpmpc   && echo "mpc:     $tmpmpc" >&2
+        test -s $tmpmodel && echo "model:   $tmpmodel" >&2
+        echo "gnuplot: $tmpgp" >&2
+    else
+        rm -f $tmpobs $tmpdat1 $tmpdat2 $tmpfit $tmpmpc $tmpmodel $tmpgp
+    fi
+    return $retval
 }
 
 # convert from ds9 circle regions to xy points
@@ -8547,7 +9244,7 @@ findgain () {
     rm $tmpimg $tmpdat1 $tmpreg
 }
 
-# show subset of an object list located within given regions
+# show subset of an object list (id x y) located within given regions
 xyinreg () {
     local showhelp
     (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
@@ -13264,9 +13961,13 @@ AIpreview () {
     local x
     
     (test "$showhelp" || test $# -lt 2) &&
-        echo "usage: AIpreview [-v] [-c] [-p nproc] [-n nlist] <rawdir> <telid> [contrast|$contrast]" >&2 &&
+        echo "usage: AIpreview [-v] [-c] [-p nproc] [-n nlist] <rawdir> <telid|flat> [contrast|$contrast]" >&2 &&
         return 1
 
+    if [ -f "$telid" ]
+    then
+        flat=$telid
+    else
     case $telid in
         K135)   flat=$A/calib/170127/sk03.pgm # 2.0/135, K5II
                 ;;
@@ -13281,6 +13982,7 @@ AIpreview () {
         *)      echo "WARNING: unknown telid, no flat field correction" >&2
                 ;;
     esac
+    fi
     test -z "$dcrawopts" && test "$flat" && dcrawopts="-R 4950 3284 0 0"
     nproc=$(cat /proc/cpuinfo | grep processor | wc -l)
     nproc=$((nproc - 1))
@@ -15233,7 +15935,7 @@ AIregister () {
         test "$setname" && test "$setname" != "$sname" && continue
         (! is_integer "$n1" || ! is_integer "$n2") && continue
         test -z "$singleimage" && ! is_integer "$nref" &&
-            echo "ERROR: nref for $sname undefined, skipping set." >&2 && continue
+            echo "ERROR: nref for $sname undefined, skipping set." >&2 && return 255
         
         # check for refcat
         refcat=""
@@ -15246,13 +15948,13 @@ AIregister () {
                 refcat="measure/$(basename $nref.src.dat)"
         fi
         test -z "$refcat" &&
-            echo "ERROR: reference catalog $nref.src.dat not found." >&2 && continue
+            echo "ERROR: reference catalog $nref.src.dat not found." >&2 && return 255
         
         # check for raw image header file
         rfile=$(get_rawfile $nref)
         test -z "$rfile" &&
             echo "ERROR: no entry for $nref in $exifdat/$rawfilesdat." >&2 &&
-            continue
+            return 255
         test ! -f $rdir/$nref.hdr && ! is_fits "$rfile" && ! is_fitzip "$rfile" &&
             echo "WARNING: missing raw header files, some keywords will be missing." >&2
         
@@ -15285,7 +15987,7 @@ AIregister () {
         
         # determine parameters depending on set (e.g. pixscale, magzero)
         test -z "$pixscale" &&
-            echo "ERROR: $sname: pixscale unknown" >&2 && continue
+            echo "ERROR: $sname: pixscale unknown" >&2 && return 255
         #crad=$(echo $pixscale | awk '{print 3*$1}')    # crossid_radius
         mres=$(echo $pixscale | awk '{print 3*$1}')     # match_resol
 
@@ -15519,7 +16221,7 @@ END     " > $ahead
                     rfile=$(get_rawfile $num)
                     test -z "$rfile" &&
                         echo "ERROR: no entry for $num in $exifdat/$rawfilesdat." >&2 &&
-                        continue
+                        return 255
                     
                     if is_fitzip "$rfile"
                     then
@@ -15706,7 +16408,7 @@ AIfocus () {
         else
             # raw to fits
             echo -n "$num " >&2
-            AIraw2rgb -q 0 $raw | gm convert - -channel Green - | \
+            AIraw2rgb -q 0 $raw | gm convert - -channel Green pgm:- | \
                 pnmtomef - > $tdir/$num.fits
 
             # try to read exposure time from exif data
@@ -19790,7 +20492,7 @@ AIcomet () {
                 split($1,a,/@/)
                 r=(a[2]-$3)*3.1415926/180
                 printf("%.2f", a[1]*cos(r)*$2/$4/3600)}')
-            echo "# comet offset: x=$x y=$y" >&2
+            #echo "# comet offset: x=$x y=$y" >&2
         fi
 
         # create initial comet region
@@ -19827,10 +20529,11 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
     fi
     test "$str$do_examine" &&
         echo "\
---> define polygon regions for
-  - comet,       save as $coreg
-  - background,  save as $bgreg
-  - bad areas,   save as $badreg (optional)" &&
+--> define polygon regions for measurements
+  - comet region,      save as $coreg
+  - background areas,  save as $bgreg
+  - areas to exclude,  save as $badreg (optional)
+  - when finished close 'SAOImage CometRegions' window to proceed" &&
         AIexamine -n CometRegions -p "-pan to $copos -regions shape polygon" \
             $coblur $coreg $ststack
 
@@ -20004,7 +20707,10 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
             "select=1 highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 " \
             "include=1 source=1" > x.newphot.reg
         echo "physical" >> x.newphot.reg)
-        echo "--> identify stars which need photometric correction, save as x.newphot.reg"
+        echo "--> apply photometric correction to selected stars"
+        echo "  - use tab to switch between stack and residual image"
+        echo "  - select stars in residual image, save as x.newphot.reg"
+        echo "  - when finished close the 'SAOImage PhotCorr' window to proceed"
         #AIexamine $ststack $coreg $bgreg x.resid.$ext x.newphot.reg
         AIexamine -n PhotCorr -p "-pan to $copos" $ststack $coreg $bgreg $badreg x.resid.$ext x.newphot.reg
         cp -p x.newphot.reg x.newphot.00.reg
@@ -21606,10 +22312,20 @@ ds9cmd () {
                 test ! -e $set.head &&
                     echo "ERROR: missing $set.head" >&2 && echo >&2 && return 255
 
+                # starphot file
+                fname=comet/$set.starphot.dat
+                test ! -f $fname &&
+                    echo "ERROR: missing stars database $fname" >&2 &&
+                    echo >&2 && return 255
+
                 # add marked bad objects (red) to variable skip
                 xpaset -p $ds9name regions system physical
                 xpaset -p $ds9name regions save $tmp1
-                x=$(grep "^circle(.* color=red text" $tmp1 | tr ' ' '\n' | grep "^text" | \
+                # old:
+                #x=$(grep "^circle(.* color=red text" $tmp1 | tr ' ' '\n' | grep "^text" | \
+                #    tr '={' ' ' | awk '{printf("%s\n", $2)}')                
+                x=$(regfilter comet/$set.src.dat $tmp1 | sexselect -r - "" "" "" "" "" 99 | \
+                    grep "^circle" | tr ' ' '\n' | grep "^text" | \
                     tr '={' ' ' | awk '{printf("%s\n", $2)}')
                 if [ "$x" ]
                 then
@@ -21619,11 +22335,6 @@ ds9cmd () {
                     return
                 fi
                 
-                fname=comet/$set.starphot.dat
-                test ! -f $fname &&
-                    echo "ERROR: missing stars database $fname" >&2 &&
-                    echo >&2 && return 255
-
                 # skip stars from being used in psf extraction
                 for id in ${skip//,/ }
                 do
