@@ -99,7 +99,7 @@ int main(int argc, char *argv[])
 {
     char *inFileName;
     char *outFileName;
-    char opt;
+    int opt;
     int nargs, verbose=0;
 
     /* eliminate some common netpbm options, e.g. -quiet */
@@ -120,13 +120,15 @@ int main(int argc, char *argv[])
                 printf("ERROR: unknown option\n");
                 exit(-1);
                 break;
+            default:
+                abort();
         }
     }
     
     /* read command line arguments */
     nargs = argc - optind;
     if (nargs != 2) {
-        printf("ERROR: need two arguments, try -u switch to show usage info\n");
+        printf("ERROR: missing arguments, try -u switch to show usage info\n");
         exit(-1);
     }
 

@@ -754,7 +754,7 @@ _register () {
             # rewrite AIregister using: type rvm | (head -1 ; dd of=/dev/null)
             AIregister $AO_REGIS $set | tee -a reg.dat
             test ${PIPESTATUS[0]} -ne 0 && retval=255
-            echo "DEBUG: AI_VERSION=$AI_VERSION retval=$retval"
+            test "$AI_DEBUG" && echo "DEBUG: AI_VERSION=$AI_VERSION retval=$retval"
 
             # find images where registration failed, e.g. due to large center offset
             # and try registration using relaxed constraints on allowed offsets
@@ -1489,6 +1489,7 @@ __load_images () {
     local msg
     local imlist
     local n
+    local first
     local last
     local fid
     local retval=0
@@ -1521,6 +1522,7 @@ __load_images () {
         imlist=$(cat $tmp1 | awk '{print $2}')
     fi
     n=$(echo $imlist | wc -w)
+    first=$(echo $imlist | awk '{print $1}')
     last=$(echo $imlist | awk '{print $NF}')
     echo "# Loading $n images ..."
     test ! -d bgvar && mkdir bgvar # to allow storage of bad region files
@@ -1532,10 +1534,11 @@ __load_images () {
         # start SAOImage and load frames
         echo "# loading $ststack ..."
         AIexamine $imlist &
-        fid=$(wait_for_frame $last)
+        fid=$(wait_for_frame $first)
     else
         # append frames to a runnung SAOImage
         AIexamine $imlist &
+        fid=$(wait_for_frame $last)
     fi
 
     rm -f $tmp1 $tmp2

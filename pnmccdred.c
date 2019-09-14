@@ -187,7 +187,7 @@ int main(int argc, char *argv[])
     char *inFileName, *dkFileName, *skFileName;
     char *outFileName;
     double bg, mult[3], add[3];
-    char opt;
+    int opt;
     unsigned int width, height;
     int i, nargs, verbose, err;
 
@@ -207,7 +207,7 @@ int main(int argc, char *argv[])
                 printf("pnmccdred [-d darkim] [-s flatim]\n");
                 printf("          [-a addR,addG,addB] [-m mulR,mulG,mulB]\n");
                 printf("          [-w width] [-h height] [-b bg]\n");
-                printf("          in.ppm out.ppm\n");
+                printf("          in.pnm out.pnm\n");
                 exit(0);
                 break;
             case 'v':
@@ -242,13 +242,15 @@ int main(int argc, char *argv[])
                 printf("ERROR: unknown option\n");
                 exit(-1);
                 break;
+            default:
+                abort();
         }
     }
     
     /* read command line arguments */
     nargs = argc - optind;
     if (nargs != 2) {
-        printf("ERROR: need two arguments, try -u switch to show usage info\n");
+        printf("ERROR: missing arguments, try -u switch to show usage info\n");
         exit(-1);
     }
 

@@ -1,3 +1,11 @@
+airtools (3.1-1) experimental; urgency=medium
+
+  * Update to airfun.sh version 4.1
+  * Several small changes to airtools-gui and airtools-cli
+  * Improved portability of C programs pnm*.c
+
+ -- Thomas Lehmann <t_lehmann@freenet.de>  Sun, 08 Sep 2019 20:57:21 +0200
+
 airtools (3.1~alpha3-1) experimental; urgency=medium
 
   * Removed OpenJFX runtime library from airtools-gui.jar, handle Ubuntu 18.04

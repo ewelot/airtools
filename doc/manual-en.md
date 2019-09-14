@@ -94,7 +94,7 @@ Recommended additional settings (click “Settings” button):
 Booting Install Medium of the Xubuntu Linux distribution
 --------------------------------------------------------
 
-Download the ISO image file of the latest 64-bit Xubuntu LTS release from <http://xubuntu.org/>. Please note the LTS version label, which indicates a “Long Term Support” release. This Linux OS version is one of the well supported ones by the AIRTOOLS software. From the choosen mirror site you should download the ISO file with highest revision number. At the time of this writing it is named `xubuntu-18.04.2-desktop-i386.iso`.
+Download the ISO image file of the latest 64-bit Xubuntu LTS release from <http://xubuntu.org/>. Please note the LTS version label, which indicates a “Long Term Support” release. This Linux OS version is one of the well supported ones by the AIRTOOLS software. From the choosen mirror site you should download the ISO file with highest revision number. At the time of this writing it is named `xubuntu-18.04.3-desktop-amd64.iso`.
 
 The ISO file is used in place of a install medium for the virtual machine. To do so you have to start the VirtualBox software (if not running already) and press the “Settings” button of the selected virtual machine.
 
@@ -116,7 +116,7 @@ While the installation process has already started in the background you are ask
 
 You might find it convenient to be logged in automatically after booting the Linux virtual machine.
 
-Continue the installation process which will take a few minutes to complete. Finally you are asked to restart the (virtual) computer. Pressing the “Enter” key does automatically remove the installation medium for you, reboots the virtual machine (in virtualbox jargon the “guest” system) until you are finally logged in to the (initially small) Xubuntu Linux desktop. Please note the different sections of the VirtualBox guest application window: the virtual machine’s menu bar at the top, a status bar at the bottom and the virtual screen of the Linux Desktop in between.
+Continue the installation process which will take a few minutes to complete. Finally you are asked to restart the (virtual) computer. Make sure to press the “Enter” key to remove the installation medium before next reboot. If for any reason the ISO file is not “ejected” from the virtual CDROM drive the reboot starts again from the installation medium. You should abort this process by powering off the virtual machine and remove the ISO manually from within the Virtualbox Manager application. The virtual machine (in virtualbox jargon the “guest” system) will now boot the installed Linux OS from the virtual disk and automatically logs in to the Xubuntu Linux desktop. Please note the different sections of the VirtualBox guest application window: the virtual machine’s menu bar at the top, a status bar at the bottom and the virtual screen of the Linux Desktop in between.
 
 If your host computer is using a network proxy which requires user authentication to access the internet then you might be faced by a message window stating “Incomplete Language Support”. It is save to skip the update until later as it is not required by the AIRTOOLS software.
 
@@ -125,7 +125,7 @@ At any time the “Software Updater” might pop up with the information about a
 Xubuntu Desktop Basics
 ----------------------
 
-On the top of the desktop screen there is a (dark) desktop panel. If you click on the small icon on the left of this panel (it uses the Xubuntu logo which mimics the head of a mouse) the main application menu pops up. From there you can start programs, tweak several desktop settings, log out and shutdown the virtual Linux system. Note the lovation of the “Log out” icon at bottom-right of the menu, which is also used to shutdown or restart the Linux OS. Get familiar with how to start the web browser and the file manager and how to shutdown the Linux OS.
+On the top of the desktop screen there is a (dark) desktop panel. If you click on the small icon on the left of this panel (it uses the Xubuntu logo which mimics the head of a mouse) the main application menu pops up. From there you can start programs, tweak several desktop settings, log out and shutdown the virtual Linux system. Note the location of the “Log out” icon at bottom-right of the menu, which is also used to shutdown or restart the Linux OS. Get familiar with how to start the web browser and the file manager and how to shutdown the Linux OS.
 
 For additional information please consult the official [Xubuntu Documentation](https://docs.xubuntu.org/1804/) or other tutorials on the web. Please keep in mind that you do not have to worry about any hardware specific setups in your Linux system (or for example network connection) because all communication to the real devices of the host computer is transparently handled by the VirtualBox drivers.
 
@@ -149,13 +149,21 @@ After a restart of the Linux virtual machine you may adjust the guest window siz
 Installing the AIRTOOLS software
 --------------------------------
 
-The AIRTOOLS project is hosted at <https://github.com/ewelot/airtools> where you can find the latest source code and documentation. Pre-compiled binary packages are build for several Debian based Linux distributions (e.g. Xubuntu) and can easily be installed by the following steps:
+The AIRTOOLS project is hosted at <https://github.com/ewelot/airtools> where you can find the latest source code and documentation. Pre-compiled binary packages are build for several Debian based Linux distributions (e.g. Xubuntu) and can easily be installed by running an install script.
 
--   Download the [install script](https://github.com/ewelot/airtools/raw/master/install_deb.sh) by pressing the right mouse button on this link and selecting “Save Link As”.
+The download of the installer requires a few more steps than usual, because you will fetch it from a GitHub source repository:
+
+-   From within the Linux virtual machine start the web browser and open the project page at <https://github.com/ewelot/airtools>.
+-   Locate the install script `install_deb.sh` within the source tree and click on it.
+-   On the top-right of the displayed script source locate the button labeled “Raw”, click it with right mouse button and select “Save Link As” which will download the installer file.
+
+You run the installer by following the next steps:
+
 -   Open the file manager (e.g. double-click the “Home” icon on the desktop).
 -   Open the “Downloads” folder which should contain the previously downloaded file `install_deb.sh`.
 -   Open the “File” menu of the file manager and choose “Open Terminal Here”. A new terminal window will pop up, ready to enter commands to be executed.
--   Enter the following command to start the install script (you will be prompted for your password first): `sudo bash install_deb.sh`
+-   Enter the following command on a single line: `sudo bash install_deb.sh`
+-   You must provide your password before the installation is started.
 
 Upon first installation of the AIRTOOLS software the script will download many other required software packages from the official Xubuntu repository. This might take a few minutes depending on the bandwidth of your internet connection. At the end of the installation you will receive some log messages about success (or failure) in the terminal window. A log file is created for later reference and a new icon is showing up on your Linux desktop.
 
@@ -283,6 +291,8 @@ Save your edits and close the text editor. Remember that for any subsequent new 
 
 Raw Images and Image Set Definition
 -----------------------------------
+
+TODO: - Description of supported RAW formats - Notes about FITS header keywords
 
 Now it is time to copy your raw images to the project’s raw directory within the Linux file system. There are different solutions to handle the file transfer between the host operating system and a VirtualBox guest. We suggest using an external USB pen drive or USB disk for this purpose.
 

@@ -11,7 +11,7 @@ VINFO="T. Lehmann, Mar. 2019"
 PINFO="\
     options:
       h         show this help text
-      l         prefer java program from users bin directory
+      l         prefer airtools-gui.jar from users bin directory
       args      program arguments passed over to java program
 "
 CHANGELOG="
@@ -56,12 +56,12 @@ test "$showhelp" &&
 
 # find program jar file
 prog=""
-test -e "$datadir/$jar" && prog="$datadir/$jar"
-if [ "$prefer_local_bin" ]
+if [ -z "$prog" ] && [ "$prefer_local_bin" ]
 then
     test -e $HOME/bin/$jar      && prog=$HOME/bin/$jar
     test -e $HOME/bin/home/$jar && prog=$HOME/bin/home/$jar
 fi
+test -z "$prog" && test -e "$datadir/$jar" && prog="$datadir/$jar"
 if [ -z "$prog" ]
 then
     msg="Unable to find $jar"

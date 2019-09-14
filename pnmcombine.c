@@ -158,7 +158,7 @@ void pnmcombine (
 int main(int argc, char *argv[])
 {
     enum function function;
-    char opt;
+    int opt;
     char *clist, *mlist, *alist, *str;
     char **painFileName;
     char *poutFileName;
@@ -175,8 +175,14 @@ int main(int argc, char *argv[])
 
     /* read command line options */
     function = FN_MEAN;
-    while((opt = getopt(argc, argv, "dsc:m:a:")) != -1) {
+    while((opt = getopt(argc, argv, "udsc:m:a:")) != -1) {
         switch(opt) {
+            case 'u':
+                printf("usage:\n");
+                printf("pnmcombine [-d|s] [-a addR,addG,addB] [-m mulR,mulG,mulB]\n");
+                printf("          in1.pnm in2.pnm ... out.pnm\n");
+                exit(0);
+                break;
             case 'd': function = FN_MEDIAN;
                 break;
             case 's': function = FN_STDDEV;
@@ -195,9 +201,15 @@ int main(int argc, char *argv[])
                 break;
             case '?': pm_error("unknown option %c\n", optopt);
                 break;
+            default:
+                abort();
         }
     }
     nargs = argc - optind;
+    if (nargs < 3) {
+        printf("ERROR: missing arguments, try -u switch to show usage info\n");
+        exit(-1);
+    }
     
     /* TODO: handle option "-h" to show usage info */
 
