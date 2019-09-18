@@ -1,18 +1,17 @@
 
 # Astronomical Image Reduction TOOLSet
 
-AIRTOOLS is a collection of programs to aim at astronomical image reduction
-of both CCD and DSLR observations on Linux. The main tasks are implemented as
-shell functions (bash) in a file airfun.sh. These functions are build
-around many tools readily available on most Linux desktops, including
+AIRTOOLS is a softawre for astronomical image reduction
+of both CCD and DSLR observations on Linux. A graphical user interface is
+build on top of command-line programs which combine a large number of
+tools readily available on most Linux desktops, including
 ImageMagick, GraphicsMagick, Netpbm, WCSTools, Gnuplot.
 
-The primary intention of the airtools software is the photometric analysis
-of comet observations. New procedures were developed to measure the total coma
-brightness. Those image processing steps are easily accessible by means of
-analysis tasks in the SAOImage display GUI.
+The primary intention of the software is the photometric analysis
+of comet observations. A new approach by means of large aperture photometry
+allows to measure the total coma brightness in a consistent way.
 
-The underlying shell functions make use of powerful third party software
+The underlying AIRTOOLS programs make use of powerful third party software
 commonly used in professional astronomy:
 - [SAOImage DS9](http://ds9.si.edu/site/Home.html): image display, catalog
   viewer and analysis GUI
@@ -24,18 +23,16 @@ commonly used in professional astronomy:
 - [Cexamples](http://heasarc.gsfc.nasa.gov/docs/software/fitsio/cexamples.html):
   basic FITS routines
 
-<img src="doc/images/splash.png" alt="AIRTOOLS in action" width="800" />
+<img src="doc/images/splash.png" alt="AIRTOOLS in action" width="900" />
 (Screenshot of an AIRTOOLS session)
 
 ## Documentation
 
-**NEW**: A [german user manual](doc/manual-de.md) has been added recently. It
-covers all aspects from installation to using the provided AIRTOOLS tasks for
-comet photometry.
+**NEW (Sep. 2019)**: A preliminary [user manual](doc/manual-en.md) has been added.
+It features an in depth installation guide for all users, including those
+running a Windows or MacOS X operating system.
 
-Users which do not speak german can use the following documentation:
-- [README.Windows](doc/README.Windows.md): which has instructions on preparing
-  a computer running Windows operating system or MacOS X
-- [INSTALL](INSTALL.md): Installation instructions for the AIRTOOLS software
-- [GettingStarted](doc/GettingStarted.txt) text file for
-  basic information on how to start AIRTOOLS tasks after installation.
+Video tutorials of typical AIRTOOLS sessions are in preparation. For
+illustrative purposes an older tutorial covering the comet extraction and
+photometry part using a previous AIRTOOLS version is still available
+[here](https://www.youtube.com/watch?v=sK9D_M06ovA).

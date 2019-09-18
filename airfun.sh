@@ -22,12 +22,15 @@ CHANGELOG
             missing instead of progressing to the next image set
         * AIbgmap, AIsfit: added option -c to fit a parabolic surface with
             arbitrary center offset (experimental)
+        * AIlist: recognize more header keywords to list on output
+        * AIflat: improved error handling
         * ds9cmd nostars: match any object within selected (red) regions
         * itel2obs, get_itel_telid: adjusted to comply with newer entries in
             iTelescope log files
         * get_cobs: bugfix to correctly handle start date
         * phot2icq: for short tail lengths print value in arcminutes, comments
             reordered to comply with COBS standards
+        * set LC_NUMERIC=C globally, assumed e.g. by printf and sort commands
         * new functions: get_xephemdb gplinfit icqplot
         * new dependency on airfun.py (used by icqplot)
 
@@ -1583,6 +1586,12 @@ CHANGELOG
 
 
 #------------------------
+#   language settings
+#------------------------
+LC_NUMERIC=C
+
+
+#------------------------
 #   program aliases
 #------------------------
 load_aliases () {
@@ -1658,6 +1667,9 @@ AIcheck_ok () {
         echo "# operating system information:"
         uname -a
         lsb_release -a
+        echo
+        echo "# language settings"
+        locale
         echo
         
         str="imagemagick|graphicsmagick|gnuplot|plplot|parallel"
@@ -3155,7 +3167,7 @@ cometcenter () {
     test ! "$AI_DEBUG" && opts="-q"
     AI_MAGZERO=$mzero AIsource $opts -2 -o $tmpsrc $tmpim1 "${use_isophotes}" 5 128
     regfilter $tmpsrc $tmpreg | sexselect - "" "" "" "" "" 99 | grep -v "^#" | \
-        LANG=C sort -n -k7 > $tmpdat
+        sort -n -k7 > $tmpdat
     test "$AI_DEBUG" && head -5 $tmpdat >&2
     # TODO: check for some reasonable object fwhm>2px
     if [ -s $tmpdat ]
@@ -3166,7 +3178,7 @@ cometcenter () {
         fy1=$3
         crad=$(echo $6 | awk '{printf("%.1f", $1/2)}')
         cmag=$7
-        LANG=C printf "# object=%.1f,%.1f fwhm=%.1f mag=%.1f\n" $fx1 $fy1 $crad $cmag >&2
+        printf "# object=%.1f,%.1f fwhm=%.1f mag=%.1f\n" $fx1 $fy1 $crad $cmag >&2
         xysource=$fx1","$fy1
     else
         # no source found
@@ -3277,7 +3289,7 @@ cometcenter () {
 global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" \
 select=1 highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 include=1 source=1
 physical"
-    LANG=C printf "circle(%.2f,%.2f,%.1f) # text={%.1f %s}\n" \
+    printf "circle(%.2f,%.2f,%.1f) # text={%.1f %s}\n" \
         $(xy2fits -i $tmpim1 $x1 $y1) $crad $cmag ${method:0:3}
     
     # optionally create check image and shifted region file
@@ -3300,12 +3312,12 @@ physical"
         cp $coreg $tmpreg
         
         # cross at center position
-        LANG=C printf "point(%.2f,%.2f) # point=cross color=yellow text={%s}\n" \
+        printf "point(%.2f,%.2f) # point=cross color=yellow text={%s}\n" \
             $(xy2fits -i $tmpim1 $x1 $y1) ${method:0:3} >> $tmpreg
         
         # circle showing sextractor source
         test "$xysource" &&
-            LANG=C printf "circle(%.2f,%.2f,%.1f)\n" $fx1 $fy1 $crad >> $tmpreg
+            printf "circle(%.2f,%.2f,%.1f)\n" $fx1 $fy1 $crad >> $tmpreg
         
         # shift regions to match small image
         regshift $tmpreg -$xoff -$((h-yoff-csize)) > $ccreg
@@ -4071,8 +4083,8 @@ omove2trail () {
         get_jd_dmag $set > $tmpdat
         test ! -s $tmpdat && echo "ERROR: unknown duration of image sequence" >&2 && return 255
         
-        jd1=$(grep -v "^#" $tmpdat | LANG=C sort -n -k 2,2 | head -1 | awk '{printf("%s", $2)}')
-        jd2=$(grep -v "^#" $tmpdat | LANG=C sort -n -k 2,2 | tail -1 | awk '{printf("%s", $2)}')
+        jd1=$(grep -v "^#" $tmpdat | sort -n -k 2,2 | head -1 | awk '{printf("%s", $2)}')
+        jd2=$(grep -v "^#" $tmpdat | sort -n -k 2,2 | tail -1 | awk '{printf("%s", $2)}')
         duration=$(echo $jd1 $jd2 | awk '{printf("%.1f", ($2-$1)*24*60)}')
         test "$AI_DEBUG" &&
             echo "# DEBUG $FUNCNAME: duration=$duration" >&2
@@ -4160,7 +4172,7 @@ FocalLength|SRFocalLength"
 
         test "$gpsinfo" && filter="$filter|GPSTimeStamp|GPSLatitude|GPSLongitude\
 |GPSAltitude|GPSSatellites|GPSTrack|GPSImgDirection|PitchAngle|RollAngle"
-        LANG=C exiftool -S -c "%.5f" "$1" | grep -wE "$filter" | awk -v tzoff=$tzoff 'BEGIN{
+        exiftool -S -c "%.5f" "$1" | grep -wE "$filter" | awk -v tzoff=$tzoff 'BEGIN{
             fn="-"; fl="-"; ms=0; temp="-"; black="-"; mode="-"
             gtime="-"; lat="-"; lon="-"; alt=-1; sat=-1; trck=-1; az=-1; pitch=-1; roll=-1}
         {
@@ -4311,7 +4323,7 @@ exiv2hdr () {
 
     echo "imnum=$(basename $img | sed -e 's/.[a-zA-Z]*$//')"
     echo "object=$obj"
-    LANG=C exiv2 -pa $img | awk -v j=$jd0 -v dt=$dt 'BEGIN{
+    exiv2 -pa $img | awk -v j=$jd0 -v dt=$dt 'BEGIN{
         fn="-"; fl="-"; ms=0; temp="-"; black="-"; mode="-"}
     {
         if ($1=="Exif.Image.DateTime")          hms=$5
@@ -4435,9 +4447,9 @@ minmax () {
     local tmp1=$(mktemp "/tmp/tmp_dat_$$.XXXXXX")
     cat $fname > $tmp1
     min=$(grep -v "^#" $tmp1 | awk -v c=$col '{print 1*$c}' | \
-        LANG=C sort -n | head -1)
+        sort -n | head -1)
     max=$(grep -v "^#" $tmp1 | awk -v c=$col '{print 1*$c}' | \
-        LANG=C sort -nr | head -1)
+        sort -nr | head -1)
     echo $min $max
     rm $tmp1
 }
@@ -4478,7 +4490,7 @@ median () {
     n=$(cat $tmp1 | wc -l)
     test $n -eq 0 && echo "ERROR: no data to compute median from." >&2 && return 255
     cat $tmp1 | awk -v c=$col '{printf("%.15g\n", 1*$c)}' | \
-        LANG=C sort -n | awk -v n=$(((n+1)/2)) '{if(NR==n) printf("%s\n", $0)}'
+        sort -n | awk -v n=$(((n+1)/2)) '{if(NR==n) printf("%s\n", $0)}'
     rm $tmp1
 }
 
@@ -4508,7 +4520,7 @@ normstat () {
     local debug
     
     test "$AI_DEBUG" && test $AI_DEBUG -gt 1 && debug="yes"
-    cat $fname | grep -v "^#" | LANG=C sort -n -k$col,$col | \
+    cat $fname | grep -v "^#" | sort -n -k$col,$col | \
     awk -v c=$col -v debug="$debug" '{
         count++;
         val[count]=1*$c
@@ -4541,7 +4553,7 @@ _stat () {
     local fname=${1:-"-"}
     local col=${2:-"1"}
 
-    cat $fname | grep -v "^#" | LANG=C sort -n -k$col,$col | \
+    cat $fname | grep -v "^#" | sort -n -k$col,$col | \
         awk -v c=$col -v m=$method '{
             count++;
             val[count]=1*$c
@@ -4603,7 +4615,7 @@ kappasigma () {
     
     grep -v "^#" $fname | awk -v c=$col -v z=${do_nonzero:-0} '{
         x=1*$c; if ((x>0) || (z==0)) print x}' | \
-        LANG=C sort -n > $tmp1
+        sort -n > $tmp1
     n=$(cat $tmp1 | wc -l)
     test $n -lt 5 &&
         echo "ERROR: too few data samples (n<5)." >&2 && return 255
@@ -4623,7 +4635,7 @@ kappasigma () {
         }' > $tmp2
         n2=$(cat $tmp2 | wc -l)
         test "$verbose" &&
-            LANG=C printf "# i=%d  md=%.1f sd=%.1f  skip=%d\n" $i $md $sd $((n-n2)) >&2
+            printf "# i=%d  md=%.1f sd=%.1f  skip=%d\n" $i $md $sd $((n-n2)) >&2
         test $n2 -lt 4 &&
             echo "ERROR: too few data samples (n2<4)." >&2 && return 255
         test $n2 -eq $n1 && break
@@ -4681,7 +4693,7 @@ roi2geom () {
         if (NR>1) {
             printf("%s %s\n", $cl, $cw"x"$ch"+"$cx"+"$cy)
         }
-    }' | tr ':' ' ' | cut -d ' ' -f4 | LANG=C sort -t "+" -n -k 2,2 -u
+    }' | tr ':' ' ' | cut -d ' ' -f4 | sort -t "+" -n -k 2,2 -u
 
     rm $tmp1
 }
@@ -5010,7 +5022,7 @@ map_rawfiles () {
         if [ "$AI_RAWDIR" ] && [ -d $AI_RAWDIR ]
         then
             x=$(ls $AI_RAWDIR/[0-9][0-9][0-9][0-9].* 2>/dev/null | grep -v "^0000" | \
-                LANG=C sort | tail -1 | cut -d "." -f1)
+                sort | tail -1 | cut -d "." -f1)
             test "$x" && test "$x" \> "$nmax" && nmax=$x
             test "$verbose" && echo "# AI_RAWDIR: x=$x nmax=$nmax" >&2
         fi
@@ -5026,7 +5038,7 @@ map_rawfiles () {
             esac
 
             x=$(grep -v "^#" $f | awk -v i=$cidx '{if($i~/^[0-9]{4}$/) {printf("%s\n", $i)}}' | \
-                LANG=C sort | tail -1)
+                sort | tail -1)
             test "$x" && test "$x" \> "$nmax" && nmax=$x
             test "$verbose" && echo "# $(basename $f): x=$x nmax=$nmax" >&2
         done
@@ -5076,7 +5088,7 @@ map_rawfiles () {
         temp=$(get_header -q $tmphdr CCD-TEMP | awk '{printf("%.0f", 1*$1)}')
         test -z "$temp" && temp="-"
         echo $d$b $tstart $texp $jd $w $h $temp
-    done | LANG=C sort -n -k4,4 > $tmpdat
+    done | sort -n -k4,4 > $tmpdat
     test "$AI_DEBUG" && echo "# tmpdat=$tmpdat" >&2
     test ! -s $tmpdat &&
         echo "ERROR: no raw images found." >&2 &&
@@ -5096,7 +5108,7 @@ map_rawfiles () {
         test "${REPLY:0:1}" == "#" && continue
         i=$((i+1))
         # fields are: fname tstart texp jd w h temp
-        LANG=C printf "%04d %-"$len"s %8s %6.1f %.5f %4d %4d %s\n" $i $REPLY
+        printf "%04d %-"$len"s %8s %6.1f %.5f %4d %4d %s\n" $i $REPLY
     done < $tmpdat
     
     rm -f $tmphdr $tmpdat
@@ -6074,9 +6086,9 @@ get_mpcephem () {
         test $nval -eq 26 && shift 11
         dr=$1; pa=$2; mphase=$6; mdist=$7; malt=$8
         set_header $hdr AI_COAZI=$3 AI_COALT=$4
-        set_header $hdr AI_OMOVE="$(LANG=C printf "%.1f@%.1f" $dr $pa)/Object motion on sky per hour"
+        set_header $hdr AI_OMOVE="$(printf "%.1f@%.1f" $dr $pa)/Object motion on sky per hour"
         set_header $hdr AI_MOP="$mphase/Moon phase" AI_MOD="${mdist##+(0)}/Moon distance angle" AI_MOALT="$malt/Moon altitude"
-        #str=$(LANG=C printf "%s %s %s %s  %.1f@%.1f  %.2f %3g %s\n" \
+        #str=$(printf "%s %s %s %s  %.1f@%.1f  %.2f %3g %s\n" \
         #    $hdr $ra $de $alt  $dr $pa  $mphase $mdist $malt)
         #AIsetkeys "$str" AI_CORA AI_CODEC AI_COALT AI_OMOVE AI_MOP AI_MOD AI_MOALT
     fi
@@ -6338,7 +6350,7 @@ photplot () {
     for x in $xlist
     do
         set - $(get_header -q -s $hdr AP_PCAT$x,AP_PCOL$x,AP_CIND$i)
-        test "${verbose}${AI_DEBUG}" && LANG=C printf "# $x %-6s %s %s\n" $1 $2 $3
+        test "${verbose}${AI_DEBUG}" && printf "# $x %-6s %s %s\n" $1 $2 $3
         test "$1" == "$catalog" && test "$2" == "$color" && aidx=$x
     done
     test -z "$aidx" &&
@@ -6653,8 +6665,8 @@ f InT APERTURcamchip SFW C ## u.uu xx.x PIXELSIZE       guideline
                 then
                     camchip=$(AI_TELESCOPE=$tel get_param camera.dat camchip xxx)
                     test "$camchip" == "-" && camchip=""
-                    str=$(LANG=C printf "%4.1fs%4.1f" $pixscale $pixscale)
-                    ccdinfo=$(LANG=C printf "I     C%5.2fm%-7s %-3s %1s %12s %9s" $coma "${camchip/[,_\/]/ }" $sfwkey $calib "" "$str")
+                    str=$(printf "%4.1fs%4.1f" $pixscale $pixscale)
+                    ccdinfo=$(printf "I     C%5.2fm%-7s %-3s %1s %12s %9s" $coma "${camchip/[,_\/]/ }" $sfwkey $calib "" "$str")
                 else
                     ccdinfo="      "
                 fi
@@ -6815,10 +6827,10 @@ icqsort () {
     test "$dat" == "-" && dat=/dev/stdin
     grep "[0-9]" $dat | grep -v "^#" | grep -n "." > $tmpdat
     grep "[0-9]" $tmpdat | grep -v "^#" | cut -c $tchars | grep -n "." > $tmpkey
-    cat $tmpkey | LANG=C sort $sortopts -t ":" -k2,99 | cut -d ":" -f1 | while read lnum
+    cat $tmpkey | sort $sortopts -t ":" -k2,99 | cut -d ":" -f1 | while read lnum
     do
         grep "^$lnum:" $tmpdat | cut -d ":" -f2-
-    done | LANG=C sort -s -t "|" -k1.1,1.11
+    done | sort -s -t "|" -k1.1,1.11
     rm -f $tmpdat $tmpkey
 }
 
@@ -7192,14 +7204,14 @@ comet_lightcurve () {
     if [ "$do_all_data" ]
     then
         startymd=$(grep -v "^#" $tmpobs | \
-            LANG=C sort -t ',' -k3,3 | head -1 | awk -F ',' '{printf("%d", int($3))}')
+            sort -t ',' -k3,3 | head -1 | awk -F ',' '{printf("%d", int($3))}')
         endymd=$(grep -v "^#" $tmpobs | \
-            LANG=C sort -t ',' -k3,3 | tail -1 | awk -F ',' '{printf("%d", int($3)+1)}')
+            sort -t ',' -k3,3 | tail -1 | awk -F ',' '{printf("%d", int($3)+1)}')
     else
         startymd=$(grep -E "^dslr,|^ccd," $tmpobs | \
-            LANG=C sort -t ',' -k3,3 | head -1 | awk -F ',' '{printf("%d", int($3))}')
+            sort -t ',' -k3,3 | head -1 | awk -F ',' '{printf("%d", int($3))}')
         endymd=$(grep -E "^dslr,|^ccd," $tmpobs | \
-            LANG=C sort -t ',' -k3,3 | tail -1 | awk -F ',' '{printf("%d", int($3)+1)}')
+            sort -t ',' -k3,3 | tail -1 | awk -F ',' '{printf("%d", int($3)+1)}')
     fi
     if [ -z "$startymd" ]
     then
@@ -7326,7 +7338,7 @@ comet_lightcurve () {
     done > $tmpmpc
     test "$AI_DEBUG" && wc -l $tmpmpc >&2
     # determine distance range
-    drange=$(LANG=C sort -n -t ',' $tmpmpc -k3,3 | awk -F ',' '{
+    drange=$(sort -n -t ',' $tmpmpc -k3,3 | awk -F ',' '{
         if(NR==1) x=$3} END {y=$3; m=(y-x)/10; printf("%f:%f", x-m, y+m)}')
     dinter=$(echo $drange | awk -F ':' '{dr=$2-$1; x=0.1
         if(dr>0.6)  x=0.2
@@ -7899,7 +7911,7 @@ icqplot () {
         # x axis is date/time
         xcol=2
         # determine start, end and number of days
-        cat $tmpdat1 | awk '{printf("%s\n", $1)}' | LANG=C sort -n > $tmpdat2
+        cat $tmpdat1 | awk '{printf("%s\n", $1)}' | sort -n > $tmpdat2
         min=$(head -1 $tmpdat2)
         max=$(tail -1 $tmpdat2)
         # apply xrange
@@ -7963,7 +7975,7 @@ icqplot () {
         xcol=12
         # TODO: split into pre-/post-perihelion plots
         cat $tmpdat1 | awk -v xcol=$xcol '{printf("%s\n", $xcol)}' | \
-            LANG=C sort -n > $tmpdat2
+            sort -n > $tmpdat2
         min=$(head -1 $tmpdat2)
         max=$(tail -1 $tmpdat2)
         span=$(echo $max $min | awk '{print $1/$2}')
@@ -8065,7 +8077,7 @@ icqplot () {
     then
         g=$(echo $afit | awk -F ',' '{print $1}')
         k=$(echo $bfit | awk -F ',' '{print $1/2.5}')
-        fitlabel=$(LANG=C printf "Model Fit: m_0=%.1f n=%.1f" $g $k)
+        fitlabel=$(printf "Model Fit: m_0=%.1f n=%.1f" $g $k)
         num=100; nskip=3 # note: skip first and last 3 point
         test $span -lt 180 && num=60; nskip=2
         test $span -lt 100 && num=30; nskip=1
@@ -9114,13 +9126,13 @@ _regstat () {
         }
     }' > $tmp1
     # region boundary in image coordinates
-    xmin=$(LANG=C sort -n -k1,1 $tmp1  | head -1 | awk -v w=$w '{
+    xmin=$(sort -n -k1,1 $tmp1  | head -1 | awk -v w=$w '{
         x=$1-1.0; if(x<0) x=0; if(x>w) x=w; printf("%.0f",x)}')
-    xmax=$(LANG=C sort -nr -k1,1 $tmp1 | head -1 | awk -v w=$w '{
+    xmax=$(sort -nr -k1,1 $tmp1 | head -1 | awk -v w=$w '{
         x=$1;     if(x<0) x=0; if(x>w) x=w; printf("%.0f",x)}')
-    ymin=$(LANG=C sort -nr -k2,2 $tmp1 | head -1 | awk -v h=$h '{
+    ymin=$(sort -nr -k2,2 $tmp1 | head -1 | awk -v h=$h '{
         y=h-$2;     if(y<0) y=0; if(y>h) y=h; printf("%.0f",y)}')
-    ymax=$(LANG=C sort -n -k2,2 $tmp1  | head -1 | awk -v h=$h '{
+    ymax=$(sort -n -k2,2 $tmp1  | head -1 | awk -v h=$h '{
         y=h-$2+1.0; if(y<0) y=0; if(y>h) y=h; printf("%.0f",y)}')
     dx=$((xmax-xmin))
     dy=$((ymax-ymin))
@@ -12919,7 +12931,7 @@ AIpeak () {
         #max=$(AIval $grayimg $bsize $bsize $xi $yi | sort -n | tail -1)
         max=$(gm convert $grayimg -crop ${bsize}x${bsize}+${xi}+${yi} - | \
             pnmnoraw | sed '1,3d' | tr ' ' '\n' | sort -n | tail -1)
-        LANG=C printf "%-8s %5d %4.2f %4.2f %5.2f\n" $id $((max-bgval)) $a $f $m
+        printf "%-8s %5d %4.2f %4.2f %5.2f\n" $id $((max-bgval)) $a $f $m
     done > $tmp2
     mc=$(median $tmp2 5)
     ic=$(median $tmp2 2)
@@ -13217,8 +13229,8 @@ AIexamine () {
     h=$((sh-80))
     test $h -gt 1200 && h=1200
     case "$small" in
-        0)  w=$((h-150));;
-        1)  h=$((h*75/100)); w=$((h-100));;
+        0)  w=$((h-130));;
+        1)  h=$((h*75/100)); w=$((h-90));;
         *)  h=$((h*58/100)); w=$((h-50));;
     esac
     test $w -lt 480 && w=480
@@ -13701,7 +13713,7 @@ AIimcompare () {
         # TODO: determine rlim
         sexselect -r $tmpscat "" 0.03 500  "" "" 0 > $tmp1
         grep -v "^circle(" $tmp1 > $tmpreg
-        grep "^circle(" $tmp1 | LANG=C sort -n -k4,4 | \
+        grep "^circle(" $tmp1 | sort -n -k4,4 | \
             awk -v mh=$mhigh '{if(1*$4>mh)print $0}' | head -15 >> $tmpreg
         AIaphot $tmpref $tmpreg $aprad 4 > $tmp1
         AIaphot $tmpim1 $tmpreg $aprad 4 > $tmp2
@@ -15007,6 +15019,7 @@ AIflat () {
     local scale
     local flip
     local opts
+    local skipset
 
     test "$showhelp" &&
         echo "usage: AIflat [-b] [-s] [set]" >&2 &&
@@ -15016,6 +15029,7 @@ AIflat () {
         echo "ERROR: badpix file $bad is missing." >&2 &&
         return 1
 
+    skipset=""
     while read ltime sname target type texp n1 n2 nref dark flat x
     do
         (echo "$ltime" | grep -q "^#") && continue
@@ -15024,9 +15038,9 @@ AIflat () {
         (! is_integer "$n1" || ! is_integer "$n2") && continue
         
         test ! "$dark" &&
-            echo "ERROR: set $sname has no dark defined." && continue
+            echo "ERROR: set $sname has no dark defined." && skipset=1 && continue
         test ! -f "$dark".pgm &&
-            echo "ERROR: dark image $dark.pgm for set $sname not found." && continue
+            echo "ERROR: dark image $dark.pgm for set $sname not found." && skipset=1 && continue
         
         is_dark_subtracted=""
         test "$(AIsetinfo $sname | awk '{print $11}')" == "0" &&
@@ -15037,7 +15051,7 @@ AIflat () {
         n=$(cat $imlist | wc -l)
         test ! "$do_simple" && test $n -lt 6 &&
             echo "ERROR: set $sname has too few images ($n < 6)." &&
-            rm $imlist && continue
+            rm $imlist && skipset=1 && continue
         
         ext="ppm"
         fname=$(head -1 $imlist | awk '{print $3}')
@@ -15246,6 +15260,8 @@ AIflat () {
         done < $imlist
     done < $sdat
     rm -f $imlist $statfile $tmpim $tmpdark $tmpmean $mask
+    test "$skipset" && return 255
+    return 0
 }
 
 
@@ -16117,10 +16133,10 @@ END     " > $ahead
         sexselect -f $coloropt $refcat "" $magerrlim "" "" "*" 0 | \
             addldacwcs - $ahead > $refldac
         # bright sources in central region used by photometric calibration
-        sexselect $refldac "" "" $rmax | LANG=C sort -n -k7,7 | \
+        sexselect $refldac "" "" $rmax | sort -n -k7,7 | \
             grep -v "^#" | (head -$nbright; dd of=/dev/null status=none) > $xyref
         x=$(tail -1 $xyref | awk -v m=$mdiff '{printf("%.2f", m+$7)}')
-        sexselect $refldac $x "" $rmax | LANG=C sort -n -k7,7 | \
+        sexselect $refldac $x "" $rmax | sort -n -k7,7 | \
             grep -v "^#" > $xyref
         
         # add required columns to WCS reference catalog
@@ -16346,7 +16362,7 @@ END     " > $ahead
                 awk -v p=$pscale '{printf("%.2f", (10-$2)/p)}')
             sy=$(grep "^CRVAL2" ${acat%.*}.head  | tr '=' ' ' | \
                 awk -v p=$pscale '{printf("%.2f", $2/p)}')
-            da=$(grep "^CD._" ${acat%.*}.head  | tr '=' ' ' | LANG=C sort | \
+            da=$(grep "^CD._" ${acat%.*}.head  | tr '=' ' ' | sort | \
                 awk '{print $2}' | tr '\n' ' ' | awk '{
                     pi=3.141592653
                     r1=180/pi*atan2($2, -$1)
@@ -16373,10 +16389,10 @@ END     " > $ahead
             
             # determine mag offset from bright sources
             #test $num == "0001" && echo sexselect $inldac "" "" $rmax ";" $xyref && return 1
-            sexselect $inldac "" "" $rmax | LANG=C sort -n -k7,7 | \
+            sexselect $inldac "" "" $rmax | sort -n -k7,7 | \
                 grep -v "^#" | (head -$nbright; dd of=/dev/null status=none) > $xydat
             x=$(tail -1 $xydat | awk -v m=0.1 '{printf("%.2f", m+$7)}')
-            sexselect $inldac $x "" $rmax | LANG=C sort -n -k7,7 | \
+            sexselect $inldac $x "" $rmax | sort -n -k7,7 | \
                 grep -v "^#" > $xydat
 
             echo "" > $tmp1
@@ -16388,7 +16404,7 @@ END     " > $ahead
                 mref=$(grep "^[ ]*$idref " $xyref | awk '{print $7}')
                 mm=$(grep "^[ ]*$id " $xydat | awk -v mref=$mref '{printf("%.2f", (mref+$7)/2)}')
                 dm=$(grep "^[ ]*$id " $xydat | awk -v mref=$mref '{printf("%.2f", mref-$7)}')
-                LANG=C printf "%6s %6s  %5.2f  %5.2f\n" $idref $id $mm $dm
+                printf "%6s %6s  %5.2f  %5.2f\n" $idref $id $mm $dm
             done | sort -n -k3,3 | (head -$nmag; dd of=/dev/null status=none) > $tmp2
             if [ $nmag -lt 5 ]
             then
@@ -16404,7 +16420,7 @@ END     " > $ahead
             test "$rot180" && da=$(echo "$da + 180" | bc)
             line=$(printf "%s %s %4d %4d" $num $nref $nsrc $nhigh
             printf " %s %s %s %4d %3d" $a $e $fw $nmatch $nmag
-            LANG=C printf " %6.3f %6.2f %6.2f 0 %6.3f" $dm $sx $sy $da
+            printf " %6.3f %6.2f %6.2f 0 %6.3f" $dm $sx $sy $da
             printf " %s %s %s 0\n" $dmsd $sxsd $sysd)
             test $nsrc -lt 0 && echo "$line" >&2 # set already processed
             test $nsrc -ge 0 && echo "$line"
@@ -18444,7 +18460,7 @@ AIstack () {
             echo "ERROR: cannot determine jd from reference image header." >&2 &&
             retval=1 && continue
         # determine mean MJD_OBS (mean from all images)
-        jdmean=$(LANG=C printf "%.5f" $(get_jd_dmag $sname | mean - 2))
+        jdmean=$(printf "%.5f" $(get_jd_dmag $sname | mean - 2))
         test -z "$jdmean" &&
             echo "ERROR: cannot determine mean jd (from get_jd_dmag $sname)." >&2 &&
             retval=1 && continue
@@ -19261,7 +19277,7 @@ AIphotcal () {
                     echo "opts=$opts" >&2
                     wget -O $tmp1 "$url?$opts&outtype=1"
                     cat $tmp1 | awk -F ',' '{if ($6!~/NA/){print $0}}' | \
-                        LANG=C sort -t ',' -k6,6 | lines 5000 > phot/$setname.$catalog.dat;;
+                        sort -t ',' -k6,6 | lines 5000 > phot/$setname.$catalog.dat;;
             *)      mkrefcat -n 5000 $catalog $centerdeg $radius > phot/$setname.$catalog.dat;;
         esac
         test -z "before_150911" && case $catalog in
@@ -19343,7 +19359,7 @@ AIphotcal () {
             rade2xy phot/$setname.$catalog.dat $whead $catalog "$delim" > phot/$setname.$catalog.xy.dat
             #xy2reg $setname.$inext phot/$setname.$catalog.xy.dat > phot/$setname.$catalog.xy.reg
             #sexselect -r $scat "" 0.03 "$rlim" "$cxy" | grep "^circ" | \
-            #    LANG=C sort -n -k4,4 | head -$((nlim*2)) | reg2xy $setname.$inext - > $tmp1
+            #    sort -n -k4,4 | head -$((nlim*2)) | reg2xy $setname.$inext - > $tmp1
             xy2reg $setname.$inext phot/$setname.$catalog.xy.dat $xoff $(echo "-1 * $yoff" | bc) 10 \
                 > phot/$setname.$catalog.xy.reg
             refxydat=phot/$setname.$catalog.xy.dat
@@ -19351,7 +19367,7 @@ AIphotcal () {
         fi
         sexselect -f $scat "" $magerrlim "$rlim" "$cxy" | \
             regfilter - $refxyreg | sexselect -r - | \
-            grep "^circ" | LANG=C sort -n -k4,4 | lines $((nlim*2)) | \
+            grep "^circ" | sort -n -k4,4 | lines $((nlim*2)) | \
             reg2xy $setname.$inext - > $tmp1
 
         # match stars in photometric reference catalog
@@ -19363,7 +19379,7 @@ AIphotcal () {
         # sort by mag (from sextractor catalog)
         sort -k 1,1 $tmp1 > $tmp2
         grep -v '^#' phot/$setname.$catalog.match.dat | sort -k 9,9 | \
-            join -1 9 -2 1 - $tmp2 | LANG=C sort -n -k 15,15 | lines $nlim |
+            join -1 9 -2 1 - $tmp2 | sort -n -k 15,15 | lines $nlim |
             cut -d " " -f2- > $tmp1
         
         # do aperture photometry
@@ -19375,7 +19391,7 @@ AIphotcal () {
         test "$AI_DEBUG" && echo "AIphotmatch phot/$setname.$catalog.phot.dat" \
             "phot/$setname.$catalog.dat $catalog" >&2
         AIphotmatch phot/$setname.$catalog.phot.dat phot/$setname.$catalog.dat $catalog | \
-            LANG=C sort -n -k5,5 > phot/$setname.$catalog.xphot.dat
+            sort -n -k5,5 > phot/$setname.$catalog.xphot.dat
         test $? -ne 0 &&
             echo "ERROR: failed command: AIphotmatch phot/$setname.$catalog.phot.dat" \
             "phot/$setname.$catalog.dat $catalog" >&2 && return 255
@@ -19414,7 +19430,7 @@ AIphotcal () {
             # TODO: only use starlike sources
             echo "# determine gapcorr using brightest calibration stars"
             sexselect -r $scat "" $magerrlim "$rlim" "$cxy" | \
-                grep "^circ" | LANG=C sort -n -k4,4 | lines 50 | \
+                grep "^circ" | sort -n -k4,4 | lines 50 | \
                 awk -v f=$fwhm '{
                     x=$1; gsub(/[(),]/," ",x);
                     na=split(x,a," ")
@@ -19441,7 +19457,7 @@ AIphotcal () {
                 #echo "$skip" | grep -qw $1 && continue
                 grep -v "^#" x.phot$aprad.dat | awk -v l="$REPLY" -v c=$apcolumn '{
                     split(l,a); if($1!=a[1]) next; print $c" "a[c]-$c}'
-            done < x.phot$r.dat | LANG=C sort -n -k2,2 | sed '1,3d' > $tmp2
+            done < x.phot$r.dat | sort -n -k2,2 | sed '1,3d' > $tmp2
             gapcorr=$(median $tmp2 2)
             echo "r=$r  gapcorr=$gapcorr" >&2
         done
@@ -19468,10 +19484,10 @@ AIphotcal () {
                 nskip=$((2+nstars/80))
             grep -v "^#" phot/$setname.$catalog.xphot.dat | \
                 awk -v ca=$apcolumn '{printf("%s\n", $ca)}' | \
-                LANG=C sort -n | tail -$nlow | lines $((nlow-nskip)) > $tmp1
+                sort -n | tail -$nlow | lines $((nlow-nskip)) > $tmp1
             sd=$(stddev $tmp1)
             mlim=$(tail -1 $tmp1 | awk -v s=$sd '{printf("%.2f", $1+s+0.1)}')
-            str=$(LANG=C printf "sd=%.2f" $sd)
+            str=$(printf "sd=%.2f" $sd)
             echo "# setting mlim=$mlim  (stats: unused=$nskip, n=$((nlow-nskip)), $str)" >&2
         else
             mlim=99
@@ -19980,7 +19996,7 @@ AIpsfextract () {
     str="FWHM_IMAGE,MAG_AUTO,MAGERR_AUTO,FLAGS"
     # identify bright sources
     sexselect -x $scat "" 0.03 $rmax "$center" "NUMBER,X*,Y*,A*,$str" 0 | \
-         LANG=C sort -n -k6,6 | grep -v "^#" | lines $nbright > $tmpdat
+         sort -n -k6,6 | grep -v "^#" | lines $nbright > $tmpdat
     # determine median fwhm from bright sources
     set - $(kappasigma $tmpdat 5)
     fwhm=$(echo $1 | awk '{printf("%.2f", $1)}')
@@ -20117,8 +20133,8 @@ physical" > $tmpreg
 
     # determine intensity multiplier
     x=$(grep -v "^#" $psfphot | awk '{printf("%s\n%s\n%s\n", $4, $5, $6)}' | \
-        LANG=C sort -n | head -1)
-    dmag=$(echo $psfrgb | tr ',' '\n' | LANG=C sort -n | head -1 | \
+        sort -n | head -1)
+    dmag=$(echo $psfrgb | tr ',' '\n' | sort -n | head -1 | \
         awk -v x=$x '{printf("%.3f", $1-x)}')
     psfmult=$(dmag2di $dmag)
     echo "# psfmult=$psfmult"
@@ -20858,8 +20874,8 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
             done | tee -a $newphot
             # sorting newphot
             grep "^#" $newphot > $tmpdat1
-            grep "^[0-9]" $newphot | LANG=C sort -n -k1,1 >> $tmpdat1
-            grep -E -v "^#|^[0-9]" $newphot | LANG=C sort -k1,1 >> $tmpdat1
+            grep "^[0-9]" $newphot | sort -n -k1,1 >> $tmpdat1
+            grep -E -v "^#|^[0-9]" $newphot | sort -k1,1 >> $tmpdat1
             cp $tmpdat1 $newphot
             
         
@@ -21491,9 +21507,9 @@ AImapphot () {
         else
             mag=$4; npx=$6
         fi
-        LANG=C printf "%-8s %-6s %11.3f %9s" \
+        printf "%-8s %-6s %11.3f %9s" \
             $(basename $(dirname $hdr)) ${b%.*} $jd $center
-        LANG=C printf " %6d %4.0f %5.2f %3.0f %s %s\n" \
+        printf " %6d %4.0f %5.2f %3.0f %s %s\n" \
             $dkm $dasec $mag $npx $bgval $magzero
         
         if [ "$csize" ] && [ -e $ccreg ]
@@ -21906,10 +21922,10 @@ AIcosmics () {
         sexselect $scat > $tmpdat1
         n=$(grep -v "^#" $tmpdat1 | awk '{if ($8<0.03) print $0}' | wc -l)
         grep -v "^#" $tmpdat1 | awk '{if ($8<0.03) print $0}' | \
-            LANG=C sort -n -k7,7 | head -n $((n/2)) > $tmpdat2
+            sort -n -k7,7 | head -n $((n/2)) > $tmpdat2
         set - $(kappasigma $tmpdat2 4) $(kappasigma $tmpdat2 5) $(kappasigma $tmpdat2 6)
         fwhm=$5    
-        LANG=C printf "# a=%.2f +- %.2f  e=%.2f +- %.2f  fwhm=%.2f +- %.2f\n" $1 $2 $3 $4 $5 $6 >&2
+        printf "# a=%.2f +- %.2f  e=%.2f +- %.2f  fwhm=%.2f +- %.2f\n" $1 $2 $3 $4 $5 $6 >&2
         cat $tmpdat1 | awk -v a=$1 -v da=$2 -v e=$3 -v de=$4 -v f=$5 -v df=$6 'BEGIN{
             alim=0.9*a-4.0*da; elim=1.3*e+4.0*de; flim=0.9*f-3.0*df-0.2
             printf("# stars: a>=%.2f  e<=%.2f  fwhm>=%.2f\n", alim, elim, flim)
@@ -22300,9 +22316,9 @@ ds9cmd () {
                     set - $(echo "$REPLY" | regstat -g $img -)
                     # bgmean sd   area sum mean reg
                     test "$1" == "${1/,/}" &&
-                    LANG=C printf "%6.1f %5.1f  %6.0f %7.0f %6.1f # %s\n" $1 $2 $3 $4 $5 $6
+                    printf "%6.1f %5.1f  %6.0f %7.0f %6.1f # %s\n" $1 $2 $3 $4 $5 $6
                     test "$1" != "${1/,/}" &&
-                    LANG=C printf "%s %s  %6.0f %s %s # %s\n" \
+                    printf "%s %s  %6.0f %s %s # %s\n" \
                         "${1//,/ }" "${2//,/ }" "${3//,/ }" "${4//,/ }" "${5//,/ }" "$6"
                 done
                 echo ""
@@ -23444,10 +23460,10 @@ AIsetinfo () {
             test -z "$inst" && test "$flength" && test "$fratio" && inst="f=$flength,f/$fratio"
             test "$inst $AI_SITE" == "f=0.0,f/0 Weimar" && inst="GSO"
             test -z "$inst" && inst="-"
-            LANG=C printf "%-7s %-5s %-8s %s %011.3f %3s %2s %4.1f %4d %3.1f  %s %s\n" \
+            printf "%-7s %-5s %-8s %s %011.3f %3s %2s %4.1f %4d %3.1f  %s %s\n" \
             $(basename $(pwd)) $sname $target $pos $jdref $texp $nexp $rms $bg $fwhm $inst $AI_SITE
         else
-            LANG=C printf "%s %-8s %s  %-4s %4.0f %3.1f %4s %5.1f %2d %2s %4s  %s\n" \
+            printf "%s %-8s %s  %-4s %4.0f %3.1f %4s %5.1f %2d %2s %4s  %s\n" \
                 $sname $target $type $nref "$flength" "$fratio" $iso $texp $nexp $tsens $black $telid
         fi
     done < $sdat
@@ -23589,7 +23605,7 @@ AIlist () {
     local hopts=""
     
     (test "$showhelp") &&
-        echo "usage: AIlist.sh [-j] [-d airtoolsdir] [-n ndays] [-t telid] [-s site] [-p photcat] [-f fields] <target>" >&2 &&
+        echo "usage: AIlist [-j] [-d airtoolsdir] [-n ndays] [-t telid] [-s site] [-p photcat] [-f fields] <target>" >&2 &&
         return 1
     
     (test "$fields" == "list" || test "$fields" == "help") &&
@@ -23654,7 +23670,7 @@ AIlist () {
                         }
                     }
             }'
-    done | LANG=C sort -k2,2 >> $tmp1
+    done | sort -k2,2 >> $tmp1
     
     test ! -s $tmp1 &&
         echo "WARNING: no match of header files" >&2 &&
@@ -23707,8 +23723,9 @@ AIlist () {
         # rot
         
         # optional fields related to the image set
-        # texp
-        # nexp
+        texp=$(echo $(get_header -s -q $hdr EXPTIME,NEXP) | awk '{if(NF==2)printf("%.0f", $1/$2)}');
+        test -z "$texp" && texp="-"
+        nexp=$(get_header -q $hdr NEXP);        test -z "$nexp" && nexp="-"
         bg=$(get_header -q $hdr AI_BGG);        test -z "$bg"   && bg="-"
         rms=$(get_header -q $hdr AI_RMSG);      test -z "$rms"  && rms="-"
         fwhm=$(get_header -q $hdr AI_FWHM);     test -z "$fwhm" && fwhm="-"
@@ -23722,8 +23739,8 @@ AIlist () {
         if [ $? -eq 0 ]
         then
             set - $(echo $line)
-            test -z "$alt"  && alt=$(LANG=C printf "%.0f" $1)
-            test -z "$az"   && az=$(LANG=C printf "%.0f" $2)
+            test -z "$alt"  && alt=$(printf "%.0f" $1)
+            test -z "$az"   && az=$(printf "%.0f" $2)
             test -z "$moon" && test $5 -ge 0 && moon="$3,$4,$5"
         fi
         test -z "$alt"  && alt="-1"
@@ -23731,12 +23748,12 @@ AIlist () {
         test -z "$moon" && moon="-"
         
         # print basic info
-        LANG=C printf "%-8s %-5s %-8s " $dir $sname ${target//\'/}
+        printf "%-8s %-5s %-8s " $dir $sname ${target//\'/}
         if [ "$do_jd" ]
         then
-            LANG=C printf "%11.3f" $jd
+            printf "%11.3f" $jd
         else
-            LANG=C printf "%13s" $(jd2ut -p 2 $jd)
+            printf "%13s" $(jd2ut -p 2 $jd)
         fi
         
         # fields related to photometry
@@ -23765,11 +23782,11 @@ AIlist () {
                 test -z "$diam" && diam=" -  "
                 
                 # show results
-                LANG=C printf " %5s %s %-6s %-4s %s %-5s %2d %3d  %-11s" \
+                printf " %5s %s %-6s %-4s %s %-5s %2d %3d  %-11s" \
                     $cmag "$diam" $pcat $mlim $mzer ${tel//\'/} $alt $az $moon
             done
         else
-            LANG=C printf "  -     -   -       -    -    %-5s %2d %3d  %-11s" \
+            printf "  -     -   -       -    -    %-5s %2d %3d  %-11s" \
                 ${tel//\'/} $alt $az $moon
         fi
         

@@ -2,6 +2,7 @@
 % Thomas Lehmann
 % Draft, August 2019
 
+
 \pagebreak
 
 # Introduction
@@ -83,23 +84,23 @@ depth later on:
 
 The full installation will take about half an hour to complete. 
 
+
 ## Installing Oracle VirtualBox
 VirtualBox (<http://www.virtualbox.org>) is a free and powerful virtualization
 software for enterprise and home users. Get the latest software package (version
-6.0.10 at the time of writing) for your host operating system from the
+6.0.12 at the time of writing) for your host operating system from the
 [Downloads](<https://www.virtualbox.org/wiki/Downloads>) page and install it.
 
 Subsequently you should install the "Oracle VM VirtualBox Extension Pack" for
-improved  performance and additional virtual hardware features.
-After downloading the extension pack file from the same download site you must
-start the Oracle VirtualBox Manager using the VirtualBox desktop icon, go to
-the menu item File/Preferences/Extensions and click on the icon on the
-right side. Select the downloaded file and click the "Install" button.
+improved  performance and additional virtual hardware features. Get it
+from the appropriate section of the previously mentioned download page.
+Click on "All supported platforms" and open it using the Oracle VM VirtualBox
+software. You might be asked to provide credentials to allow installation.
 
 
 ## Setup of a Virtual Machine for Linux OS
 Start the Oracle VirtualBox Manager, if not running already.
-Click on the "New" button and fill in the name of the new VM, e.g. xubuntu.
+Click on the "New" button and fill in the name of the new VM, e.g. xubuntu-vm.
 Depending on the name you have choosen you might have to select
 Type="Linux" and Version="Ubuntu (64-bit)". Continue by pressing "Next".
 
@@ -115,12 +116,18 @@ comet observations then you should create a much larger virtual hard disk,
 e.g. of size 500 GB. After pressing the "Create" button the virtual
 machine is created.
 
-Recommended additional settings (click "Settings" button):
+It is recommended to tweak some additional parameters for improved
+performance. Click the "Settings" button to access the following tabs:
 
 - Tab System/Processor: increase number of CPU to >=2 (up to number of physical
   cores minus one)
 - Tab Display/Screen: increase Memory to 64 MB
 - Tab USB: choose USB 3.0 Controller
+
+Finally you should create a desktop icon to directly launch the
+virtual machine. Locate the name of the virtual machine on the left side
+of the VirtualBox Manager, press the right mouse and select
+"Create Shortcut on Desktop".
 
 
 ## Booting Install Medium of the Xubuntu Linux distribution
@@ -174,12 +181,16 @@ You might find it convenient to be logged in automatically after booting the
 Linux virtual machine.
 
 Continue the installation process which will take a few minutes to complete.
-Finally you are asked to restart the (virtual) computer. Make sure to press
-the "Enter" key to remove the installation medium before next
-reboot. If for any reason the ISO file is not "ejected" from the virtual CDROM
-drive the reboot starts again from the installation medium. You should abort
-this process by powering off the virtual machine and remove the ISO manually
-from within the Virtualbox Manager application. 
+Finally you are asked to restart the (virtual) computer. This will take a
+little time and you might be prompted to remove the installation medium
+(the ISO file used in the virtual CDROM drive). Press the "Enter" key to
+continue. There are few combinations of host hardware, VirtualBox version and
+guest operating system where the virtual machine is not rebooting but showing
+a black screen for infinite time. In this case you must manually close the virtual
+machine window and select "Shutdown VM". In the VirtualBox Manager check that
+the ISO file is removed from the virtual CDROM drive and start the virtual
+machine again.
+
 The virtual machine (in virtualbox jargon the "guest" system) will now boot
 the installed Linux OS from the virtual disk and automatically 
 logs in to the Xubuntu Linux desktop.
@@ -187,14 +198,14 @@ Please note the different sections of the VirtualBox guest application window:
 the virtual machine's menu bar at the top, a status bar at the bottom and the
 virtual screen of the Linux Desktop in between.
 
-If your host computer is using a network proxy which requires user authentication
-to access the internet then you might be faced by a message window stating
+After booting into the virtual Xubuntu Linux desktop you might be faced by
+a message window stating
 "Incomplete Language Support". It is save to skip the update until
 later as it is not required by the AIRTOOLS software.
 
-At any time the "Software Updater" might pop up with the information about
-available updates of currently installed packages. Again, those updates
-are not required right now
+Similarly the "Software Updater" might pop up at any time with the information
+about available updates of currently installed packages. Again, those updates
+are not required right now.
 
 
 ## Xubuntu Desktop Basics
@@ -234,7 +245,7 @@ For installation you must
   (you will be asked to provide your password):
   `sudo apt-get install build-essential`
 - Start installation by entering the command:
-  `sudo sh VBoxLinuxAdditions.run`
+  `sudo bash VBoxLinuxAdditions.run`
 - If installation has finished close the terminal window and eject the
   virtual CD by using the eject button next to the CD symbol in the file
   manager.
@@ -242,6 +253,11 @@ For installation you must
 
 After a restart of the Linux virtual machine you may adjust the guest window
 size and effectively the screen size of the Linux desktop as needed.
+
+Moreover, you can now configure the virtual machine to use a shared
+clipboard between host and guest and use drag-and-drop between both systems.
+Those settings are activated from the "Devices" menu of the virtual machine
+menu bar on top of the running guest screen.
 
 
 ## Installing the AIRTOOLS software
@@ -263,9 +279,9 @@ you will fetch it from a GitHub source repository:
 
 You run the installer by following the next steps:
 
-- Open the file manager (e.g. double-click the "Home" icon on the desktop).
-- Open the "Downloads" folder which should contain the previously downloaded file
-  `install_deb.sh`.
+- Locate the directory which contains the previously downloaded file
+  `install_deb.sh`. E.g. double-click the "Home" icon on the desktop which
+  starts the file manager and open the "Downloads" folder.
 - Open the "File" menu of the file manager and choose "Open Terminal Here". A new
   terminal window will pop up, ready to enter commands to be executed.
 - Enter the following command on a single line: `sudo bash install_deb.sh`
@@ -308,17 +324,17 @@ to use the date at the beginning of the night.
 
 The following directories are related to a project:
 
-Project directory:
-:   It stores all config files of this project, results
+- Project directory:\
+    It stores all config files of this project, results
     from image reduction and analysis (images, plots, data tables) and
     log files. After finishing a project this directory should be saved, e.g.
     to an external disk drive.
-Raw directory:
-:   Used for all the individual raw images as created by your
+- Raw directory:\
+    Used for all the individual raw images as created by your
     image asquisition system, both light frames and calibration images related
     to the project.
-Temporary directory:
-:   Used to store individual calibrated images of the
+- Temporary directory:\
+    Used to store individual calibrated images of the
     project which are used by several different AIRTOOLS analysis tasks as well
     as temporary files created during those tasks.
     This directory may be savely deleted when the project is finished.
@@ -335,7 +351,7 @@ date of observation. This will be used to make initial suggestions for
 names of the project directory, raw directory and temporary directory.
 It is allowed to modify those names, e.g. append a letter. E.g. you
 might want to repeat the image reduction of a given night using other
-parameters without interferring the original analysis. In that case
+parameters without interfering the original analysis. In that case
 you could use the same raw directory name but different names for the
 project and temporary directories.
 
@@ -518,7 +534,7 @@ The syntax is as follows: everything after the character `#` is considered
 a comment. Each line (uncommented and non-empty) defines an image set
 using at least 11 fields (words separated by spaces) which are:
 
-h:m:
+h\:m:
 :   The local time at start of observation (approximation only, not used by
     the program)
 set:

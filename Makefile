@@ -11,7 +11,7 @@ DATADIR = $(DESTDIR)/$(prefix)/share/$(PACKAGE)
 DOCDIR  = $(DESTDIR)/$(prefix)/share/doc/$(PACKAGE)
 APPDIR  = $(DESTDIR)/$(prefix)/share/applications
 DATA	= data/*
-DOCS	= README* doc/README* doc/*txt doc/manual-de.html
+DOCS	= README* doc/manual-en.html
 IMAGESDIR	= $(DOCDIR)/images
 IMAGES	= doc/images/*
 
