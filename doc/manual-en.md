@@ -163,6 +163,9 @@ machine. Locate the name of the virtual machine on the left side of the
 VirtualBox Manager, press the right mouse and select “Create Shortcut on
 Desktop”.
 
+![Setup of a virtual machine in the Oracle VirtualBox
+Manager](images/virtualbox-manager.png "virtualbox manager")
+
 ## Booting Install Medium of the Xubuntu Linux distribution
 
 Download the ISO image file of the latest 64-bit Xubuntu LTS release
@@ -244,6 +247,9 @@ software.
 Similarly the “Software Updater” might pop up at any time with the
 information about available updates of currently installed packages.
 Again, those updates are not required right now.
+
+![Xubuntu Linux (with AIRTOOLS) running in
+VirtualBox](images/xubuntu-vm-annotated.png "Xubuntu")
 
 ## Xubuntu Desktop Basics
 
@@ -346,7 +352,9 @@ of downloads).
 
 # The AIRTOOLS Graphical User Interface
 
-TODO
+  
+![The AIRTOOLS user interface tabs](images/airtools-gui.png
+"airtools-gui")
 
 # The first AIRTOOLS Project
 
@@ -499,23 +507,29 @@ reference for your newly added lines. The columns used are:
     response is linear up to 2/3 of its dynamic range then you should
     enter a value of 40000 approximately.
   - gain:  
-    Anzahl der Elektronen je ADU. Wenn nicht bekannt, dann kann als
-    Schätzwert 1 eingesetzt werden.
+    Number of electrons per ADU. Use a value of 1 if it is not known.
   - pixscale:  
-    Größe des Bildpunktes am Himmel in Bogensekunden.
+    Approximate value of the size of a pixel on the sky in seconds of
+    arc.
   - magzero:  
-    Schätzwert für Helligkeitsnullpunkt, d.h. die Sternhelligkeit, die
-    bei 1 Sekunde Belichtungszeit eine Intensität von 1 Count (ADU)
-    erzeugen würde.
+    Zeropoint of the non-calibrated instrumental magnitude scale. This
+    is the magnitude of a star which yields a signal of 1 count (ADU) in
+    a 1 second exposure. Initially you can use an arbitrary value but it
+    is useful to refine it to something close to the zeropoint of the
+    calibrated scale (see log output of your first photometric
+    calibration later on)
   - ttype:  
-    Auswahl des Teleskop-Typs: Reflector, Refractor, Photo Lens
+    Telescope type: L=reflector, R=refractor, A=photo Lens
   - ctype:  
-    Auswahl des Kameratyps: CCD, DSLR
+    Sensor type: CCD=monochrome CCD, DSLR=DSLR raw image (as stored in
+    camera, e.g. files with extension CR2 for a Canon DSLR), use BGGR or
+    RGGB for a one-shot-color CCD or CMOS sensor with a Bayer filter
+    matrix.
 
 Save your edits and close the text editor. Remember that for any
 subsequent new project you will be able to copy over those parameter
-files. You only need to add a new observatory site or instrument it is
-is not previously used and defined.
+files. You only need to add entries to these files if using a new
+observatory site or a new instrument for the first time.
 
 ## Raw Images and Image Set Definition
 
@@ -543,10 +557,10 @@ manager and close it.
 You are now going to start the first AIRTOOLS task. By pressing the
 “Extract basic image info” the program reads meta data of all raw
 image files. At the end an editor window pops up which shows an overview
-of relevant data for each image. Please note the first column which
-consists of a 4-digit image number associated with each single raw
-image. Images are referenced by this number throughout the reduction
-process.
+of relevant data for each image. Please note the column which holds a
+4-digit image number associated with each image (first column if images
+are in FITS format, second column if images are RAW files from DSLR).
+Images are referenced by this number throughout the reduction process.
 
 Now it is time to group the individual images to form “image sets”. An
 image set is a number of images of the same type and target, e.g. a

@@ -1,7 +1,7 @@
 
 # Astronomical Image Reduction TOOLSet
 
-AIRTOOLS is a softawre for astronomical image reduction
+AIRTOOLS is a software for astronomical image reduction
 of both CCD and DSLR observations on Linux. A graphical user interface is
 build on top of command-line programs which combine a large number of
 tools readily available on most Linux desktops, including

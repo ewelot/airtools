@@ -101,6 +101,9 @@
 <li>Tab USB: choose USB 3.0 Controller</li>
 </ul>
 <p>Finally you should create a desktop icon to directly launch the virtual machine. Locate the name of the virtual machine on the left side of the VirtualBox Manager, press the right mouse and select “Create Shortcut on Desktop”.</p>
+<figure>
+<img src="images/virtualbox-manager.png" title="virtualbox manager" alt="" /><figcaption>Setup of a virtual machine in the Oracle VirtualBox Manager</figcaption>
+</figure>
 <h2 id="booting-install-medium-of-the-xubuntu-linux-distribution"><span class="header-section-number">2.3</span> Booting Install Medium of the Xubuntu Linux distribution</h2>
 <p>Download the ISO image file of the latest 64-bit Xubuntu LTS release from <a href="http://xubuntu.org/" class="uri">http://xubuntu.org/</a>. Please note the LTS version label, which indicates a “Long Term Support” release. This Linux OS version is one of the well supported ones by the AIRTOOLS software. From the choosen mirror site you should download the ISO file with highest revision number. At the time of this writing it is named <code>xubuntu-18.04.3-desktop-amd64.iso</code>.</p>
 <p>The ISO file is used in place of a install medium for the virtual machine. To do so you have to start the VirtualBox software (if not running already) and press the “Settings” button of the selected virtual machine.</p>
@@ -119,6 +122,9 @@
 <p>The virtual machine (in virtualbox jargon the “guest” system) will now boot the installed Linux OS from the virtual disk and automatically logs in to the Xubuntu Linux desktop. Please note the different sections of the VirtualBox guest application window: the virtual machine’s menu bar at the top, a status bar at the bottom and the virtual screen of the Linux Desktop in between.</p>
 <p>After booting into the virtual Xubuntu Linux desktop you might be faced by a message window stating “Incomplete Language Support”. It is save to skip the update until later as it is not required by the AIRTOOLS software.</p>
 <p>Similarly the “Software Updater” might pop up at any time with the information about available updates of currently installed packages. Again, those updates are not required right now.</p>
+<figure>
+<img src="images/xubuntu-vm-annotated.png" title="Xubuntu" alt="" /><figcaption>Xubuntu Linux (with AIRTOOLS) running in VirtualBox</figcaption>
+</figure>
 <h2 id="xubuntu-desktop-basics"><span class="header-section-number">2.5</span> Xubuntu Desktop Basics</h2>
 <p>On the top of the desktop screen there is a (dark) desktop panel. If you click on the small icon on the left of this panel (it uses the Xubuntu logo which mimics the head of a mouse) the main application menu pops up. From there you can start programs, tweak several desktop settings, log out and shutdown the virtual Linux system. Note the location of the “Log out” icon at bottom-right of the menu, which is also used to shutdown or restart the Linux OS. Get familiar with how to start the web browser and the file manager and how to shutdown the Linux OS.</p>
 <p>For additional information please consult the official <a href="https://docs.xubuntu.org/1804/">Xubuntu Documentation</a> or other tutorials on the web. Please keep in mind that you do not have to worry about any hardware specific setups in your Linux system (or for example network connection) because all communication to the real devices of the host computer is transparently handled by the VirtualBox drivers.</p>
@@ -156,7 +162,8 @@
 <p>An update of the AIRTOOLS software is issued the same way as the initial installation but should complete much faster (due to much smaller amount of downloads).</p>
 
 <h1 id="the-airtools-graphical-user-interface"><span class="header-section-number">3</span> The AIRTOOLS Graphical User Interface</h1>
-<p>TODO</p>
+<p><br />
+<img src="images/airtools-gui.png" title="airtools-gui" alt="The AIRTOOLS user interface tabs" /></p>
 
 <h1 id="the-first-airtools-project"><span class="header-section-number">4</span> The first AIRTOOLS Project</h1>
 <h2 id="what-is-a-project"><span class="header-section-number">4.1</span> What is a Project?</h2>
@@ -240,27 +247,27 @@ Used to store individual calibrated images of the project which are used by seve
 <dd>Saturation value. Strictly speeking the upper counts (ADU) for which the camera response is linear (proportional to the illumination intensity) must be provided. We need the value after scaling up to the 16-bit range, e.g. if you are using a consumer DSLR where response is linear up to 2/3 of its dynamic range then you should enter a value of 40000 approximately.
 </dd>
 <dt>gain:</dt>
-<dd>Anzahl der Elektronen je ADU. Wenn nicht bekannt, dann kann als Schätzwert 1 eingesetzt werden.
+<dd>Number of electrons per ADU. Use a value of 1 if it is not known.
 </dd>
 <dt>pixscale:</dt>
-<dd>Größe des Bildpunktes am Himmel in Bogensekunden.
+<dd>Approximate value of the size of a pixel on the sky in seconds of arc.
 </dd>
 <dt>magzero:</dt>
-<dd>Schätzwert für Helligkeitsnullpunkt, d.h. die Sternhelligkeit, die bei 1 Sekunde Belichtungszeit eine Intensität von 1 Count (ADU) erzeugen würde.
+<dd>Zeropoint of the non-calibrated instrumental magnitude scale. This is the magnitude of a star which yields a signal of 1 count (ADU) in a 1 second exposure. Initially you can use an arbitrary value but it is useful to refine it to something close to the zeropoint of the calibrated scale (see log output of your first photometric calibration later on)
 </dd>
 <dt>ttype:</dt>
-<dd>Auswahl des Teleskop-Typs: Reflector, Refractor, Photo Lens
+<dd>Telescope type: L=reflector, R=refractor, A=photo Lens
 </dd>
 <dt>ctype:</dt>
-<dd>Auswahl des Kameratyps: CCD, DSLR
+<dd>Sensor type: CCD=monochrome CCD, DSLR=DSLR raw image (as stored in camera, e.g. files with extension CR2 for a Canon DSLR), use BGGR or RGGB for a one-shot-color CCD or CMOS sensor with a Bayer filter matrix.
 </dd>
 </dl>
-<p>Save your edits and close the text editor. Remember that for any subsequent new project you will be able to copy over those parameter files. You only need to add a new observatory site or instrument it is is not previously used and defined.</p>
+<p>Save your edits and close the text editor. Remember that for any subsequent new project you will be able to copy over those parameter files. You only need to add entries to these files if using a new observatory site or a new instrument for the first time.</p>
 <h2 id="raw-images-and-image-set-definition"><span class="header-section-number">4.4</span> Raw Images and Image Set Definition</h2>
 <p>TODO: - Description of supported RAW formats - Notes about FITS header keywords</p>
 <p>Now it is time to copy your raw images to the project’s raw directory within the Linux file system. There are different solutions to handle the file transfer between the host operating system and a VirtualBox guest. We suggest using an external USB pen drive or USB disk for this purpose.</p>
 <p>Use the file manager of your host OS to copy the raw image files to the USB disk. Wait until all data have been completely written to disk. From the running Linux virtual machine locate the “Devices” menu entry on the VirtualBox VM menu at the top of the window. Select “USB” and you will see a list of USB devices from which you need to identify and select the USB disk. After a few seconds a new USB disk icon will apear on the virtual Linux desktop and little after the file manager window pops up. Use the common copy-and-paste feature to copy your raw images from the USB disk to the appropriate raw directory of the current project. Finally push the eject button on the USB device entry of the file manager and close it.</p>
-<p>You are now going to start the first AIRTOOLS task. By pressing the “Extract basic image info” the program reads meta data of all raw image files. At the end an editor window pops up which shows an overview of relevant data for each image. Please note the first column which consists of a 4-digit image number associated with each single raw image. Images are referenced by this number throughout the reduction process.</p>
+<p>You are now going to start the first AIRTOOLS task. By pressing the “Extract basic image info” the program reads meta data of all raw image files. At the end an editor window pops up which shows an overview of relevant data for each image. Please note the column which holds a 4-digit image number associated with each image (first column if images are in FITS format, second column if images are RAW files from DSLR). Images are referenced by this number throughout the reduction process.</p>
 <p>Now it is time to group the individual images to form “image sets”. An image set is a number of images of the same type and target, e.g. a sequence of dark exposures with a given exposure time or a bracketed series of exposures of a comet. All image sets of the project are described in a parameter file called <code>set.dat</code> which must be created by yourself. From the AIRTOOLS application’s main menu select “Edit” and “Edit Image Set Definitions”. Enter lines similar to the following example:</p>
 <pre><code>    # 190329
     # Newton 400 mm f=1040 mm
