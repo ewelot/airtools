@@ -168,24 +168,23 @@ Manager](images/virtualbox-manager.png "virtualbox manager")
 
 ## Booting Install Medium of the Xubuntu Linux distribution
 
-Download the ISO image file of the latest 64-bit Xubuntu LTS release
-from <http://xubuntu.org/>. Please note the LTS version label, which
-indicates a “Long Term Support” release. This Linux OS version is one of
-the well supported ones by the AIRTOOLS software. From the choosen
-mirror site you should download the ISO file with highest revision
-number. At the time of this writing it is named
-`xubuntu-18.04.3-desktop-amd64.iso`.
+Download the ISO image file of the latest Xubuntu LTS release from
+<http://xubuntu.org/>. Please note the LTS version label, which
+indicates a “Long Term Support” release. This Linux OS version is well
+supported by the AIRTOOLS software. Choose a mirror download close to
+your location and download the 64-bit desktop image. At the time of this
+writing it is named `xubuntu-18.04.3-desktop-amd64.iso`.
 
-The ISO file is used in place of a install medium for the virtual
+The ISO image file is used in place of a install medium for the virtual
 machine. To do so you have to start the VirtualBox software (if not
 running already) and press the “Settings” button of the selected virtual
 machine.
 
 Select the “Storage” tab. Within “Storage Devices” click on the CD
 symbol (labeled “Empty”) and from “Attributes” click the CD symbol near
-the right border of the window and select the ISO image file. Pressing
-“OK” will save your modified settings and you are ready to start the
-virtual machine by pressing the green “Start” button.
+the right border of the window and select the previously downloaded ISO
+file. Pressing “OK” will save your modified settings and you are ready
+to start the virtual machine by pressing the green “Start” button.
 
 The following boot process is very similar to a regular boot process of
 a install CD/DVD on a real computer. In addition, the current virtual
@@ -215,10 +214,9 @@ are asked to provide a few additional informations:
     geographic location
   - “Who are you”: Fill in your (full) name, a computer name, username
     and user password. Note that choosing “xubuntu” for the name of the
-    virtual computer is allowed, despite the given warning message
-
-You might find it convenient to be logged in automatically after booting
-the Linux virtual machine.
+    virtual computer is allowed, despite the given warning message. You
+    might toggle the “Log in automatically” radio button for the sake of
+    convenience.
 
 Continue the installation process which will take a few minutes to
 complete. Finally you are asked to restart the (virtual) computer. This
@@ -228,25 +226,26 @@ Press the “Enter” key to continue. There are few combinations of host
 hardware, VirtualBox version and guest operating system where the
 virtual machine is not rebooting but showing a black screen for infinite
 time. In this case you must manually close the virtual machine window
-and select “Shutdown VM”. In the VirtualBox Manager check that the ISO
+and select “Shutdown VM”. In the VirtualBox Manager, check that the ISO
 file is removed from the virtual CDROM drive and start the virtual
 machine again.
 
 The virtual machine (in virtualbox jargon the “guest” system) will now
 boot the installed Linux OS from the virtual disk and automatically logs
 in to the Xubuntu Linux desktop. Please note the different sections of
-the VirtualBox guest application window: the virtual machine’s menu bar
-at the top, a status bar at the bottom and the virtual screen of the
-Linux Desktop in between.
+the VirtualBox guest application window: the VirtualBox guest machine’s
+menu bar at the top, a status bar at the bottom and the virtual screen
+of the Linux Desktop in between.
 
 After booting into the virtual Xubuntu Linux desktop you might be faced
 by a message window stating “Incomplete Language Support”. It is save to
 skip the update until later as it is not required by the AIRTOOLS
-software.
+software installation.
 
 Similarly the “Software Updater” might pop up at any time with the
 information about available updates of currently installed packages.
-Again, those updates are not required right now.
+Again, those updates are not required right now but should be completed
+after the AIRTOOLS installation.
 
 ![Xubuntu Linux (with AIRTOOLS) running in
 VirtualBox](images/xubuntu-vm-annotated.png "Xubuntu")
@@ -280,10 +279,10 @@ performance and usability.
 For installation you must
 
   - Boot the guest OS.
-  - Go to the virtual machine’s menu “Devices” and press “Install Guest
-    Additions CD Image”. A new CD icon appears on the Linux desktop and
-    a few seconds later the Linux file manager is showing the contents
-    of the Guest Additions virtual CD.
+  - Go to the VirtualBox guest menu item “Devices” and press “Install
+    Guest Additions CD Image”. A new CD icon appears on the Linux
+    desktop and a few seconds later the Linux file manager is showing
+    the contents of the Guest Additions virtual CD.
   - Open a terminal window using “File” menu of the file manager and
     select “Open Terminal Here”.
   - From the command line of the terminal run the following command (you
@@ -292,8 +291,8 @@ For installation you must
   - Start installation by entering the command: `sudo bash
     VBoxLinuxAdditions.run`
   - If installation has finished close the terminal window and eject the
-    virtual CD by using the eject button next to the CD symbol in the
-    file manager.
+    virtual CD by using the eject button (caret-up) next to the CD entry
+    in the file manager.
   - Finally you must reboot the Linux guest.
 
 After a restart of the Linux virtual machine you may adjust the guest
@@ -303,7 +302,7 @@ needed.
 Moreover, you can now configure the virtual machine to use a shared
 clipboard between host and guest and use drag-and-drop between both
 systems. Those settings are activated from the “Devices” menu of the
-virtual machine menu bar on top of the running guest screen.
+VirtualBox guest menu bar on the top of the window.
 
 ## Installing the AIRTOOLS software
 
@@ -347,8 +346,9 @@ showing up on your Linux desktop.
 ## Updating the AIRTOOLS software
 
 An update of the AIRTOOLS software is issued the same way as the initial
-installation but should complete much faster (due to much smaller amount
-of downloads).
+installation, that is by downloading and executing the installer
+`install_deb.sh`. Though, it will complete much faster due to much
+smaller amount of required downloads.
 
 # The AIRTOOLS Graphical User Interface
 
@@ -390,8 +390,8 @@ The following directories are related to a project:
 ## Setting up the first Project
 
 Upon first start of the AIRTOOLS software the base directories for the
-the three above mentioned storage places must be defined. Each new
-project will later create a new subdirectory below these places.
+three above mentioned storage places must be defined. Each new project
+will later create a new subdirectory below these places.
 
 Next, the setup for the first project must be configured. Select the
 date of observation. This will be used to make initial suggestions for

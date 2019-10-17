@@ -105,9 +105,9 @@
 <img src="images/virtualbox-manager.png" title="virtualbox manager" alt="" /><figcaption>Setup of a virtual machine in the Oracle VirtualBox Manager</figcaption>
 </figure>
 <h2 id="booting-install-medium-of-the-xubuntu-linux-distribution"><span class="header-section-number">2.3</span> Booting Install Medium of the Xubuntu Linux distribution</h2>
-<p>Download the ISO image file of the latest 64-bit Xubuntu LTS release from <a href="http://xubuntu.org/" class="uri">http://xubuntu.org/</a>. Please note the LTS version label, which indicates a “Long Term Support” release. This Linux OS version is one of the well supported ones by the AIRTOOLS software. From the choosen mirror site you should download the ISO file with highest revision number. At the time of this writing it is named <code>xubuntu-18.04.3-desktop-amd64.iso</code>.</p>
-<p>The ISO file is used in place of a install medium for the virtual machine. To do so you have to start the VirtualBox software (if not running already) and press the “Settings” button of the selected virtual machine.</p>
-<p>Select the “Storage” tab. Within “Storage Devices” click on the CD symbol (labeled “Empty”) and from “Attributes” click the CD symbol near the right border of the window and select the ISO image file. Pressing “OK” will save your modified settings and you are ready to start the virtual machine by pressing the green “Start” button.</p>
+<p>Download the ISO image file of the latest Xubuntu LTS release from <a href="http://xubuntu.org/" class="uri">http://xubuntu.org/</a>. Please note the LTS version label, which indicates a “Long Term Support” release. This Linux OS version is well supported by the AIRTOOLS software. Choose a mirror download close to your location and download the 64-bit desktop image. At the time of this writing it is named <code>xubuntu-18.04.3-desktop-amd64.iso</code>.</p>
+<p>The ISO image file is used in place of a install medium for the virtual machine. To do so you have to start the VirtualBox software (if not running already) and press the “Settings” button of the selected virtual machine.</p>
+<p>Select the “Storage” tab. Within “Storage Devices” click on the CD symbol (labeled “Empty”) and from “Attributes” click the CD symbol near the right border of the window and select the previously downloaded ISO file. Pressing “OK” will save your modified settings and you are ready to start the virtual machine by pressing the green “Start” button.</p>
 <p>The following boot process is very similar to a regular boot process of a install CD/DVD on a real computer. In addition, the current virtual machine can be used to start a fully functional Linux live session to evaluate or experiment with the Xubuntu Linux OS (but this is not our goal).</p>
 <h2 id="installing-xubuntu-linux"><span class="header-section-number">2.4</span> Installing Xubuntu Linux</h2>
 <p>Now, the Linux OS has to be installed into the presently empty virtual hard disk of the running virtual machine. Please make sure your host computer has a working internet connection.</p>
@@ -115,13 +115,12 @@
 <p>While the installation process has already started in the background you are asked to provide a few additional informations:</p>
 <ul>
 <li>“Where are you”: Select your time zone by clicking close to your geographic location</li>
-<li>“Who are you”: Fill in your (full) name, a computer name, username and user password. Note that choosing “xubuntu” for the name of the virtual computer is allowed, despite the given warning message</li>
+<li>“Who are you”: Fill in your (full) name, a computer name, username and user password. Note that choosing “xubuntu” for the name of the virtual computer is allowed, despite the given warning message. You might toggle the “Log in automatically” radio button for the sake of convenience.</li>
 </ul>
-<p>You might find it convenient to be logged in automatically after booting the Linux virtual machine.</p>
-<p>Continue the installation process which will take a few minutes to complete. Finally you are asked to restart the (virtual) computer. This will take a little time and you might be prompted to remove the installation medium (the ISO file used in the virtual CDROM drive). Press the “Enter” key to continue. There are few combinations of host hardware, VirtualBox version and guest operating system where the virtual machine is not rebooting but showing a black screen for infinite time. In this case you must manually close the virtual machine window and select “Shutdown VM”. In the VirtualBox Manager check that the ISO file is removed from the virtual CDROM drive and start the virtual machine again.</p>
-<p>The virtual machine (in virtualbox jargon the “guest” system) will now boot the installed Linux OS from the virtual disk and automatically logs in to the Xubuntu Linux desktop. Please note the different sections of the VirtualBox guest application window: the virtual machine’s menu bar at the top, a status bar at the bottom and the virtual screen of the Linux Desktop in between.</p>
-<p>After booting into the virtual Xubuntu Linux desktop you might be faced by a message window stating “Incomplete Language Support”. It is save to skip the update until later as it is not required by the AIRTOOLS software.</p>
-<p>Similarly the “Software Updater” might pop up at any time with the information about available updates of currently installed packages. Again, those updates are not required right now.</p>
+<p>Continue the installation process which will take a few minutes to complete. Finally you are asked to restart the (virtual) computer. This will take a little time and you might be prompted to remove the installation medium (the ISO file used in the virtual CDROM drive). Press the “Enter” key to continue. There are few combinations of host hardware, VirtualBox version and guest operating system where the virtual machine is not rebooting but showing a black screen for infinite time. In this case you must manually close the virtual machine window and select “Shutdown VM”. In the VirtualBox Manager, check that the ISO file is removed from the virtual CDROM drive and start the virtual machine again.</p>
+<p>The virtual machine (in virtualbox jargon the “guest” system) will now boot the installed Linux OS from the virtual disk and automatically logs in to the Xubuntu Linux desktop. Please note the different sections of the VirtualBox guest application window: the VirtualBox guest machine’s menu bar at the top, a status bar at the bottom and the virtual screen of the Linux Desktop in between.</p>
+<p>After booting into the virtual Xubuntu Linux desktop you might be faced by a message window stating “Incomplete Language Support”. It is save to skip the update until later as it is not required by the AIRTOOLS software installation.</p>
+<p>Similarly the “Software Updater” might pop up at any time with the information about available updates of currently installed packages. Again, those updates are not required right now but should be completed after the AIRTOOLS installation.</p>
 <figure>
 <img src="images/xubuntu-vm-annotated.png" title="Xubuntu" alt="" /><figcaption>Xubuntu Linux (with AIRTOOLS) running in VirtualBox</figcaption>
 </figure>
@@ -133,15 +132,15 @@
 <p>For installation you must</p>
 <ul>
 <li>Boot the guest OS.</li>
-<li>Go to the virtual machine’s menu “Devices” and press “Install Guest Additions CD Image”. A new CD icon appears on the Linux desktop and a few seconds later the Linux file manager is showing the contents of the Guest Additions virtual CD.</li>
+<li>Go to the VirtualBox guest menu item “Devices” and press “Install Guest Additions CD Image”. A new CD icon appears on the Linux desktop and a few seconds later the Linux file manager is showing the contents of the Guest Additions virtual CD.</li>
 <li>Open a terminal window using “File” menu of the file manager and select “Open Terminal Here”.</li>
 <li>From the command line of the terminal run the following command (you will be asked to provide your password): <code>sudo apt-get install build-essential</code></li>
 <li>Start installation by entering the command: <code>sudo bash VBoxLinuxAdditions.run</code></li>
-<li>If installation has finished close the terminal window and eject the virtual CD by using the eject button next to the CD symbol in the file manager.</li>
+<li>If installation has finished close the terminal window and eject the virtual CD by using the eject button (caret-up) next to the CD entry in the file manager.</li>
 <li>Finally you must reboot the Linux guest.</li>
 </ul>
 <p>After a restart of the Linux virtual machine you may adjust the guest window size and effectively the screen size of the Linux desktop as needed.</p>
-<p>Moreover, you can now configure the virtual machine to use a shared clipboard between host and guest and use drag-and-drop between both systems. Those settings are activated from the “Devices” menu of the virtual machine menu bar on top of the running guest screen.</p>
+<p>Moreover, you can now configure the virtual machine to use a shared clipboard between host and guest and use drag-and-drop between both systems. Those settings are activated from the “Devices” menu of the VirtualBox guest menu bar on the top of the window.</p>
 <h2 id="installing-the-airtools-software"><span class="header-section-number">2.7</span> Installing the AIRTOOLS software</h2>
 <p>The AIRTOOLS project is hosted at <a href="https://github.com/ewelot/airtools" class="uri">https://github.com/ewelot/airtools</a> where you can find the latest source code and documentation. Pre-compiled binary packages are build for several Debian based Linux distributions (e.g. Xubuntu) and can easily be installed by running an install script.</p>
 <p>The download of the installer requires a few more steps than usual, because you will fetch it from a GitHub source repository:</p>
@@ -159,7 +158,7 @@
 </ul>
 <p>Upon first installation of the AIRTOOLS software the script will download many other required software packages from the official Xubuntu repository. This might take a few minutes depending on the bandwidth of your internet connection. At the end of the installation you will receive some log messages about success (or failure) in the terminal window. A log file is created for later reference and a new icon is showing up on your Linux desktop.</p>
 <h2 id="updating-the-airtools-software"><span class="header-section-number">2.8</span> Updating the AIRTOOLS software</h2>
-<p>An update of the AIRTOOLS software is issued the same way as the initial installation but should complete much faster (due to much smaller amount of downloads).</p>
+<p>An update of the AIRTOOLS software is issued the same way as the initial installation, that is by downloading and executing the installer <code>install_deb.sh</code>. Though, it will complete much faster due to much smaller amount of required downloads.</p>
 
 <h1 id="the-airtools-graphical-user-interface"><span class="header-section-number">3</span> The AIRTOOLS Graphical User Interface</h1>
 <p><br />
@@ -178,7 +177,7 @@ Used for all the individual raw images as created by your image asquisition syst
 Used to store individual calibrated images of the project which are used by several different AIRTOOLS analysis tasks as well as temporary files created during those tasks. This directory may be savely deleted when the project is finished.</li>
 </ul>
 <h2 id="setting-up-the-first-project"><span class="header-section-number">4.2</span> Setting up the first Project</h2>
-<p>Upon first start of the AIRTOOLS software the base directories for the the three above mentioned storage places must be defined. Each new project will later create a new subdirectory below these places.</p>
+<p>Upon first start of the AIRTOOLS software the base directories for the three above mentioned storage places must be defined. Each new project will later create a new subdirectory below these places.</p>
 <p>Next, the setup for the first project must be configured. Select the date of observation. This will be used to make initial suggestions for names of the project directory, raw directory and temporary directory. It is allowed to modify those names, e.g. append a letter. E.g. you might want to repeat the image reduction of a given night using other parameters without interfering the original analysis. In that case you could use the same raw directory name but different names for the project and temporary directories.</p>
 <p>Further settings are:</p>
 <dl>
