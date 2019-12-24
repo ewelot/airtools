@@ -1,39 +1,62 @@
-Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v3.1)
+Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v3.2)
 ======================================================================
 
-  - [Introduction](#introduction)
-  - [Installation](#installation)
-      - [Installing Oracle VirtualBox](#installing-oracle-virtualbox)
-      - [Setup of a Virtual Machine for Linux
-        OS](#setup-of-a-virtual-machine-for-linux-os)
-      - [Booting Install Medium of the Xubuntu Linux
+  - [<span class="toc-section-number">1</span>
+    Introduction](#introduction)
+  - [<span class="toc-section-number">2</span>
+    Installation](#installation)
+      - [<span class="toc-section-number">2.1</span> Installing Oracle
+        VirtualBox](#installing-oracle-virtualbox)
+      - [<span class="toc-section-number">2.2</span> Setup of a Virtual
+        Machine for Linux OS](#setup-of-a-virtual-machine-for-linux-os)
+      - [<span class="toc-section-number">2.3</span> Booting Install
+        Medium of the Xubuntu Linux
         distribution](#booting-install-medium-of-the-xubuntu-linux-distribution)
-      - [Installing Xubuntu Linux](#installing-xubuntu-linux)
-      - [Xubuntu Desktop Basics](#xubuntu-desktop-basics)
-      - [Installing VirtualBox Guest
+      - [<span class="toc-section-number">2.4</span> Installing Xubuntu
+        Linux](#installing-xubuntu-linux)
+      - [<span class="toc-section-number">2.5</span> Xubuntu Desktop
+        Basics](#xubuntu-desktop-basics)
+      - [<span class="toc-section-number">2.6</span> Installing
+        VirtualBox Guest
         Additions](#installing-virtualbox-guest-additions)
-      - [Installing the AIRTOOLS
-        software](#installing-the-airtools-software)
-      - [Updating the AIRTOOLS
-        software](#updating-the-airtools-software)
-  - [The AIRTOOLS Graphical User
-    Interface](#the-airtools-graphical-user-interface)
-  - [The first AIRTOOLS Project](#the-first-airtools-project)
-      - [What is a Project?](#what-is-a-project)
-      - [Setting up the first Project](#setting-up-the-first-project)
-      - [Parameter Files](#parameter-files)
-      - [Raw Images and Image Set
-        Definition](#raw-images-and-image-set-definition)
-  - [Image Reduction](#image-reduction)
-      - [Master Darks and Flats](#master-darks-and-flats)
-      - [Image Calibration](#image-calibration)
-      - [Stacking and Astrometry](#stacking-and-astrometry)
-  - [Large Aperture Comet Photometry](#large-aperture-comet-photometry)
-      - [Comet Observation](#comet-observation)
-      - [PSF Extraction and Star
-        Removal](#psf-extraction-and-star-removal)
-      - [Measuring the Comet](#measuring-the-comet)
-      - [Photometric Calibration](#photometric-calibration)
+      - [<span class="toc-section-number">2.7</span> Installing the
+        AIRTOOLS software](#installing-the-airtools-software)
+      - [<span class="toc-section-number">2.8</span> Updating the
+        AIRTOOLS software](#updating-the-airtools-software)
+  - [<span class="toc-section-number">3</span> The AIRTOOLS Graphical
+    User Interface](#the-airtools-graphical-user-interface)
+  - [<span class="toc-section-number">4</span> The first AIRTOOLS
+    Project](#the-first-airtools-project)
+      - [<span class="toc-section-number">4.1</span> What is a
+        Project?](#what-is-a-project)
+      - [<span class="toc-section-number">4.2</span> Setting up the
+        first Project](#setting-up-the-first-project)
+      - [<span class="toc-section-number">4.3</span> Parameter
+        Files](#parameter-files)
+      - [<span class="toc-section-number">4.4</span> Raw Images and
+        Image Set Definition](#raw-images-and-image-set-definition)
+  - [<span class="toc-section-number">5</span> Image
+    Reduction](#image-reduction)
+      - [<span class="toc-section-number">5.1</span> Master Darks and
+        Flats](#master-darks-and-flats)
+      - [<span class="toc-section-number">5.2</span> Image
+        Calibration](#image-calibration)
+      - [<span class="toc-section-number">5.3</span> Background
+        evaluation](#background-evaluation)
+      - [<span class="toc-section-number">5.4</span> Image
+        Registration](#image-registration)
+      - [<span class="toc-section-number">5.5</span> Stacking and
+        Astrometry](#stacking-and-astrometry)
+  - [<span class="toc-section-number">6</span> Large Aperture Comet
+    Photometry](#large-aperture-comet-photometry)
+      - [<span class="toc-section-number">6.1</span> Comet
+        Observation](#comet-observation)
+      - [<span class="toc-section-number">6.2</span> PSF Extraction and
+        Star Removal](#psf-extraction-and-star-removal)
+      - [<span class="toc-section-number">6.3</span> Measuring the
+        Comet](#measuring-the-comet)
+      - [<span class="toc-section-number">6.4</span> Photometric
+        Calibration](#photometric-calibration)
 
 # Introduction
 
@@ -141,13 +164,13 @@ Type=“Linux” and Version=“Ubuntu (64-bit)”. Continue by pressing
 Set the memory size to \>=2 GB (recommended 4 GB or up to 75% of
 physical RAM) and press “Next”.
 
-Choose the defaults to create a virtual hard disk of type VDI,
-dynamically allocated, using the proposed file name. The file size (size
-of the virtual hard disk) should be \>=50 GB. This is sufficient for
-roughly 10-30 comet observations, based on 10-20 individual exposures
-each. If you intent to use the AIRTOOLS software regularly to analyze
-all your comet observations then you should create a much larger virtual
-hard disk, e.g. of size 500 GB. After pressing the “Create” button the
+Create a virtual hard disk of type VDI of fixed size. You can use the
+proposed file name but it is recommended to create the virtual disk file
+on a fast physical hard disk drive, e.g. SSD. The file size should be
+\>=50 GB to serve for roughly 10-20 comet observations, based on 10-20
+individual exposures each. If you intent to use the AIRTOOLS software
+regularly to analyze all your comet observations then you should create
+a much larger virtual hard diskAfter pressing the “Create” button the
 virtual machine is created.
 
 It is recommended to tweak some additional parameters for improved
@@ -352,6 +375,20 @@ smaller amount of required downloads.
 
 # The AIRTOOLS Graphical User Interface
 
+The graphical user interface consists of three tabs. The first tab is
+used for all basic image reduction steps to process the raw images to
+finally obtain stacked images of your targets. The second tab is
+dedicated to the comet extraction and large aperture photometry tasks.
+Finally, a couple of handy tasks are placed on a third tab.
+
+The lower part of the interface will display text output from any
+processing steps. There you can watch progress of the running tasks, see
+some measurement results but also possible error messages. In a few
+cases during the comet extraction part you will get information about a
+required user action written to the same log area. Please note that all
+the textual output is logged to a text file ‘airtools.log’ as well which
+comes handy in case of errors are simply for later reference.
+
   
 ![The AIRTOOLS user interface tabs](images/airtools-gui.png
 "airtools-gui")
@@ -468,7 +505,7 @@ reference for your newly added lines. The columns used are:
     Unique identifier for the telescope and camera, using 3-6
     alphanumeric characters.
   - flen:  
-    Folal length of the telescope or camera lens in mm.
+    Focal length of the telescope or camera lens in mm.
   - aperture:  
     Open aperture of the telescope or camera lens in mm.
   - fratio:  
@@ -639,11 +676,166 @@ using the file manager.
 
 # Image Reduction
 
+The “Image Reduction” tab is the first tab of the AIRTOOLS graphical
+user interface. Its main purpose is to provide general tasks for basic
+reduction of astronomical images that is to process all of the raw image
+sequences to obtain deep stacked result images of your targets.
+
+The tasks are presented in logical order and may be run one step after
+the other - which is recommended for first time users - or run
+completely unattended, including astrometry and blind stacking on a
+moving comet. Just select the tasks you wish to run in a row. Suitable
+parameters are determined automatically and will work in most cases.
+Special cases can be handled by supplying options via the “Expert
+Options” entry (see Appendix ???).
+
+It is possible to limit the requested tasks to run on a specific image
+set by providing the set name in the appropriate text entry field.
+
+The final group of checkboxes determines which part of the tasks is
+executed. Normally, you will want the program to process your images and
+display any diagnostic plot it creates and show all result images.
+
+Pressing the “Start” button causes the selected tasks to execute. At any
+time you may interrupt operation by pressing the same button again. Note
+that interruption is typically defered by a couple of seconds. Running a
+task for a second time will process any remaining image sets only.
+
 ## Master Darks and Flats
+
+The processing of calibration images involves a mixture of median and
+average operations. For best results it is therefore adviced to capture
+in multiples of 6 exposures, e.g. 6 individual dark images at any
+required exposure time (and temperature) and 12 individual flat images
+for any filter used.
+
+Throughout this manual we refer to the term master dark by meaning of an
+image which has not been subtracted by a bias image. Within this
+definition a bias image is just a dark image at zero seconds exposure
+time. Furthermore a master flat image is a dark-subtracted flat field
+(where the corresponding master dark was taken at the same exposure
+time, sometimes called a flat-dark).
+
+If you don’t know your camera/sensor very well then it is a good idea to
+take more exposures - especially darks. The processing routines include
+measurements of the dark level in each image. A plot of this
+measurements is displayed and you can evaluate the stability of the mean
+intensity level. In addition, the difference of each individual dark
+exposure with respect to the mean image is computed. A mosaic of the
+much downsized and contrast enhanced difference images is created and
+displayed. This is helpful again to judge sensor stability and health.
+You may measure image intensity withing self defined regions. Note that
+the mean intensity of difference images has been shifted to 1000 and
+streched by a factor of 10.
+
+The number of individual flat images has to be choosen to be large
+enough to provide suitable signal to noise (not degrade the signal to
+noise of the stacked target image). Also its intensity level should be
+choosen carefully to provide high signal but fall well within linear
+range of the sensor response. Creating high quality flat fields is a
+challenge but crucial for obtaining precise photometry of extended
+objects like comets.
+
+![Variation of dark images with respect to master dark (Pentax K-5II
+DSLR)](images/dark_variation2.png "Dark variation")
 
 ## Image Calibration
 
+Image calibration involves the subtraction of the master dark image and
+division by the master flat image. The calibrated images are stored in
+the temporary directory defined for the project. Their name starts with
+the image number associated with each individual raw image. Calibrated
+images are not overwritten by default and kept throughout the project.
+
+There is no plots or result images produced by the caibration task.
+Though you may display certain calibrated images by using actions from
+the “Misc. Tools” tab: enter an image set name or specific image numbers
+and press the button “Load Calibrated Images”.
+
+For DSLR images it is possible to provide a file which contains a list
+of known hot pixels. Those will be replaced by the interpolation
+algorithm during the debayering step. The hot pixel file must be named
+using the telescope/camera identifier as defined in ‘camera.dat’,
+e.g. if the identifier is N16C then provide a hot pixel file
+‘hotpix.n16c.dat’ is the project directory. It is a simple text file
+containing one line of at least 3 space separated values per pixel. The
+values are image coordinates in x (starting at left with 0) and y
+(starting at top with 0) and a third fixed value of 0.
+
+In addition it is possible to manually create masks of bad image regions
+where necessary (e.g. satellite trails) on calibrated images. Load the
+calibrated images and use SAOImage regions to surround the affected
+areas. Save the regions file under the ‘bgvar’ subdirectory using a name
+containing the given image number, e.g. ‘0003.bad.reg’. Those image
+regions will be excluded from the stacking process later on.
+
+## Background evaluation
+
+Often, observations are carried out under non-perfect conditions. If you
+plan to estimate photometric magnitudes from extended sources, then it
+is important to carefully check image quality and possibly reject some
+exposures from stacking of a long sequence of images. Therefore a check
+of variation in the sky background has been added to the processing
+pipeline. At first, a downsized background map is created for each image
+and the average intensity level is plotted.
+
+![Background intensity (3 image sets)](images/gsog.bg.png
+"Background intensity")
+
+Then an average background image is created for each image set as
+reference and difference images are created for each individual
+exposure. A mosaic of those thumbnail difference images is finally
+displayed.
+
+![Background variation (2 different image sets)](images/bgvar.png
+"Background variation")
+
+## Image Registration
+
+The stacking process involves several steps. At first, sources (stars)
+are extracted for each calibrated image. Then sources are matched with
+respect to the reference image of the given set. Some of the brighter,
+unsaturated stars are used to measure relative brightness between images
+and an average value of star size (full width at half maximum). Those
+values are plotted to allow to quantify image quality and sky
+conditions.
+
+![Mag difference](images/gsog.dmag.png "Mag difference")
+
+![FWHM of stars](images/gsog.fwhm.png "FWHM")
+
 ## Stacking and Astrometry
+
+Finally the images are projected to the reference image arbitrary
+coordinate system and co-added. The stacked image is used to create an
+object catalog. Stellar sources of this catalog are matched against a
+local copy of the Tycho2 catalog to obtain a first astrometric solution
+(using an offline Astrometry.net solver). In a second step a global
+model is fitted (using UCAC-4 catalog) over the whole image including to
+map some degree of distortion. This new WCS model is saved and used
+later on to identify objects against photometric catalogs. The overall
+astrometric accuracy is printed to the log output and several diagnostic
+plots are created to show deviations from catalog position in different
+axes, a distortion map showing pixel scale variation and a sky chart
+with detected sources (green).
+
+![Distortion map (8" Newton f/4, Pentax K-5II)](images/distortion2.png
+"Distortion map")
+
+With the help of the astrometric solution and comet ephemeris data
+fetched from MPC it is possible to predict the comet motion between
+individual exposures and use this information to do blind stacking on
+the comet.
+
+The resulting output images have names starting with the image set name.
+Stacks centered on the moving comet have a fixed string suffix ’\_m’.
+The images contain 16bit integer data and are either in PGM (monochrome,
+gray image) or PPM (RGB image) format. The choice of these formats over
+FITS is mainly due to historic reasons - the software originally was
+written to reduce DSLR images only - and because many of the underlying
+image reduction software programs simply do not operate on (RGB-) FITS
+images. image metadata are stored in associated ASCII header files using
+the file extension ‘.head’.
 
 # Large Aperture Comet Photometry
 

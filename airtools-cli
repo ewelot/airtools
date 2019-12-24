@@ -13,8 +13,8 @@
 #       AO_AMASK and AO_ACCOO in _astrometry
 #
 ########################################################################
-VERSION="1.0"
-VINFO="T. Lehmann, Aug. 2019"
+VERSION="1.1"
+VINFO="T. Lehmann, Dec. 2019"
 PINFO="\
     options:
       -h            show this help text
@@ -28,6 +28,21 @@ PINFO="\
       task          run given task    
 "
 CHANGELOG="
+    1.1 - 15 Dec 2019
+        * darks, bgvar: bugfix for newer versions of imagemagick: when writing
+          result to stdout in a specific image format then a hyphen character
+          is required after the format specification (e.g. pgm:-)
+        * lights: allow to use hotpixel file name hotpix.$cam.dat
+        * astrometry: if using AO_ACCOO=unknown then do full sky search
+        * allow for performance monitoring by using AI_DSTAT=1
+
+    1.1a2 - 07 Nov 2019
+        * imageinfo: avoid Gtk-Warning messages about theme parsing errors in
+          calls of mousepad by filtering error stream
+
+    1.1a1 - 21 Oct 2019
+        * darks: run parallel jobs
+        
     1.0   - 27 Aug 2019
         * set LC_NUMERIC=C required by printf and sort commands
         * register: bugfix: correctly capture exit code of the first comand in
@@ -288,6 +303,7 @@ _imageinfo () {
     local ext
     local msg
     local flist
+    local infofile
     
     msg="# Collecting image information ..."
     extlist=$(cd $AI_RAWDIR/ && find * -type f | sed -e 's,.*\.,,' | sort -u | \
@@ -298,15 +314,16 @@ _imageinfo () {
         # scanning dslr raw images ...
         # note: use AI_TZOFF=1 if DSLR camera time is MEZ instead of UT
         #   DSLR camera exif time is exposure end time + 30s
-        test -f exif.dat && rm exif.dat
+        infofile=exif.dat
         for ext in $extlist
         do
             echo "# scanning $ext files ..."
-            img_info $(find $AI_RAWDIR -type f -name "*.$ext") | sort -n -k 2,2 >> exif.dat
+            img_info $(find $AI_RAWDIR -type f -name "*.$ext") | sort -n -k 2,2 >> $infofile
             test $? -ne 0 && return 255
         done
     else
         # scanning FITS images ...
+        infofile=rawfiles.dat
         if grep -iq iTelescope.Net $AI_RAWDIR/2*{txt,log} 2>/dev/null
         then
             if [ -e $AI_RAWDIR/obs.txt ]
@@ -318,24 +335,24 @@ _imageinfo () {
             tellist=$(get_itel_telid $AI_RAWDIR/2*)
             test "$tellist" && for tel in $tellist
             do
-                # bugfix for wrong identifiers on T16
+                # bugfix for wrong identifiers on T16, T68, T20
                 test $tel == "16" && tel=T16
                 test $tel == "jbl08" && tel=T68
+                test $tel == "T2" && tel=T20
                 echo "# scanning fits files for $tel ..."
                 flist=$(find $AI_RAWDIR \( -name "*fit.zip" -or -name "*fits" \) -not -name "calib*" | grep -iw $tel)
-                map_rawfiles -x $flist >> rawfiles.dat
+                map_rawfiles -x $flist >> $infofile
                 test $? -ne 0 && return 255
             done
         else
             echo "# scanning fits files ..."
             map_rawfiles -x $(find $AI_RAWDIR -type f \
                    -name "*.fit"  -o -name "*.FIT" \
-                -o -name "*.fits" -o -name "*.FITS") >> rawfiles.dat
+                -o -name "*.fits" -o -name "*.FITS") >> $infofile
             test $? -ne 0 && return 255
         fi
     fi
-    test -f exif.dat && mousepad exif.dat &
-    test -f rawfiles.dat && mousepad rawfiles.dat &
+    ( mousepad $infofile 3>&1 1>&2 2>&3 | grep -v "Gtk-WARNING .* Theme parsing error" ) 3>&1 1>&2 2>&3 &
     return 0
 }
 
@@ -353,6 +370,17 @@ _darks () {
     local nlist
     local exlist
     local fname
+    local x
+    local msg
+    local bs
+    local tmpargs=$(mktemp "/tmp/tmp_args_XXXXXX")
+    local tmpsh=$(mktemp "/tmp/tmp_script_XXXXXX.sh")
+    chmod u+x $tmpsh
+    cat <<EOF > $tmpsh
+#!/bin/bash
+. airfun.sh > /dev/null
+_run_parallel \$@
+EOF
     
     slist=$(AIsetinfo -b | awk '{if($4=="d"){print $2}}')
     test "$setname" && slist=$setname
@@ -367,25 +395,102 @@ _darks () {
             return 255
     done
     
+    msg="# Converting dark images ..."
+    tellist=$(AIsetinfo -c | grep -w d | awk '{printf("%s\n", $12)}' | sort -u)
+    (test -z "$TASKMODE" || test "$TASKMODE" == "nodisplay") && for tel in $tellist
+    do
+        # get camera dependend parameters
+        # determine intensity scaling factor to stretch to full 16bit range
+        # this is used by AIraw2gray in case of FITS images only
+        scale=$(get_param camera.dat rawbits $tel | awk '{if ($1!="-" && $1<16) print 2^(16-$1)}')
+
+        # check if top-down image flipping is required
+        flip=$(get_param camera.dat flip $tel | awk '{if ($1=="1") print 1}')
+        
+        # options for raw image conversion
+        opts=""
+        test "$scale" && opts="-s $scale"
+        test "$flip"  && opts=$(echo $opts "-f")
+
+        # determine images which need to be converted
+        rm -f $tmpargs
+        for set in $(AIsetinfo -c | grep -w d | \
+            awk -v t=$tel '{if($12==t){print $1}}')
+        do
+            echo $slist | grep -q -w $set || continue
+            for num in $(AI_EXCLUDE="" AIimlist -n $set "" raw)
+            do
+                test -f $AI_TMPDIR/$num.pgm && continue
+                x=""
+                test -s mstat.dk.dat &&
+                    fname=$(get_rawfile $num) &&
+                    x=$(grep "^$(basename $fname) " mstat.dk.dat)
+                test "$x" && test -f $set.pgm &&
+                    test -f dk.var10.${tel,,}.pgm && continue
+                echo $num $opts >> $tmpargs
+            done
+        done
+
+        if [ -s $tmpargs ]
+        then
+            test "$msg" && echo $msg && msg="" &&
+                echo "#" $(cat $tmpargs | wc -l) "images"
+            _run_parallel () {
+                num=$1; shift 1
+                opts=$@
+                dcrawopts=""
+                test "$AI_CCDREGION" && dcrawopts="-R $AI_CCDREGION"
+
+                fname=$(get_rawfile $num)
+                echo $num >&2
+                #echo "# AI_DCRAWPARAM=\"$AI_DCRAWPARAM $dcrawopts\" AIraw2gray $opts $fname > $AI_TMPDIR/$num.pgm" >&2
+                AI_DCRAWPARAM="$AI_DCRAWPARAM $dcrawopts" \
+                    AIraw2gray $opts $fname > $AI_TMPDIR/$num.pgm
+            }
+            export -f _run_parallel
+            cat $tmpargs | parallel -k $tmpsh
+            unset -f _run_parallel
+        fi
+    done
+    
     msg="# Computing statistics of dark images ..."
     if [ -z "$TASKMODE" ] || [ "$TASKMODE" == "nodisplay" ]
     then
+        # determine list of images for which to estimate statistics
+        nlist=$(
         for set in $slist
         do
-            nlist="$(echo $(AI_EXCLUDE="" AIimlist -n $set "" raw))"
-            exlist=""
-            for num in $nlist
+            AI_EXCLUDE="" AIimlist $set "" raw | while read x num fname x
             do
-                fname=$(get_rawfile $num)
-                test -s mstat.dk.dat &&
-                    grep -q "^$(basename $fname) " mstat.dk.dat &&
-                    exlist="$(echo $exlist $num)"
+                if [ -s mstat.dk.dat ]
+                then
+                    ! grep -q "^$(basename $fname) " mstat.dk.dat &&
+                        echo $num
+                else
+                    echo $num
+                fi
             done
-            test "$nlist" == "$exlist" && continue
+        done)
+        
+        # get stats
+        if [ "$nlist" ]
+        then
+            test "$AI_DEBUG" && echo nlist=$nlist >&2
             test "$msg" && echo $msg && msg=""
-            AI_EXCLUDE="$exlist" AImstat -v -c $set >> mstat.dk.dat
-        done
+            _run_parallel () {
+                num=$1
+                fname=$(get_rawfile $num)
+                AImstat -v -c $fname | awk -v n=$num '{
+                    if ($2=="-") sub(/-/,n,$2)
+                    print $0}'
+            }
+            export -f _run_parallel
+            parallel -k $tmpsh ::: $nlist >> mstat.dk.dat
+            unset -f _run_parallel
+        fi
     fi
+
+    # plot stats
     test ! -s mstat.dk.dat && return 255
     test "$TASKMODE" != "nodisplay" &&
         AIplot -o $AI_TMPDIR/x.darkvalue.png -t "Dark value per image" -p mstat.dk.dat 2 5
@@ -413,58 +518,57 @@ _darks () {
     (test -z "$TASKMODE" || test "$TASKMODE" == "nodisplay") && for tel in $tellist
     do
         test -f dk.var10.$tel.pgm && continue
-        test "$msg" && echo $msg && msg=""
-        set - $(AIsetinfo -c | grep -w d | \
-            awk -v t=$tel '{if(tolower($12)==t){print $0}}' | sort -n -k9,9 | tail -1)
-        test -f dkmn.pgm && rm dkmn.pgm
-        ln -s $1.pgm dkmn.pgm
+        
+        # populate $tmpargs to be used by parallel
+        rm -f $tmpargs
         for set in $(AIsetinfo -c | grep -w d | \
             awk -v t=$tel '{if(tolower($12)==t){print $1}}')
         do
-            bs=""
-            dcrawopts=""
-            test "$AI_CCDREGION" && dcrawopts="-R $AI_CCDREGION"
-            ext=$(AIimlist -f $set "" raw 2>/dev/null | head -1 | sed -e 's/.*\.//g')
-
-            # determine intensity scaling factor to stretch to full 16bit range
-            # this is used by AIraw2gray in case of FITS images only
-            scale=$(get_param camera.dat rawbits $set | awk '{if ($1!="-" && $1<16) print 2^(16-$1)}')
-
-            # check if top-down image flipping is required
-            flip=$(get_param camera.dat flip $set | awk '{if ($1=="1") print 1}')
-            
-            # options for raw image conversion
-            opts=""
-            test "$scale" && opts="-s $scale"
-            test "$flip"  && opts=$(echo $opts "-f")
-
+            test ! -f $set.pgm &&
+                echo "ERROR: $set.pgm is missing." >&2 && return 255
+            bs=64
+            x=$(imsize $set.pgm | tr ' ' '\n' | sort -nr | head -1)
+            test $x -lt 3000 && bs=32
+            test $x -lt 1600 && bs=20
             for num in $(AI_EXCLUDE="" AIimlist -n $set "" raw)
             do
-                echo "# computing diff for $num ($set $tel $scale)" >&2
-                rfile=$(get_rawfile $num)
-                AI_DCRAWPARAM="$AI_DCRAWPARAM $dcrawopts" \
-                    AIraw2gray $opts $rfile | \
-                    pnmccdred -m 10 -a 1000 -d dkmn.pgm - - | pnmsmooth > x.dk.pgm
-                if [ -z "$bs" ]
-                then
-                    l=$(identify x.dk.pgm | cut -d " " -f3 | tr 'x' '\n' | sort -nr | head -1)
-                    bs=64
-                    test $l -lt 3000 && bs=32
-                fi
-                AIbgmap -q x.dk.pgm $bs 1
-                add=$(AIstat x.dk.bgm1.pgm | awk '{printf("%.0f", 1000-$5)}')
-                pnmccdred -a $add x.dk.bgm1.pgm $AI_TMPDIR/dk.$num.pgm
-                rm x.dk.bgm1.pgm x.dk.bg.pgm x.dk.pgm
+                test ! -f $AI_TMPDIR/$num.pgm &&
+                    echo "ERROR: file $AI_TMPDIR/$num.pgm is missing." >&2 &&
+                    return 255
+                echo $num $bs $set $tel
             done
-        done
+        done > $tmpargs
+        
+        if [ -s $tmpargs ]
+        then
+            test "$msg" && echo $msg && msg="" &&
+                echo "#" $(cat $tmpargs | wc -l) "images"
+            _run_parallel () {
+                num=$1
+                bs=$2
+                set=$3
+                tel=$4
+                echo "# computing diff for $num ($set $tel)" >&2
+                pnmccdred -m 10 -a 1000 -d $set.pgm $AI_TMPDIR/$num.pgm - | pnmsmooth > x.$num.pgm
+                AIbgmap -q x.$num.pgm $bs 1
+                add=$(AIstat x.$num.bgm1.pgm | awk '{printf("%.0f", 1000-$5)}')
+                pnmccdred -a $add x.$num.bgm1.pgm $AI_TMPDIR/$num.dkdiff.pgm
+                rm x.$num.bgm1.pgm x.$num.bg.pgm x.$num.pgm
+            }
+            export -f _run_parallel
+            cat $tmpargs | parallel $tmpsh
+            unset -f _run_parallel
+        fi
+        
         montage -background '#03c003c003c0' -fill '#050005000500' -label '%t' \
-            $AI_TMPDIR/dk.????.pgm -geometry +4+2 ppm: | ppm2gray - > dk.var10.$tel.pgm
-        rm -f $AI_TMPDIR/dk.????.pgm dkmn.pgm
+            $AI_TMPDIR/????.dkdiff.pgm -geometry +4+2 dk.var10.$tel.pgm &&
+			rm -f $AI_TMPDIR/????.dkdiff.pgm
     done
     
     # dark noise estimation (per pixel)
     (test -z "$TASKMODE" || test "$TASKMODE" == "nodisplay") && for set in $slist
     do
+        test -f n${set}.sd.pgm && continue
         nimg=$(AIsetinfo $set | awk '{print $9}')
         test $nimg -lt 12 && continue
         echo "# estimate dark noise in $set, nimg=$nimg"
@@ -489,6 +593,7 @@ _darks () {
     (test -z "$TASKMODE" || test "$TASKMODE" == "statusall") &&
         (AIexamine -n "Dark_Variation" -l dk.var10.*pgm &
         sleep 3)
+    rm -f $tmpsh $tmpargs
     return 0
 }
 
@@ -514,8 +619,9 @@ _flats () {
         echo "# tel=$tel  cam=$cam"
         type=long; test $texp -lt 32 && type=short
         badpix=hotpix.${cam}_$type.dat
-        test ! -e $badpix &&
-            echo "WARNING: file $badpix is missing." && badpix=""
+        test ! -e $badpix && badpix=hotpix.${cam}.dat
+        test ! -e $badpix && badpix=""
+        test "$badpix" && echo "# using hotpixel file $badpix"
         echo "# AI_BADPIX=\"$badpix\" AIflat $AO_FLATS -b $set"
         AI_BADPIX="$badpix" AIflat $AO_FLATS -b $set
         test $? -ne 0 && return 255
@@ -566,7 +672,7 @@ _lights () {
     for set in $slist
     do
         # check if all images have been calibrated already
-        nlist1=$(AIimlist -q -n $set 2>/dev/null | sort)    # processed
+        nlist1=$(AIimlist -q -s -n $set 2>/dev/null | sort) # processed (non-empty)
         nlist2=$(AIimlist -q -x -n $set | sort)             # all
         test "$nlist1" == "$nlist2" &&
             echo "WARNING: all images in $set are calibrated already" &&
@@ -584,9 +690,11 @@ _lights () {
             echo "# tel=$tel  cam=$cam"
             type=long; test $texp -lt 32 && type=short
             badpix=hotpix.${cam}_$type.dat
-            test ! -e $badpix &&
-                echo "WARNING: file $badpix is missing." && badpix=""
+            test ! -e $badpix && badpix=hotpix.${cam}.dat
+            test ! -e $badpix && badpix=""
+            test "$badpix" && echo "# using hotpixel file $badpix"
         fi
+        test -d bgvar || mkdir bgvar
         
         echo "# running: AI_BADPIX=\"$badpix\" AIccd $ccdopts $set"
         AI_BADPIX="$badpix" AIccd $ccdopts $set
@@ -620,7 +728,7 @@ _bgvar () {
         echo "WARNING: no images to process." && return 0
     echo "# Estimate background variation ..."
 
-    sleep 3
+    sleep 1
     if [ -z "$TASKMODE" ] || [ "$TASKMODE" == "nodisplay" ]
     then
         # recognize already processed set
@@ -634,7 +742,13 @@ _bgvar () {
             for num in $nlist
             do
                 test "$doit" && continue
-                AIsetinfo -b | grep -w o | awk '{printf("%s", $8)}' | \
+                # TODO: determine inext
+                #   determine calib. image
+                #   if -f calimg && calimg newer than bgvar/$num.bgm1.$inext
+                #   then rm bgvar/$num.bgm1.$inext
+                #       remove entry from bgdiff.dat bgsfit.dat
+                #       remove varbgm1.$set.$inext
+                AIsetinfo -b | grep -w o | awk '{printf("%s ", $8)}' | \
                     grep -q -w $num && continue
                 ! grep -q "^"$num"." bgdiff.dat && doit=1            
             done
@@ -662,6 +776,8 @@ _bgvar () {
             done
         fi
     fi
+    
+    # plot mean bg values
     test $(head -1 bgdiff.dat | wc -w) -gt 14 && bgcol=16   # rgb in 15 16 17
     test $(head -1 bgdiff.dat | wc -w) -eq 7  && bgcol=7    # gray in 7
     tellist=$(AIsetinfo -o | grep -v "^#" | awk '{printf("%s\n", tolower($12))}' | sort -u)
@@ -708,7 +824,7 @@ _bgvar () {
         done
         # note: montage changes intensities when output is 16bit grayscale
         montage -background $bg -fill $fg -label '%t' \
-            z.$set.????.$inext -geometry +4+2 ppm: | ppm2gray - 0,1,0 > var$suffix.$set.$inext
+            z.$set.????.$inext -geometry +4+2 ppm:- | ppm2gray - 0,1,0 > var$suffix.$set.$inext
         rm z.$set.????.$inext tmp1.$$.$inext
     done
     imlist=$(for set in $slist
@@ -776,6 +892,7 @@ _register () {
                 done
                 for set in $failedlist
                 do
+                    echo "# AIregister -m 0.6 -p $set \"\" 0.06" >&2
                     AIregister -m 0.6 -p $set "" 0.06 | tee -a reg.dat
                     test ${PIPESTATUS[0]} -ne 0 && retval=255
                 done
@@ -1002,6 +1119,7 @@ _astrometry () {
     #       a number representing max radius from image center to use
     #   AO_ACCOO - image center coordinates (RA,DEC) overwriting the
     #       values determined by imcoord automatically
+    #       if set to "unknown" then do full sky search
     local slist
     local use_scat=1
     local set
@@ -1087,6 +1205,12 @@ _astrometry () {
         north=$(get_header -q $set.head AI_NPA)
         test $? -ne 0 && do_solve_field=1
         
+        # force full sky search
+        if [ "$line" == "unknown" ]
+        then
+            do_solve_field=1
+            line=""
+        fi
         
         # run solve-field if necessary
         opts=""
@@ -1372,6 +1496,7 @@ _ds9cmd () {
     # note: all tasks related to comet photometry must start with set name or image
     #   image - bggradient
     #   set   - psfextract, cometextract, manualdata, photcal
+    local cmd=$1
     local set=$2
     local msg="# ds9cmd $@"
     local ststack
@@ -1394,13 +1519,16 @@ _ds9cmd () {
             error "missing header file $set.head"
     fi
     # check for running SAOImage AIRTOOLS
-    xpaaccess -c -t "2,2" AIRTOOLS > /dev/null
-    if [ $? -eq 0 ]
+    if [ "$cmd" != "photcal" ]
     then
-        # load star stack
-        echo "# loading $ststack ..."
-        AIexamine $ststack &
-        fid=$(wait_for_frame $ststack)
+        xpaaccess -c -t "2,2" AIRTOOLS > /dev/null
+        if [ $? -eq 0 ]
+        then
+            # load star stack
+            echo "# loading $ststack ..."
+            AIexamine $ststack &
+            fid=$(wait_for_frame $ststack)
+        fi
     fi
 
     false && (
@@ -1497,7 +1625,8 @@ __load_images () {
     local tmp1=$(mktemp "/tmp/tmp1_$$_XXXXXX.dat")
     local tmp2=$(mktemp "/tmp/tmp2_$$_XXXXXX.dat")
 
-    slist=$(AIsetinfo -b | awk '{if($4=="o"){print $2}}')
+    #slist=$(AIsetinfo -b | awk '{if($4=="o"){print $2}}')
+    slist=$(AIsetinfo -b)
     test "$1" && is_setname $1 && slist=$1 && shift 1
     test -z "$slist" && rm -f $tmp1 $tmp2 && return
     msg="# Searching images ..."
@@ -1660,15 +1789,16 @@ Miscellaneous tools:
     status      - check previous results"
     exit 0
 fi
-if [ "$TASKMODE" == "list" ]
-then
-    echo "\
+case "$TASKMODE" in
+    nodisplay|status|statusall) ;;
+    *)  echo "\
 available task modes:
     nodisplay   - skip display of new windows (images, plots)
     status      - show available results (measurements) only
     statusall   - like status but includes image display "
-    exit 0
-fi
+        exit 0
+        ;;
+esac
 
 
 #--------------------
@@ -1758,7 +1888,7 @@ test ! "$quiet" &&
 #-----------------------
 #   main program start
 #-----------------------
-LC_NUMERIC=C
+export LC_NUMERIC=C
 trap "" PIPE
 errcode=""
 
@@ -1786,10 +1916,14 @@ test "$task" != "imageinfo" && test "$task" != "usercmd" &&
     test ! -e "set.dat" &&
     error "Missing file set.dat."
 
+DSTAT_PID=""
+test "$AI_DSTAT" && DSTAT_PID=$(
+    dstat --nocolor --noupdate --output dstat.log -tcdnmsp 5 >/dev/null &
+    echo $!)
 echo "# Running task $task ($(date +'%H:%M')) ..."
 _$task "$@"
 errcode=$?
 test -z "$errcode" && error "Missing return code from task."
 test "$errcode" == "0" && echo "# task finished at $(date +'%H:%M')"
-
+test "$DSTAT_PID" && kill $DSTAT_PID
 exit $errcode

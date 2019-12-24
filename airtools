@@ -6,15 +6,19 @@
 #   a wrapper around airtools-gui.jar
 #
 ########################################################################
-VERSION="0.2"
-VINFO="T. Lehmann, Mar. 2019"
+VERSION="1.0"
+VINFO="T. Lehmann, Dec. 2019"
 PINFO="\
     options:
       h         show this help text
-      l         prefer airtools-gui.jar from users bin directory
+      l         prefer airtools-gui from users bin directory
       args      program arguments passed over to java program
 "
 CHANGELOG="
+    1.0  - 17 Dec 2019
+        * handle startup options for java and openjfx versions 9 and later
+	    due to new modules system
+
     0.2  - 16 Mar 2019
         * added option -l to prefer java program from users bin directory
         * improved error checking and messages
@@ -28,6 +32,7 @@ CHANGELOG="
 #   user definitions
 #--------------------
 jar=airtools-gui.jar
+mainclass=tl.airtoolsgui.AirtoolsGUI
 datadir=/usr/share/airtools
 
 
@@ -36,6 +41,7 @@ datadir=/usr/share/airtools
 #--------------------
 cmdline="$(basename $0) $@"  # preserve command line
 prefer_local_bin=""
+experimental=""
 testonly=""
 showhelp=""
 for i in $(seq 1 3)
@@ -66,7 +72,8 @@ if [ -z "$prog" ]
 then
     msg="Unable to find $jar"
     type -p yad >/dev/null &&
-        yad --title "Error" --window-icon=none --image=gtk-dialog-error --no-buttons --text "\n  $msg" && exit 1
+        yad --title "Error" --window-icon=none --image=gtk-dialog-error --no-buttons \
+            --text "\n  $msg" && exit 1
     type -p zenity >/dev/null &&
         zenity --error --text "\n  $msg" && exit 1
     notify-send -u critical -i gtk-dialog-error "$msg"
@@ -77,19 +84,19 @@ fi
 #--------------------
 #   start
 #--------------------
-# set Java 8 runtime
-# (currently there are problems using Java 11 which is the default java
-# on Ubuntu 18.04)
-JAVA_HOME=$(update-alternatives --list java | grep -E "java-8|jdk-8|jre-8" | head -1 | \
-    sed -e 's,/bin/java$,,')
-test -z "$JAVA_HOME" &&
-    echo "ERROR: unable to find Java 8 runtime." >&2 &&
-    exit 255
+javaprog=java
+test "$JAVA_HOME" && javaprog=$JAVA_HOME/bin/java
+
+jvers=$(java -XshowSettings:properties -version 2>&1 | tr -d ' ' | grep "^java.version=" | \
+    cut -d '=' -f2)
+jargs=""
+test ${jvers/.*/} -gt 8 &&
+    jargs="-p /usr/share/openjfx/lib --add-modules javafx.controls,javafx.fxml"
 
 # start java program
 if [ "$testonly" ]
 then
-    echo $JAVA_HOME/bin/java -jar $prog "$@"
+    echo $javaprog $jargs -cp $prog $mainclass "$@"
 else
-    $JAVA_HOME/bin/java -jar $prog "$@"
+    $javaprog $jargs -cp $prog $mainclass "$@"
 fi

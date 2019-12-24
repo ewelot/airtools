@@ -17,6 +17,10 @@ set -e
 # for details, see http://www.debian.org/doc/debian-policy/ or
 # the debian-policy package
 
+get_x11user () {
+    display=":$(ls /tmp/.X11-unix/* | sed 's#/tmp/.X11-unix/X##' | head -n 1)"
+    who | grep '('$display')' | awk '{print $1}' | head -n 1
+}
 
 case "$1" in
     configure)
@@ -24,11 +28,11 @@ case "$1" in
         export dfile
         xdg-desktop-menu install --novendor $dfile
         
-        duser=$(last | grep -w ":0 " | head -1 | sed -e 's|[ \t].*||')
-        if [ "$duser" ]
+	xuser=$(get_x11user)
+        if [ "$xuser" ]
         then
             # install desktop icon
-            su - $duser -c "xdg-desktop-icon install --novendor $dfile"
+            su - $xuser -c "xdg-desktop-icon install --novendor $dfile"
         fi
     ;;
 

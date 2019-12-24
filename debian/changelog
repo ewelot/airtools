@@ -1,3 +1,11 @@
+airtools (3.2-1) experimental; urgency=medium
+
+  * Update to airfun.sh version 4.2 and airtools-cli version 1.1
+  * Several small changes to airtools-gui
+  * Depend on java-runtime-headless instead of openjdk-8-jre
+
+ -- Thomas Lehmann <t_lehmann@freenet.de>  Fri, 20 Dec 2019 21:52:03 +0100
+
 airtools (3.1-1) experimental; urgency=medium
 
   * Update to airfun.sh version 4.1

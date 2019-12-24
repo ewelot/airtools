@@ -106,18 +106,16 @@ done
 # handle openjfx package peculiarities in Ubuntu 18.04
 if [ $dist == "bionic" ]
 then
-    v=$(apt-cache policy openjfx | sed -e 's,^ *,,' | grep "^8" | cut -d ' ' -f1)
-    if [ "$v" ]
-    then
-        echo "
-Installing JavaFX8 and pinning packages ..."
-        sleep 3
-        apt-get -y install libopenjfx-jni=$v libopenjfx-java=$v openjfx=$v
-        for p in libopenjfx-jni libopenjfx-java openjfx
-        do
-            echo $p hold | dpkg --set-selections
-        done
-    fi
+    msg="# unsetting package holds"
+    for p in libopenjfx-jni libopenjfx-java openjfx
+    do
+        if dpkg --get-selections | grep -qw $p
+        then
+            test "$msg" && echo $msg && msg=""
+            echo $p install | dpkg --set-selections
+        fi
+    done
+    apt-get -y install libopenjfx-jni libopenjfx-java openjfx
 fi
 echo "
 Installing $packages ..."

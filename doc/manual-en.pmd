@@ -1,6 +1,6 @@
-% Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v3.1)
+% Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v3.2)
 % Thomas Lehmann
-% Draft, August 2019
+% Draft, December 2019
 
 
 \pagebreak
@@ -107,14 +107,10 @@ Type="Linux" and Version="Ubuntu (64-bit)". Continue by pressing "Next".
 Set the memory size to >=2 GB (recommended 4 GB or up to 75% of physical RAM)
 and press "Next".
 
-Choose the defaults to create a virtual hard disk of type
-VDI, dynamically allocated, using the proposed file name. The file size
-(size of the virtual hard disk) should be >=50 GB. This is sufficient for
-roughly 10-30 comet observations, based on 10-20 individual exposures each.
+Create a virtual hard disk of type VDI of fixed size. You can use the proposed file name but it is recommended to create the virtual disk file on a fast physical hard disk drive, e.g. SSD. The file size should be >=50 GB to serve for
+roughly 10-20 comet observations, based on 10-20 individual exposures each.
 If you intent to use the AIRTOOLS software regularly to analyze all your
-comet observations then you should create a much larger virtual hard disk,
-e.g. of size 500 GB. After pressing the "Create" button the virtual
-machine is created.
+comet observations then you should create a much larger virtual hard diskAfter pressing the "Create" button the virtual machine is created.
 
 It is recommended to tweak some additional parameters for improved
 performance. Click the "Settings" button to access the following tabs:
@@ -306,6 +302,20 @@ downloads.
 
 # The AIRTOOLS Graphical User Interface
 
+The graphical user interface consists of three tabs. The first tab is used for
+all basic image reduction steps to process the raw images to finally obtain
+stacked images of your targets. The second tab is dedicated to the comet
+extraction and large aperture photometry tasks. Finally, a couple of handy
+tasks are placed on a third tab.
+
+The lower part of the interface will display text output from any processing
+steps. There you can watch progress of the running tasks, see some measurement
+results but also possible error messages. In a few cases during the comet
+extraction part you will get information about a required user action written
+to the same log area. Please note that all the textual output is logged to
+a text file 'airtools.log' as well which comes handy in case of errors are
+simply for later reference.
+
 \
 ![The AIRTOOLS user interface tabs](images/airtools-gui.png "airtools-gui")
 
@@ -400,6 +410,7 @@ description is as follows:
 
 ID:
 :   This is a unique short identifier for your site (three letters)
+
 location:
 :   A unique single word for the name of your observatory location. The
     previously used entry of the observatory site during project setup must
@@ -425,13 +436,17 @@ tel:
 :   Unique identifier for the telescope and camera, using 3-6 alphanumeric
     characters.
 flen:
-:   Folal length of the telescope or camera lens in mm.
+:   Focal length of the telescope or camera lens in mm.
+
 aperture:
 :   Open aperture of the telescope or camera lens in mm.
+
 fratio:
 :   F-ration of the telescope or camera, that is `flen/aperture`.
+
 camera:
 :   Camera model, used for your convenience only
+
 camchip:
 :   Camera and sensor keys used in final ICQ records of a comet measurement.
     Refer to the lists of [camera keys](https://cobs.si/help?page=ccd_type)
@@ -445,11 +460,11 @@ flip:
     file is organized in such a way that the data of the bottom image row comes
     first and that of the top-most row latest then it is considered unflipped
     and the other way it is flipped. It seems that MaximDL stores data in a
-    flipped manner. 
+    flipped manner.
 rot:
 :   If the camera is rotated with respect to the sky coordinate system then you
     should provide a value different from 0. If true north is left on your
-    image then use a value of 90. A rough approximation is sufficient. 
+    image then use a value of 90. A rough approximation is sufficient.
 rawbits:
 :   Original bitdepth or number of bits per pixel in a single color channel.
     Note that at start of the image reduction the counts (ADU, intensities) are
@@ -462,16 +477,19 @@ satur:
     dynamic range then you should enter a value of 40000 approximately.
 gain:
 :   Number of electrons per ADU. Use a value of 1 if it is not known.
+
 pixscale:
 :   Approximate value of the size of a pixel on the sky in seconds of arc.
+
 magzero:
 :   Zeropoint of the non-calibrated instrumental magnitude scale. This is the
-    magnitude of a star which yields a signal of 1 count (ADU) in a 1 second exposure. 
+    magnitude of a star which yields a signal of 1 count (ADU) in a 1 second exposure.
     Initially you can use an arbitrary value but it is useful to refine it to
     something close to the zeropoint of the calibrated scale (see log output
     of your first photometric calibration later on)
 ttype:
 :   Telescope type: L=reflector, R=refractor, A=photo Lens
+
 ctype:
 :   Sensor type: CCD=monochrome CCD, DSLR=DSLR raw image (as stored in camera,
     e.g. files with extension CR2 for a Canon DSLR), use BGGR or RGGB for a
@@ -557,6 +575,7 @@ set:
     computed stacks and other result files.
 target:
 :   Short name of the target observed (up to 8 characters).
+
 type:
 :   Type of images (1 character): d=dark/bias, f=flat, o=lights, a=addition
     (continuation) of a previously defined image set. If you for some reason
@@ -565,18 +584,23 @@ type:
     then use the character `-` in place of the image type.
 texp:
 :   Exposure time of a single exposure in seconds.
+
 n1:
 :   Number of the first image of the set.
+
 n2:
 :   Number of the last image of the set.
+
 nref:
 :   Number of the image which is used as a reference image for stacking,
     typically it should be close to the middle of the bracketed sequence.
     Not used for darks and flats.
 dark:
 :   Name of the master dark (image set name) used for calibration.
+
 flat:
 :   Name of the master flat used for calibration.
+
 tel:
 :   Identifier of the instrument (telescope/camera) used. This must match
     a valid entry in `camera.dat`.
@@ -590,13 +614,162 @@ using the file manager.
 
 \pagebreak
 
+
 # Image Reduction
+
+The "Image Reduction" tab is the first tab of the AIRTOOLS graphical user
+interface. Its main purpose is to provide general tasks for basic reduction
+of astronomical images that is to process all of the raw image sequences to
+obtain deep stacked result images of your targets.
+
+The tasks are presented in logical order and may be run one step after the
+other - which is recommended for first time users - or run completely
+unattended, including astrometry and blind stacking on a moving
+comet. Just select the tasks you wish to run in a row. Suitable parameters
+are determined automatically and will work in most cases. Special cases
+can be handled by supplying options via the "Expert Options" entry (see
+Appendix ???).
+
+It is possible to limit the requested tasks to run on a specific image set
+by providing the set name in the appropriate text entry field.
+
+The final group of checkboxes determines which part of the tasks is executed.
+Normally, you will want the program to process your images and display any
+diagnostic plot it creates and show all result images.
+
+Pressing the "Start" button causes the selected tasks to execute. At any time
+you may interrupt operation by pressing the same button again. Note that
+interruption is typically defered by a couple of seconds. Running a task for
+a second time will process any remaining image sets only.
+
 
 ## Master Darks and Flats
 
+The processing of calibration images involves a mixture of median and average
+operations. For best results it is therefore adviced to capture in multiples
+of 6 exposures, e.g. 6 individual dark images at any required exposure time
+(and temperature) and 12 individual flat images for any filter used.
+
+Throughout this manual we refer to the term master dark by meaning of an image
+which has not been subtracted by a bias image. Within this definition a bias
+image is just a dark image at zero seconds exposure time. Furthermore a master
+flat image is a dark-subtracted flat field (where the corresponding master dark
+was taken at the same exposure time, sometimes called a flat-dark).
+
+If you don't know your camera/sensor very well then it is a good idea to
+take more exposures - especially darks. The processing routines include
+measurements of the dark level in each image. A plot of this
+measurements is displayed and you can evaluate the stability of the mean
+intensity level. In addition, the difference of each individual dark exposure
+with respect to the mean image is computed. A mosaic of the much downsized and
+contrast enhanced difference images is created and displayed. This is helpful
+again to judge sensor stability and health. You may measure image intensity
+withing self defined regions. Note that the mean intensity of difference images
+has been shifted to 1000 and streched by a factor of 10.
+
+The number of individual flat images has to be choosen to be large enough to
+provide suitable signal to noise (not degrade the signal to noise of the stacked
+target image). Also its intensity level should be choosen carefully to provide
+high signal but fall well within linear range of the sensor response.
+Creating high quality flat fields is a challenge but crucial for obtaining
+precise photometry of extended objects like comets.
+
+![Variation of dark images with respect to master dark (Pentax K-5II DSLR)](images/dark_variation2.png "Dark variation")
+
+
 ## Image Calibration
 
+Image calibration involves the subtraction of the master dark image and division
+by the master flat image. The calibrated images are stored in the temporary
+directory defined for the project. Their name starts with the image number
+associated with each individual raw image. Calibrated images are not overwritten
+by default and kept throughout the project.
+
+There is no plots or result images produced by the caibration task. Though
+you may display certain calibrated images by using actions from the "Misc. Tools"
+tab: enter an image set name or specific image numbers and press the button
+"Load Calibrated Images".
+
+For DSLR images it is possible to provide a file which contains a list of known
+hot pixels. Those will be replaced by the interpolation algorithm during the
+debayering step. The hot pixel file must be named using the telescope/camera
+identifier as defined in 'camera.dat', e.g. if the identifier is N16C then
+provide a hot pixel file 'hotpix.n16c.dat' is the project directory. It is a
+simple text file containing one line of at least 3 space separated values per
+pixel. The values are image coordinates in x (starting at left with 0) and y
+(starting at top with 0) and a third fixed value of 0.
+
+In addition it is possible to manually create masks of bad image regions where
+necessary (e.g. satellite trails) on calibrated images. Load the calibrated images
+and use SAOImage regions to surround the affected areas. Save the regions file
+under the 'bgvar' subdirectory using a name containing the given image number,
+e.g. '0003.bad.reg'. Those image regions will be
+excluded from the stacking process later on.
+
+## Background evaluation
+
+Often, observations are carried out under non-perfect conditions. If you plan
+to estimate photometric magnitudes from extended sources, then it is important
+to carefully check image quality and possibly reject some exposures from
+stacking of a long sequence of images. Therefore a check of variation in the
+sky background has been added to the processing pipeline. At first, a downsized
+background map is created for each image and the average intensity level is
+plotted.
+
+![Background intensity (3 image sets)](images/gsog.bg.png "Background intensity")
+
+
+Then an average background image is created for each image set as reference and
+difference images are created for each individual exposure. A mosaic of those
+thumbnail difference images is finally displayed.
+
+![Background variation (2 different image sets)](images/bgvar.png "Background variation")
+
+## Image Registration
+
+The stacking process involves several steps. At first,
+sources (stars) are extracted for each calibrated image. Then sources are matched
+with respect to the reference image of the given set. Some of the brighter,
+unsaturated stars are used to measure relative brightness between images and
+an average value of star size (full width at half maximum). Those values are
+plotted to allow to quantify image quality and sky conditions.
+
+![Mag difference](images/gsog.dmag.png "Mag difference")
+
+![FWHM of stars](images/gsog.fwhm.png "FWHM")
+
 ## Stacking and Astrometry
+
+Finally the images are
+projected to the reference image arbitrary coordinate system and co-added.
+The stacked image is used to create an object catalog. Stellar sources of this
+catalog are matched against a local copy of the Tycho2 catalog to obtain a
+first astrometric solution (using an offline Astrometry.net solver). In a second
+step a global model is fitted (using UCAC-4 catalog) over the whole image
+including to map some degree
+of distortion. This new WCS model is saved and used later on to identify
+objects against photometric catalogs. The overall astrometric accuracy is
+printed to the log output and several diagnostic plots are created to show
+deviations from catalog position in different axes, a distortion map showing
+pixel scale variation and a sky chart with detected sources (green).
+
+![Distortion map (8" Newton f/4, Pentax K-5II)](images/distortion2.png "Distortion map")
+
+With the help of the astrometric solution and comet ephemeris data fetched from
+MPC it is possible to predict the comet motion between individual exposures and
+use this information to do blind stacking on the comet.
+
+The resulting output images have names starting with the image set name. Stacks
+centered on the moving comet have a fixed string suffix '_m'. The images contain
+16bit integer data and are either in PGM (monochrome, gray image) or PPM (RGB
+image) format. The choice of these formats over FITS is mainly due to historic
+reasons - the software originally was written to reduce DSLR images only - and
+because many of the underlying image reduction software programs simply do not
+operate on (RGB-) FITS images. image metadata are stored in associated ASCII header
+files using the file extension '.head'.
+
+
+\pagebreak
 
 # Large Aperture Comet Photometry
 
