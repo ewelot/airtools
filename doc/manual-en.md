@@ -755,9 +755,9 @@ and press the button “Load Calibrated Images”.
 For DSLR images it is possible to provide a file which contains a list
 of known hot pixels. Those will be replaced by the interpolation
 algorithm during the debayering step. The hot pixel file must be named
-using the telescope/camera identifier as defined in ‘camera.dat’,
-e.g. if the identifier is N16C then provide a hot pixel file
-‘hotpix.n16c.dat’ is the project directory. It is a simple text file
+using the telescope/camera identifier as defined in `camera.dat`,
+e.g. if the identifier is `N16C` then provide a hot pixel file
+`hotpix.n16c.dat` is the project directory. It is a simple text file
 containing one line of at least 3 space separated values per pixel. The
 values are image coordinates in x (starting at left with 0) and y
 (starting at top with 0) and a third fixed value of 0.
@@ -765,8 +765,8 @@ values are image coordinates in x (starting at left with 0) and y
 In addition it is possible to manually create masks of bad image regions
 where necessary (e.g. satellite trails) on calibrated images. Load the
 calibrated images and use SAOImage regions to surround the affected
-areas. Save the regions file under the ‘bgvar’ subdirectory using a name
-containing the given image number, e.g. ‘0003.bad.reg’. Those image
+areas. Save the regions file under the `bgvar` subdirectory using a name
+containing the given image number, e.g. `0003.bad.reg`. Those image
 regions will be excluded from the stacking process later on.
 
 ## Background evaluation
@@ -828,14 +828,14 @@ individual exposures and use this information to do blind stacking on
 the comet.
 
 The resulting output images have names starting with the image set name.
-Stacks centered on the moving comet have a fixed string suffix ’\_m’.
-The images contain 16bit integer data and are either in PGM (monochrome,
+Stacks centered on the moving comet have a fixed string suffix `_m`. The
+images contain 16bit integer data and are either in PGM (monochrome,
 gray image) or PPM (RGB image) format. The choice of these formats over
 FITS is mainly due to historic reasons - the software originally was
 written to reduce DSLR images only - and because many of the underlying
 image reduction software programs simply do not operate on (RGB-) FITS
 images. image metadata are stored in associated ASCII header files using
-the file extension ‘.head’.
+the file extension `.head`.
 
 # Large Aperture Comet Photometry
 
