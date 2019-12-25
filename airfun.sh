@@ -13456,6 +13456,7 @@ AIexamine () {
         ftype=""
         is_fitzip $infile && ftype="FITZIP"
         is_fitscube $infile && ftype="FITSCUBE"
+        is_raw $infile && ftype="RAW"
         test -z "$ftype" && ftype=$(identify $infile | cut -d " " -f2)
         test -z "$ftype" &&
             echo "ERROR: $infile is neither region file nor image." >&2 && return 255
@@ -13486,22 +13487,16 @@ AIexamine () {
                     test -z "$firstimage" && firstimage=$infile
                     lastimage=$infile
                     nimg=$((nimg + 1));;
-            PBM|PGM|PPM|PNG|JPEG)
+            PBM|PGM|PPM|PNG|JPEG|RAW)
                     hdr=${infile%.*}.head
                     test -f $hdr || hdr=""
                     
                     tfits=$tdir/$b.tmp_${RANDOM}.fits
-                    if [ $ftype == "PPM" ]
-                    then
-                        ppm2gray -q -f $infile $hdr > $tfits
-                    else
-                        if [ $ftype == "PGM" ]
-                        then
-                            ppm2gray -q -f $infile $hdr > $tfits
-                        else
-                            gm convert $infile pgm:- | ppm2gray -q -f - $hdr > $tfits
-                        fi
-                    fi
+                    case $ftype in
+                    	PPM|PGM) ppm2gray -q -f $infile $hdr > $tfits;;
+                        RAW) AIraw2rgb -q 0 $infile | ppm2gray -q -f - $hdr > $tfits;;
+                        *)	 gm convert $infile pgm:- | ppm2gray -q -f - $hdr > $tfits;;
+                    esac
                     # TODO: the arbitrary wcs header should be removed by AIstack
                     false && test "$hdr" &&
                         str=$(get_header -q $hdr SOFTNAME) &&

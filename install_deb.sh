@@ -124,6 +124,6 @@ apt-get -y --allow-unauthenticated install $packages
 apt-get clean
 echo ""
 echo "Installation finished."
-echo "For AIRTOOLS documentation see /usr/share/doc/airtools-doc/"
-
+echo "For AIRTOOLS documentation please refer to the online manual at
+https://github.com/ewelot/airtools/blob/master/doc/manual-en.md"
 exit 0

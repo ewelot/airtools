@@ -376,8 +376,8 @@ smaller amount of required downloads.
 # The AIRTOOLS Graphical User Interface
 
 The graphical user interface consists of three tabs. The first tab is
-used for all basic image reduction steps to process the raw images to
-finally obtain stacked images of your targets. The second tab is
+used for all basic image reduction steps to process the raw images with
+the goal to obtain stacked images of your targets. The second tab is
 dedicated to the comet extraction and large aperture photometry tasks.
 Finally, a couple of handy tasks are placed on a third tab.
 
@@ -385,9 +385,9 @@ The lower part of the interface will display text output from any
 processing steps. There you can watch progress of the running tasks, see
 some measurement results but also possible error messages. In a few
 cases during the comet extraction part you will get information about a
-required user action written to the same log area. Please note that all
-the textual output is logged to a text file ‘airtools.log’ as well which
-comes handy in case of errors are simply for later reference.
+required user action written to the same text area. Please note that all
+the visible output is logged to a text file `airtools.log` as well,
+which comes handy in case of errors or simply for later reference.
 
   
 ![The AIRTOOLS user interface tabs](images/airtools-gui.png
@@ -525,8 +525,8 @@ reference for your newly added lines. The columns used are:
     Essentially this describes the order and interpretation of FITS
     data: If the FITS file is organized in such a way that the data of
     the bottom image row comes first and that of the top-most row latest
-    then it is considered unflipped and the other way it is flipped. It
-    seems that MaximDL stores data in a flipped manner.
+    then it is considered unflipped and the other way it is flipped. The
+    check for image flipping is described in the next chapter.
   - rot:  
     If the camera is rotated with respect to the sky coordinate system
     then you should provide a value different from 0. If true north is
@@ -570,14 +570,20 @@ observatory site or a new instrument for the first time.
 
 ## Raw Images and Image Set Definition
 
-TODO: - Description of supported RAW formats - Notes about FITS header
-keywords
+Initially the AIRTOOLS software was written to work on digital camera
+raw image files. It uses a modified version of the
+[dcraw](https://www.dechifro.org/dcraw/) converter (by D. Coffin).
+Therefore raw images of all cameras supported by *dcraw* will be handled
+by AIRTOOLS. Later on, support of single plane FITS images from CCD
+cameras was added. Now, the AIRTOOLS software correctly handles
+monochrome images as well as bayered images from one-shot color sensors
+(e.g. CMOS sensors with an added Bayer filter matrix).
 
-Now it is time to copy your raw images to the project’s raw directory
-within the Linux file system. There are different solutions to handle
-the file transfer between the host operating system and a VirtualBox
-guest. We suggest using an external USB pen drive or USB disk for this
-purpose.
+At first you must copy your unprocessed raw images to the project’s raw
+directory within the Linux file system. There are different solutions to
+handle this file transfer between the host operating system and a
+VirtualBox guest. We suggest using an external USB pen drive or USB disk
+for this purpose.
 
 Use the file manager of your host OS to copy the raw image files to the
 USB disk. Wait until all data have been completely written to disk. From
@@ -599,26 +605,42 @@ of relevant data for each image. Please note the column which holds a
 are in FITS format, second column if images are RAW files from DSLR).
 Images are referenced by this number throughout the reduction process.
 
+When a camera for which the data acquisition system delivers FITS data
+is used for the first time then you should check the image orientation
+on a single frame. Choose an image number referring to a raw image with
+a known object - one which you can easily recognize on a sky chart. Go
+to the “Misc. Tools” tab, enter the image number next to the “Load Raw
+Images” button and press the button to start the SAOImage viewer. If
+necessary correct the values for flipping and image rotation in the
+camera parameters file (refer to the previous chapter).
+
 Now it is time to group the individual images to form “image sets”. An
 image set is a number of images of the same type and target, e.g. a
-sequence of dark exposures with a given exposure time or a bracketed
-series of exposures of a comet. All image sets of the project are
+couple of dark exposures with a given exposure time or a bracketed
+sequence of exposures of a comet. All image sets of the project are
 described in a parameter file called `set.dat` which must be created by
 yourself. From the AIRTOOLS application’s main menu select “Edit” and
-“Edit Image Set Definitions”. Enter lines similar to the following
-example:
+“Edit Image Set Definitions”. Here is an example of a typical file
+which can be used for reference:
 
 ``` 
-    # 190329
-    # Newton 400 mm f=1040 mm
-    # Canon 5D MkII (CDS), ISO 800, MaximDL
+    # 191116
+    # telescope 200/800, CGEM, Pentax K5IIs, ISO 200
+    # autoguider SX Lodestar, 1x1.5s, move_thres=0.07 move_relax=1.0
 
-    # UT
+    # UT, S 3-4, D 2, Wo 1-2..5, Wi 3, Mo 1..4
     # h:m set  target type texp n1 n2   nref dark flat tel
-    20:30 dk01 bias     d   1 0001 0010 -    -    -    N16C
-    00:03 dk02 dark     d 300 0011 0016 -    -    -    N16C
-    07:49 sk01 flat     f   1 0017 0022 -    dk01 -    N16C
-    00:14 co01 2017K2   o 300 0023 0026 0024 dk02 sk01 N16C
+    15:30 sk01 poly80s  f   1 0044 0055 -    dk11 -    GSOG # 12x 0.4s
+    16:48 co01 2018N2   o 120 0178 0194 0186 dk01 sk01 GSOG # t=3
+    17:29 co02 260P     o 120 0196 0217 0207 dk01 sk01 GSOG
+    18:20 co03 2017T2   o 120 0221 0238 0224 dk01 sk01 GSOG
+    22:08 dk01 -        d 120 0323 0341 -    -    -    GSOG # t=1
+    # 191115
+    18:28 dk02 -        d 120 0436 0459 -    -    -    GSOG # t=6
+
+    # dk11 is taken from 191031
+    # exclude 0228-0233 cloudy
+    # 0200 satellite
 ```
 
 The syntax is as follows: everything after the character `#` is
@@ -705,9 +727,9 @@ task for a second time will process any remaining image sets only.
 
 The processing of calibration images involves a mixture of median and
 average operations. For best results it is therefore adviced to capture
-in multiples of 6 exposures, e.g. 6 individual dark images at any
-required exposure time (and temperature) and 12 individual flat images
-for any filter used.
+multiples of 6 exposures, e.g. 6 individual dark images at any required
+exposure time (and temperature) and 12 individual flat images for any
+filter used.
 
 Throughout this manual we refer to the term master dark by meaning of an
 image which has not been subtracted by a bias image. Within this
@@ -752,19 +774,22 @@ Though you may display certain calibrated images by using actions from
 the “Misc. Tools” tab: enter an image set name or specific image numbers
 and press the button “Load Calibrated Images”.
 
-For DSLR images it is possible to provide a file which contains a list
+For DSLR images it is possible to provide a text file which holds a list
 of known hot pixels. Those will be replaced by the interpolation
 algorithm during the debayering step. The hot pixel file must be named
-using the telescope/camera identifier as defined in `camera.dat`,
-e.g. if the identifier is `N16C` then provide a hot pixel file
-`hotpix.n16c.dat` is the project directory. It is a simple text file
-containing one line of at least 3 space separated values per pixel. The
-values are image coordinates in x (starting at left with 0) and y
-(starting at top with 0) and a third fixed value of 0.
+using a fixed scheme which uses the camera name you have defined in the
+parameter file `camera.dat`. The appropriate line is found by matching
+the telescope identifier of the image set (first column in
+`camera.dat`). The camera name is given at fifth field position of that
+line. If the camera identifier is `K5II` then you have to name the hot
+pixel file `hotpix.k5ii.dat` and place it in the project directory. The
+file contains one line per pixel, with at least 3 space separated
+values. The values are image coordinates in x (starting at left with 0)
+and y (starting at top with 0) and a third fixed value of 0.
 
 In addition it is possible to manually create masks of bad image regions
 where necessary (e.g. satellite trails) on calibrated images. Load the
-calibrated images and use SAOImage regions to surround the affected
+calibrated images and use SAOImage regions to draw around affected
 areas. Save the regions file under the `bgvar` subdirectory using a name
 containing the given image number, e.g. `0003.bad.reg`. Those image
 regions will be excluded from the stacking process later on.
@@ -800,6 +825,12 @@ and an average value of star size (full width at half maximum). Those
 values are plotted to allow to quantify image quality and sky
 conditions.
 
+If some of your images have signs of much degraded quality then you
+might wish to exclude them from any further processing. To do so, go to
+the “Edit” menu and open the “Project Settings”. Add the corresponding
+image numbers to the string variable `AI_EXCLUDE` (space separated four
+digit numbers). Save your edits and close the text editor.
+
 ![Mag difference](images/gsog.dmag.png "Mag difference")
 
 ![FWHM of stars](images/gsog.fwhm.png "FWHM")
@@ -809,15 +840,15 @@ conditions.
 Finally the images are projected to the reference image arbitrary
 coordinate system and co-added. The stacked image is used to create an
 object catalog. Stellar sources of this catalog are matched against a
-local copy of the Tycho2 catalog to obtain a first astrometric solution
-(using an offline Astrometry.net solver). In a second step a global
-model is fitted (using UCAC-4 catalog) over the whole image including to
-map some degree of distortion. This new WCS model is saved and used
-later on to identify objects against photometric catalogs. The overall
-astrometric accuracy is printed to the log output and several diagnostic
-plots are created to show deviations from catalog position in different
-axes, a distortion map showing pixel scale variation and a sky chart
-with detected sources (green).
+local copy of the Tycho2 star catalog to obtain a first astrometric
+solution (using an offline Astrometry.net solver). In a second step a
+global model is fitted (using online UCAC-4 catalog) over the whole
+image including to map some degree of distortion. This new WCS model is
+saved and used later on to identify objects from photometric catalogs.
+The overall astrometric accuracy is printed to the log output and
+several diagnostic plots are created to show deviations from catalog
+position in different axes, a distortion map showing pixel scale
+variation and a sky chart with detected sources.
 
 ![Distortion map (8" Newton f/4, Pentax K-5II)](images/distortion2.png
 "Distortion map")
@@ -828,14 +859,14 @@ individual exposures and use this information to do blind stacking on
 the comet.
 
 The resulting output images have names starting with the image set name.
-Stacks centered on the moving comet have a fixed string suffix `_m`. The
-images contain 16bit integer data and are either in PGM (monochrome,
-gray image) or PPM (RGB image) format. The choice of these formats over
-FITS is mainly due to historic reasons - the software originally was
-written to reduce DSLR images only - and because many of the underlying
-image reduction software programs simply do not operate on (RGB-) FITS
-images. image metadata are stored in associated ASCII header files using
-the file extension `.head`.
+Stacks centered on the moving comet have a fixed string suffix of `_m`
+after the set name. Images consist of 16bit integer data and are either
+in PGM (monochrome, gray image) or PPM (RGB color image) format. The
+choice of these formats over FITS is mainly due to historic reasons -
+the software originally was written to reduce DSLR images only - and
+because many of the underlying image reduction software programs simply
+do not operate on (RGB-) FITS images. Image metadata are stored in
+associated ASCII header files using the file extension `.head`.
 
 # Large Aperture Comet Photometry
 

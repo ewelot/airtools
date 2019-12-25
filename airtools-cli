@@ -1765,6 +1765,18 @@ do
 done
 shift `expr $OPTIND - 1`
 
+
+#--------------------
+#   get parameter
+#--------------------
+if [ $# -lt 1 ] && [ -z "$usercmd" ]
+then
+    shorthelp; exit -1
+fi
+task=$1
+shift 1
+test "$usercmd" && task="usercmd"
+
 # display additional info if requested
 if [ "$task" == "help" ]
 then
@@ -1789,7 +1801,8 @@ Miscellaneous tools:
     status      - check previous results"
     exit 0
 fi
-case "$TASKMODE" in
+
+test "$TASKMODE" && case "$TASKMODE" in
     nodisplay|status|statusall) ;;
     *)  echo "\
 available task modes:
@@ -1799,18 +1812,6 @@ available task modes:
         exit 0
         ;;
 esac
-
-
-#--------------------
-#   get parameter
-#--------------------
-if [ $# -lt 1 ] && [ -z "$usercmd" ]
-then
-    shorthelp; exit -1
-fi
-task=$1
-shift 1
-test "$usercmd" && task="usercmd"
 
 
 #--------------------

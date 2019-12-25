@@ -187,8 +187,8 @@
 </section>
 <section id="the-airtools-graphical-user-interface" data-number="3">
 <h1 data-number="3"><span class="header-section-number">3</span> The AIRTOOLS Graphical User Interface</h1>
-<p>The graphical user interface consists of three tabs. The first tab is used for all basic image reduction steps to process the raw images to finally obtain stacked images of your targets. The second tab is dedicated to the comet extraction and large aperture photometry tasks. Finally, a couple of handy tasks are placed on a third tab.</p>
-<p>The lower part of the interface will display text output from any processing steps. There you can watch progress of the running tasks, see some measurement results but also possible error messages. In a few cases during the comet extraction part you will get information about a required user action written to the same log area. Please note that all the textual output is logged to a text file ‘airtools.log’ as well which comes handy in case of errors are simply for later reference.</p>
+<p>The graphical user interface consists of three tabs. The first tab is used for all basic image reduction steps to process the raw images with the goal to obtain stacked images of your targets. The second tab is dedicated to the comet extraction and large aperture photometry tasks. Finally, a couple of handy tasks are placed on a third tab.</p>
+<p>The lower part of the interface will display text output from any processing steps. There you can watch progress of the running tasks, see some measurement results but also possible error messages. In a few cases during the comet extraction part you will get information about a required user action written to the same text area. Please note that all the visible output is logged to a text file <code>airtools.log</code> as well, which comes handy in case of errors or simply for later reference.</p>
 <p><br />
 <img src="images/airtools-gui.png" title="airtools-gui" alt="The AIRTOOLS user interface tabs" /></p>
 </section>
@@ -268,7 +268,7 @@ Used to store individual calibrated images of the project which are used by seve
 <dd>Camera and sensor keys used in final ICQ records of a comet measurement. Refer to the lists of <a href="https://cobs.si/help?page=ccd_type">camera keys</a> and <a href="https://cobs.si/help?page=ccd_chip">sensor keys</a>. Both values have to be provided in a single word, using the character <code>/</code> as a delimiter. If you for example have used a Canon 6D DSLR for imaging then the correct entry would be <code>CDS/CFC</code>.
 </dd>
 <dt>flip:</dt>
-<dd>Indicate if the image data is flipped top-down (1) or not (0). Essentially this describes the order and interpretation of FITS data: If the FITS file is organized in such a way that the data of the bottom image row comes first and that of the top-most row latest then it is considered unflipped and the other way it is flipped. It seems that MaximDL stores data in a flipped manner.
+<dd>Indicate if the image data is flipped top-down (1) or not (0). Essentially this describes the order and interpretation of FITS data: If the FITS file is organized in such a way that the data of the bottom image row comes first and that of the top-most row latest then it is considered unflipped and the other way it is flipped. The check for image flipping is described in the next chapter.
 </dd>
 <dt>rot:</dt>
 <dd>If the camera is rotated with respect to the sky coordinate system then you should provide a value different from 0. If true north is left on your image then use a value of 90. A rough approximation is sufficient.
@@ -299,21 +299,29 @@ Used to store individual calibrated images of the project which are used by seve
 </section>
 <section id="raw-images-and-image-set-definition" data-number="4.4">
 <h2 data-number="4.4"><span class="header-section-number">4.4</span> Raw Images and Image Set Definition</h2>
-<p>TODO: - Description of supported RAW formats - Notes about FITS header keywords</p>
-<p>Now it is time to copy your raw images to the project’s raw directory within the Linux file system. There are different solutions to handle the file transfer between the host operating system and a VirtualBox guest. We suggest using an external USB pen drive or USB disk for this purpose.</p>
+<p>Initially the AIRTOOLS software was written to work on digital camera raw image files. It uses a modified version of the <a href="https://www.dechifro.org/dcraw/">dcraw</a> converter (by D. Coffin). Therefore raw images of all cameras supported by <em>dcraw</em> will be handled by AIRTOOLS. Later on, support of single plane FITS images from CCD cameras was added. Now, the AIRTOOLS software correctly handles monochrome images as well as bayered images from one-shot color sensors (e.g. CMOS sensors with an added Bayer filter matrix).</p>
+<p>At first you must copy your unprocessed raw images to the project’s raw directory within the Linux file system. There are different solutions to handle this file transfer between the host operating system and a VirtualBox guest. We suggest using an external USB pen drive or USB disk for this purpose.</p>
 <p>Use the file manager of your host OS to copy the raw image files to the USB disk. Wait until all data have been completely written to disk. From the running Linux virtual machine locate the “Devices” menu entry on the VirtualBox VM menu at the top of the window. Select “USB” and you will see a list of USB devices from which you need to identify and select the USB disk. After a few seconds a new USB disk icon will apear on the virtual Linux desktop and little after the file manager window pops up. Use the common copy-and-paste feature to copy your raw images from the USB disk to the appropriate raw directory of the current project. Finally push the eject button on the USB device entry of the file manager and close it.</p>
 <p>You are now going to start the first AIRTOOLS task. By pressing the “Extract basic image info” the program reads meta data of all raw image files. At the end an editor window pops up which shows an overview of relevant data for each image. Please note the column which holds a 4-digit image number associated with each image (first column if images are in FITS format, second column if images are RAW files from DSLR). Images are referenced by this number throughout the reduction process.</p>
-<p>Now it is time to group the individual images to form “image sets”. An image set is a number of images of the same type and target, e.g. a sequence of dark exposures with a given exposure time or a bracketed series of exposures of a comet. All image sets of the project are described in a parameter file called <code>set.dat</code> which must be created by yourself. From the AIRTOOLS application’s main menu select “Edit” and “Edit Image Set Definitions”. Enter lines similar to the following example:</p>
-<pre><code>    # 190329
-    # Newton 400 mm f=1040 mm
-    # Canon 5D MkII (CDS), ISO 800, MaximDL
+<p>When a camera for which the data acquisition system delivers FITS data is used for the first time then you should check the image orientation on a single frame. Choose an image number referring to a raw image with a known object - one which you can easily recognize on a sky chart. Go to the “Misc. Tools” tab, enter the image number next to the “Load Raw Images” button and press the button to start the SAOImage viewer. If necessary correct the values for flipping and image rotation in the camera parameters file (refer to the previous chapter).</p>
+<p>Now it is time to group the individual images to form “image sets”. An image set is a number of images of the same type and target, e.g. a couple of dark exposures with a given exposure time or a bracketed sequence of exposures of a comet. All image sets of the project are described in a parameter file called <code>set.dat</code> which must be created by yourself. From the AIRTOOLS application’s main menu select “Edit” and “Edit Image Set Definitions”. Here is an example of a typical file which can be used for reference:</p>
+<pre><code>    # 191116
+    # telescope 200/800, CGEM, Pentax K5IIs, ISO 200
+    # autoguider SX Lodestar, 1x1.5s, move_thres=0.07 move_relax=1.0
 
-    # UT
+    # UT, S 3-4, D 2, Wo 1-2..5, Wi 3, Mo 1..4
     # h:m set  target type texp n1 n2   nref dark flat tel
-    20:30 dk01 bias     d   1 0001 0010 -    -    -    N16C
-    00:03 dk02 dark     d 300 0011 0016 -    -    -    N16C
-    07:49 sk01 flat     f   1 0017 0022 -    dk01 -    N16C
-    00:14 co01 2017K2   o 300 0023 0026 0024 dk02 sk01 N16C</code></pre>
+    15:30 sk01 poly80s  f   1 0044 0055 -    dk11 -    GSOG # 12x 0.4s
+    16:48 co01 2018N2   o 120 0178 0194 0186 dk01 sk01 GSOG # t=3
+    17:29 co02 260P     o 120 0196 0217 0207 dk01 sk01 GSOG
+    18:20 co03 2017T2   o 120 0221 0238 0224 dk01 sk01 GSOG
+    22:08 dk01 -        d 120 0323 0341 -    -    -    GSOG # t=1
+    # 191115
+    18:28 dk02 -        d 120 0436 0459 -    -    -    GSOG # t=6
+
+    # dk11 is taken from 191031
+    # exclude 0228-0233 cloudy
+    # 0200 satellite</code></pre>
 <p>The syntax is as follows: everything after the character <code>#</code> is considered a comment. Each line (uncommented and non-empty) defines an image set using at least 11 fields (words separated by spaces) which are:</p>
 <dl>
 <dt>h:m:</dt>
@@ -362,7 +370,7 @@ Used to store individual calibrated images of the project which are used by seve
 <p>Pressing the “Start” button causes the selected tasks to execute. At any time you may interrupt operation by pressing the same button again. Note that interruption is typically defered by a couple of seconds. Running a task for a second time will process any remaining image sets only.</p>
 <section id="master-darks-and-flats" data-number="5.1">
 <h2 data-number="5.1"><span class="header-section-number">5.1</span> Master Darks and Flats</h2>
-<p>The processing of calibration images involves a mixture of median and average operations. For best results it is therefore adviced to capture in multiples of 6 exposures, e.g. 6 individual dark images at any required exposure time (and temperature) and 12 individual flat images for any filter used.</p>
+<p>The processing of calibration images involves a mixture of median and average operations. For best results it is therefore adviced to capture multiples of 6 exposures, e.g. 6 individual dark images at any required exposure time (and temperature) and 12 individual flat images for any filter used.</p>
 <p>Throughout this manual we refer to the term master dark by meaning of an image which has not been subtracted by a bias image. Within this definition a bias image is just a dark image at zero seconds exposure time. Furthermore a master flat image is a dark-subtracted flat field (where the corresponding master dark was taken at the same exposure time, sometimes called a flat-dark).</p>
 <p>If you don’t know your camera/sensor very well then it is a good idea to take more exposures - especially darks. The processing routines include measurements of the dark level in each image. A plot of this measurements is displayed and you can evaluate the stability of the mean intensity level. In addition, the difference of each individual dark exposure with respect to the mean image is computed. A mosaic of the much downsized and contrast enhanced difference images is created and displayed. This is helpful again to judge sensor stability and health. You may measure image intensity withing self defined regions. Note that the mean intensity of difference images has been shifted to 1000 and streched by a factor of 10.</p>
 <p>The number of individual flat images has to be choosen to be large enough to provide suitable signal to noise (not degrade the signal to noise of the stacked target image). Also its intensity level should be choosen carefully to provide high signal but fall well within linear range of the sensor response. Creating high quality flat fields is a challenge but crucial for obtaining precise photometry of extended objects like comets.</p>
@@ -374,8 +382,8 @@ Used to store individual calibrated images of the project which are used by seve
 <h2 data-number="5.2"><span class="header-section-number">5.2</span> Image Calibration</h2>
 <p>Image calibration involves the subtraction of the master dark image and division by the master flat image. The calibrated images are stored in the temporary directory defined for the project. Their name starts with the image number associated with each individual raw image. Calibrated images are not overwritten by default and kept throughout the project.</p>
 <p>There is no plots or result images produced by the caibration task. Though you may display certain calibrated images by using actions from the “Misc. Tools” tab: enter an image set name or specific image numbers and press the button “Load Calibrated Images”.</p>
-<p>For DSLR images it is possible to provide a file which contains a list of known hot pixels. Those will be replaced by the interpolation algorithm during the debayering step. The hot pixel file must be named using the telescope/camera identifier as defined in <code>camera.dat</code>, e.g. if the identifier is <code>N16C</code> then provide a hot pixel file <code>hotpix.n16c.dat</code> is the project directory. It is a simple text file containing one line of at least 3 space separated values per pixel. The values are image coordinates in x (starting at left with 0) and y (starting at top with 0) and a third fixed value of 0.</p>
-<p>In addition it is possible to manually create masks of bad image regions where necessary (e.g. satellite trails) on calibrated images. Load the calibrated images and use SAOImage regions to surround the affected areas. Save the regions file under the <code>bgvar</code> subdirectory using a name containing the given image number, e.g. <code>0003.bad.reg</code>. Those image regions will be excluded from the stacking process later on.</p>
+<p>For DSLR images it is possible to provide a text file which holds a list of known hot pixels. Those will be replaced by the interpolation algorithm during the debayering step. The hot pixel file must be named using a fixed scheme which uses the camera name you have defined in the parameter file <code>camera.dat</code>. The appropriate line is found by matching the telescope identifier of the image set (first column in <code>camera.dat</code>). The camera name is given at fifth field position of that line. If the camera identifier is <code>K5II</code> then you have to name the hot pixel file <code>hotpix.k5ii.dat</code> and place it in the project directory. The file contains one line per pixel, with at least 3 space separated values. The values are image coordinates in x (starting at left with 0) and y (starting at top with 0) and a third fixed value of 0.</p>
+<p>In addition it is possible to manually create masks of bad image regions where necessary (e.g. satellite trails) on calibrated images. Load the calibrated images and use SAOImage regions to draw around affected areas. Save the regions file under the <code>bgvar</code> subdirectory using a name containing the given image number, e.g. <code>0003.bad.reg</code>. Those image regions will be excluded from the stacking process later on.</p>
 </section>
 <section id="background-evaluation" data-number="5.3">
 <h2 data-number="5.3"><span class="header-section-number">5.3</span> Background evaluation</h2>
@@ -391,6 +399,7 @@ Used to store individual calibrated images of the project which are used by seve
 <section id="image-registration" data-number="5.4">
 <h2 data-number="5.4"><span class="header-section-number">5.4</span> Image Registration</h2>
 <p>The stacking process involves several steps. At first, sources (stars) are extracted for each calibrated image. Then sources are matched with respect to the reference image of the given set. Some of the brighter, unsaturated stars are used to measure relative brightness between images and an average value of star size (full width at half maximum). Those values are plotted to allow to quantify image quality and sky conditions.</p>
+<p>If some of your images have signs of much degraded quality then you might wish to exclude them from any further processing. To do so, go to the “Edit” menu and open the “Project Settings”. Add the corresponding image numbers to the string variable <code>AI_EXCLUDE</code> (space separated four digit numbers). Save your edits and close the text editor.</p>
 <figure>
 <img src="images/gsog.dmag.png" title="Mag difference" alt="" /><figcaption>Mag difference</figcaption>
 </figure>
@@ -400,12 +409,12 @@ Used to store individual calibrated images of the project which are used by seve
 </section>
 <section id="stacking-and-astrometry" data-number="5.5">
 <h2 data-number="5.5"><span class="header-section-number">5.5</span> Stacking and Astrometry</h2>
-<p>Finally the images are projected to the reference image arbitrary coordinate system and co-added. The stacked image is used to create an object catalog. Stellar sources of this catalog are matched against a local copy of the Tycho2 catalog to obtain a first astrometric solution (using an offline Astrometry.net solver). In a second step a global model is fitted (using UCAC-4 catalog) over the whole image including to map some degree of distortion. This new WCS model is saved and used later on to identify objects against photometric catalogs. The overall astrometric accuracy is printed to the log output and several diagnostic plots are created to show deviations from catalog position in different axes, a distortion map showing pixel scale variation and a sky chart with detected sources (green).</p>
+<p>Finally the images are projected to the reference image arbitrary coordinate system and co-added. The stacked image is used to create an object catalog. Stellar sources of this catalog are matched against a local copy of the Tycho2 star catalog to obtain a first astrometric solution (using an offline Astrometry.net solver). In a second step a global model is fitted (using online UCAC-4 catalog) over the whole image including to map some degree of distortion. This new WCS model is saved and used later on to identify objects from photometric catalogs. The overall astrometric accuracy is printed to the log output and several diagnostic plots are created to show deviations from catalog position in different axes, a distortion map showing pixel scale variation and a sky chart with detected sources.</p>
 <figure>
 <img src="images/distortion2.png" title="Distortion map" alt="" /><figcaption>Distortion map (8" Newton f/4, Pentax K-5II)</figcaption>
 </figure>
 <p>With the help of the astrometric solution and comet ephemeris data fetched from MPC it is possible to predict the comet motion between individual exposures and use this information to do blind stacking on the comet.</p>
-<p>The resulting output images have names starting with the image set name. Stacks centered on the moving comet have a fixed string suffix <code>_m</code>. The images contain 16bit integer data and are either in PGM (monochrome, gray image) or PPM (RGB image) format. The choice of these formats over FITS is mainly due to historic reasons - the software originally was written to reduce DSLR images only - and because many of the underlying image reduction software programs simply do not operate on (RGB-) FITS images. image metadata are stored in associated ASCII header files using the file extension <code>.head</code>.</p>
+<p>The resulting output images have names starting with the image set name. Stacks centered on the moving comet have a fixed string suffix of <code>_m</code> after the set name. Images consist of 16bit integer data and are either in PGM (monochrome, gray image) or PPM (RGB color image) format. The choice of these formats over FITS is mainly due to historic reasons - the software originally was written to reduce DSLR images only - and because many of the underlying image reduction software programs simply do not operate on (RGB-) FITS images. Image metadata are stored in associated ASCII header files using the file extension <code>.head</code>.</p>
 </section>
 </section>
 <section id="large-aperture-comet-photometry" data-number="6">
