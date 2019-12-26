@@ -81,7 +81,7 @@ then
     echo "deb [trusted=yes] file://$ddir main/" > $aptsrc
 fi
 rm -f $ddir/main/Release
-apt-get update
+apt-get --allow-unauthenticated update
 
 # install airtools
 if [ "$do_not_install" ]
