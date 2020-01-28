@@ -14,9 +14,20 @@
 # - in order to use SAOImage DS9 analysis tasks (via AIexamine) you must
 #   have installed files airds9.ana and aircmd.sh
 ########################################################################
-AI_VERSION="4.2"
+AI_VERSION="4.2.1"
 : << '----'
 CHANGELOG
+	4.2.1 - 25 Jan 2020
+		* AIstack: bugfix: propagate badpix to _fitsconv_parallel
+        * bgresmodel: bugfix: take stats for scaling residuals from background
+            image
+		* AIcosnap: enhanced to support monochrome images
+        * AIpsfextract: added options -p to stop processing after creating
+            psfphot file and option -n nbright to set number of bright stars
+            to use (default 30)
+        * AIsetinfo: added output of hour angle when requesting longinfo (-l)
+		* new function wait_for_saoimage
+
     4.2 - 17 Dec 2019
         * AIstack: use parallel jobs when converting to FITS
         * AIsetinfo (long format): if there is only raw images available, then
@@ -5737,7 +5748,7 @@ mpchecker () {
     then
         date=$(echo $utdate | awk -F '-' '{printf("year=%d&month=%02d&day=%06.3f", $1,$2,$3)}')
     else
-        jd=$(AIsetinfo -l $sname | awk '{printf("%s", $5)}')
+        jd=$(AIsetinfo -l $sname | awk '{printf("%s", $6)}')
         date=$(jd2ut $jd | awk -F '-' '{printf("year=%d&month=%02d&day=%06.3f", $1,$2,$3)}')
     fi
     
@@ -12763,7 +12774,8 @@ bgresmodel () {
     local i
     local add
     local mult
-    local img
+    local resimg
+    local bgimg
     
     (test "$showhelp" || test $# -ne 2) &&
         echo "usage: bgresmodel [-c cdir|$cdir] [-m bgmult|$bgmult] [-s scale|$scale] [-b setbgval]" \
@@ -12815,21 +12827,23 @@ bgresmodel () {
             suffix=""
         fi
         resimg=""
+        bgimg=""
         for refdir in $(dirname $refentry)/$cdir$suffix \
                       $A/$(dirname $refentry)/$cdir$suffix \
                       $A/results/$(dirname $refentry)/$cdir$suffix
         do
             test "$resimg" && break
             test -e    $refdir/$sname.bgm${bgmult}res.$ext &&
-                resimg=$refdir/$sname.bgm${bgmult}res.$ext
+                resimg=$refdir/$sname.bgm${bgmult}res.$ext &&
+                bgimg=$refdir/$sname.bgm${bgmult}.$ext
         done
         test -z "$resimg" &&
             echo "ERROR: missing image $cdir$suffix/$sname.bgm${bgmult}res.p[pg]m" >&2 &&
             return 255
         
-        x=($(AIstat -c $resimg | awk -v m=$bgmult '{
+        x=($(AIstat -c $bgimg | awk -v m=$bgmult '{
             printf("%s", $5/m); if(NF>13) {printf(" %s %s", $9/m, $13/m)}}'))
-        test "$verbose" && echo "# $resimg: x=${x[@]}" >&2
+        test "$verbose" && echo "# $bgimg: x=${x[@]}" >&2
         for i in $(seq 0 $((ncol-1)))
         do
             mult[$i]=$(echo ${x[i]} ${bgval[i]} | \
@@ -13196,7 +13210,7 @@ AIimlist () {
         
         # try to find associated images of the same set (splitted sets)
         cmd=$(grep -v "^#" $sdat | awk -v s=$sname -v e=$texp -v n1=$n1 -v n2=$n2 '{
-            if ($2==s && $4=="a" && $5==e && $6!=n1 && $7!=n2) {
+            if ($2==s && $4=="a" && $6!=n1 && $7!=n2) {
                 printf("seq %s %s;", $6, $7)}}')
         test "$cmd" && nlist="$nlist $(eval "$cmd" | awk '{printf("%04d\n", $1)}')"
         test "$AI_DEBUG" && echo "nlist="$nlist >&2
@@ -14218,7 +14232,9 @@ AIpreview () {
     test $nproc -gt 4 && nproc=4
     test $nproc -eq 0 && nproc=1
     
-    imlist=$(ls $rdir/*.{pef,PEF,fits,FITS,cr2,CR2,nef,NEF,raf,RAF} 2>/dev/null)
+    imlist=$(ls $rdir/*.{pef,PEF,fits,FITS,cr2,CR2,nef,NEF,raf,RAF} \
+    	$rdir/*/*.{pef,PEF,fits,FITS,cr2,CR2,nef,NEF,raf,RAF} \
+    	2>/dev/null)
     test -z "$imlist" &&
         echo "ERROR: no images to process" >&2 &&
         return 255
@@ -14269,6 +14285,7 @@ AIpreview () {
             #convert $tmpimg -level $((low-md*max/2000-50)),$((high+md*max/300+400)) -gamma 2.5 -depth 8 $tmp1/$num.$ext
             convert $tmpimg -level $((low-md*2/contrast-50)),$((high+md*13/contrast+400)) -gamma 2.2 -depth 8 $tmp1/$num.$ext
         else
+            #echo "#" dcraw-tl -c -r 1 1 1 1 -q 0 -4 -t 0 $fbopts $dcrawopts -o 0 $f >&2
             dcraw-tl -c -r 1 1 1 1 -q 0 -4 -t 0 $fbopts $dcrawopts -o 0 $f | \
             ppm2gray - > $tmpimg
             imcrop $tmpimg 70 > $tmpcrop
@@ -14296,7 +14313,8 @@ AIpreview () {
     if [ "$do_examine" ]
     then
         echo "$imlist" | parallel -j $nproc -k $tmpscript {}
-        AIexamine -l $tmp1/*.$ext
+        AIexamine -n BadMasks -l $tmp1/*.$ext &
+        wait_for_saoimage -n BadMasks
     else
         if type geeqie >/dev/null 2>&1
         then
@@ -14407,11 +14425,11 @@ AIpublish () {
     
     # get ut
     set - $(AIsetinfo -l $set)
-    test $# -lt 8 &&
+    test $# -lt 9 &&
         echo "ERROR: AIsetinfo -l $set does not work." >&2 && return 255
     oshort=$3
     test -z "$object" && object=$oshort
-    x=$(jd2ut $5)
+    x=$(jd2ut $6)
     utdate=${x%.*}
     uttime=$(echo 0.${x#*.} | awk '{
         x=$1*24; printf("%02d:%02.0f", int(x), (x-int(x))*60)}')
@@ -15376,8 +15394,19 @@ AIflat () {
                 
                 # process iolist
                 im2=$(printf "%02d" $im)
-                echo "median odd images in group $ig -> $tdir/$sname.m$im2.$ext"
-                pnmcombine -d $iolist $tdir/$sname.m$im2.$ext
+                if [ $n -gt 2 ]
+                then
+	                echo "median odd images in group $ig -> $tdir/$sname.m$im2.$ext"
+                	pnmcombine -d $iolist $tdir/$sname.m$im2.$ext
+                else
+                	if [ $n -eq 2 ]
+                	then
+		                echo "mean from odd images in group $ig -> $tdir/$sname.m$im2.$ext"
+                		pnmcombine $iolist $tdir/$sname.m$im2.$ext
+                	else
+                		cp $iolist $tdir/$sname.m$im2.$ext
+                	fi
+                fi
                 im=$(($im + 1))
                 # process ielist
                 if [ "$ielist" ]
@@ -15598,7 +15627,7 @@ AIccd () {
 
             # crop dark image if necessary
             darkcrop=$tdir/$dark.crop.pgm
-            if [ ! -e  "$darkcrop" ] || [ "$(imsize $darkcrop)" != "$(imsize $dark.pgm)" ]
+            if [ ! -s  "$darkcrop" ] || [ "$(imsize $darkcrop)" != "$w $h" ]
             then
                 if [ $(imsize $dark.pgm | cut -d ' ' -f2) -gt $h ]
                 then
@@ -16968,8 +16997,6 @@ AIbgdiff () {
     then
         echo "WARNING: DEBUG mode - no diff stats are written to output files !" >&2 &&
         sleep 5 && echo "" >&2
-    else
-        test -f "$sfitdat" && echo "WARNING: appending sfit data to $sfitdat." >&2
     fi
     
     while read ltime sname target type texp n1 n2 nref dark flat x
@@ -17923,7 +17950,7 @@ END     " >> wcs/$b.src.ahead
             printf("%d %d %d %d\n", nsrc, ncat, nmatch, nhigh)
         }')
         test $((($3-5)*100/$1)) -lt 5 &&
-            echo "ERROR: too few stars matched ($3 out of $1)." >&2 &&
+            echo "ERROR: too few stars matched ($3 out of nimg=$1, ncat=$2)." >&2 &&
             return 255
         set_header $b.wcs.head POLYDEG=$fitdegrees NIMG=$1 NCAT=$2 NMATCH=$3 NHIGH=$4
         echo ""
@@ -18390,7 +18417,7 @@ AIaladin () {
     if type -p aladin > /dev/null 2>&1
     then
         # use the full featured desktop version
-        script="$ra $dec"
+        script="$ra $dec; reticle off"
         catlayer=2
         test "$labelpos" &&
             catlayer=3 &&
@@ -18830,6 +18857,7 @@ h=$h
 bgdiffzero=$bgdiffzero
 do_bayer="$do_bayer"
 do_not_register="$do_not_register"
+badpix="$badpix"
 
 _fitsconv_parallel \$@
 EOF
@@ -20232,14 +20260,18 @@ AIpsfextract () {
     local showhelp
     local trail     # length,angle,centerfrac - length in pix, pa in deg from
                     #   right over top, center fraction (0=start, 1=end of trail)
-    local psfoff=1000        # background of resulting psf image
+    local psfoff=1000       # background of resulting psf image
     local bgres=2000        # background of psf subtracted residual image
+    local nbright=30
+    local do_only_psfphot   # if set, stop after creating psfphot file
     local i
-    for i in $(seq 1 3)
+    for i in $(seq 1 5)
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-b" && psfoff=$2 && shift 2
         test "$1" == "-t" && trail=$2 && shift 2
+        test "$1" == "-n" && nbright=$2 && shift 2
+        test "$1" == "-p" && do_only_psfphot=1 && shift 1
     done
     
     local img=$1
@@ -20251,7 +20283,6 @@ AIpsfextract () {
     local merrlim=${5:-""}  # mag error limit for field stars
     local psfsize=${6:-"128"}   # size of psf images
     local scale=${7:-"4"}   # psf oversampling factor (e.g. used by AIstarcombine)
-    local nbright=30
     #local nreject=7
     local mlimpsf=0.03
     local tdir=${AI_TMPDIR:-"/tmp"}
@@ -20298,7 +20329,7 @@ AIpsfextract () {
     test -z "$merrlim" && merrlim=0.2
     
     (test "$showhelp" || test $# -lt 2) &&
-        echo "usage: AIpsfextract [-t trail/len,angle,cfrac] [-b $psfoff|$psfoff] <img> <srccat> [<center>]" \
+        echo "usage: AIpsfextract [-p] [-n nbright|$nbright] [-t trail/len,angle,cfrac] [-b $psfoff|$psfoff] <img> <srccat> [<center>]" \
             "[rlim%|$rlim] [merrlim|$merrlim] [psfsize|$psfsize] [psfoversamp|$scale]" >&2 &&
         return 1
 
@@ -20384,6 +20415,7 @@ AIpsfextract () {
         printf("%.0f", sqrt($1*$1+$2*$2)*r/100)}')
     echo "# w=$w h=$h rmax=$rmax" >&2
     str="FWHM_IMAGE,MAG_AUTO,MAGERR_AUTO,FLAGS"
+    
     # identify bright sources
     sexselect -x $scat "" 0.03 $rmax "$center" "NUMBER,X*,Y*,A*,$str" 0 | \
          sort -n -k6,6 | grep -v "^#" | lines $nbright > $tmpdat
@@ -20432,6 +20464,14 @@ physical" > $tmpreg
                     $1, $2, $3, $6, $6, $6, 0, 0, 0, 0, $7)
             }' > $psfphot
         fi
+    fi
+    if [ "$do_only_psfphot" ]
+    then
+        echo "$psfphot created" >&2
+        echo "WARNING: skip any further processing as requested" >&2
+        rm -f $tmpcat $tmpim1 $tmpim2 $tmpphot
+        rm -f $tmpdat $tmpreg $tmppsf
+        return
     fi
 
     if [ -e $compphot ] && [ $compphot -nt $scat ]
@@ -21583,8 +21623,14 @@ AIcosnap () {
 
     # determine background in cosub
     regstat $cosub $bgreg $badreg | awk '{printf("%s\n", $5)}' | tr ',' ' ' > $tmp1
-    bg=$(echo $(mean $tmp1 1) $(mean $tmp1 2) $(mean $tmp1 3) | awk -v o=$bgoff -v m=$comult '{
-        printf("%.1f,%.1f,%.1f\n", o+($1-o)/m, o+($2-o)/m, o+($3-o)/m)}')
+    if [ $ext == "ppm" ]
+	then
+    	bg=$(echo $(mean $tmp1 1) $(mean $tmp1 2) $(mean $tmp1 3) | awk -v o=$bgoff -v m=$comult '{
+        	printf("%.1f,%.1f,%.1f\n", o+($1-o)/m, o+($2-o)/m, o+($3-o)/m)}')
+    else
+    	bg=$(echo $(mean $tmp1 1) | awk -v o=$bgoff -v m=$comult '{
+        	printf("%.1f\n", o+($1-o)/m)}')
+    fi
     echo "# cosub=$cosub  bg=$bg  move=$omove@$oxy" >&2
 
     if [ -e $set.cosnap.$ext ] && [ "$keep_cosnap" ]
@@ -21622,14 +21668,19 @@ AIcosnap () {
         #convert x.st.$ext -blur 0x1.0 x.st.blur.$ext
         
         # glue star and comet images together
-        pnmccdred -a $((100-bgoff)) x.comet.ppm - | \
+        pnmccdred -a $((100-bgoff)) x.comet.$ext - | \
             pnmarith -a - x.st.$ext | \
             pnmccdred -a -100 - x.cosnap.$ext
         
         # apply white balance
-        a=$(echo ${wbmul//,/ } | awk -v bg=1000 '{
-            printf("%.1f,%.1f,%.1f", bg*(1-$1), bg*(1-$2), bg*(1-$3))}')
-        pnmccdred -a $a -m $wbmul x.cosnap.$ext $set.cosnap.$ext
+        if [ $ext == "ppm" ]
+        then
+        	a=$(echo ${wbmul//,/ } | awk -v bg=1000 '{
+            	printf("%.1f,%.1f,%.1f", bg*(1-$1), bg*(1-$2), bg*(1-$3))}')
+        	pnmccdred -a $a -m $wbmul x.cosnap.$ext $set.cosnap.$ext
+        else
+        	ppm2gray x.cosnap.$ext > $set.cosnap.$ext
+        fi
     fi
     
     
@@ -21642,10 +21693,13 @@ AIcosnap () {
     sd=$(mean $tmp1 5)
     echo "# cosnap bg=$bg sd=$sd" >&2
 
-    rgbsmooth $set.cosnap.$ext $bg $sd > x.rgb.$ext
-    convert x.rgb.$ext -gamma 2.2 $set.cosnapwb.tif
-    echo "# image $set.cosnapwb.tif created" >&2
-
+	if [ $ext == "ppm" ]
+	then
+    	rgbsmooth $set.cosnap.$ext $bg $sd > x.rgb.$ext
+    	convert x.rgb.$ext -gamma 2.2 $set.cosnapwb.tif
+    	echo "# image $set.cosnapwb.tif created" >&2
+	fi
+	
     rm -f $tmp1
     return
 }
@@ -23569,6 +23623,49 @@ get_frameno () {
     return
 }
 
+wait_for_saoimage () {
+	# wait until SAOImage display is shown
+	local showhelp
+    local timeout=120
+    local verbose
+    local ds9name="AIRTOOLS"
+    local i
+    for i in 1 2 3 4
+    do
+        (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
+        test "$1" == "-t" && timeout=$2 && shift 2
+        test "$1" == "-n" && ds9name=$2 && shift 2
+        test "$1" == "-v" && verbose=1 && shift 1
+    done
+    local found
+    local t
+    local dt
+    
+    (test "$showhelp" || test $# -ge 1) &&
+        echo "usage: wait_for_saoimage [-v] [-n ds9name] [-t timeout|$timeout]" >&2 &&
+        return 1
+
+	t=0; dt=1
+    while test ! "$found" && test $t -lt $timeout
+    do
+        xpaaccess -c -t "2,2" $ds9name > /dev/null
+        test $? -ne 0 && found=1
+        if [ -z "$found" ]
+        then
+            test "$verbose" && echo "waiting for SAOImage $ds9name ..." >&2
+            sleep $dt
+        fi
+        t=$((t + dt))
+        test $t -ge 3 && dt=2
+        test $t -ge 9 && dt=3
+        test $t -ge 20 && dt=5
+    done
+    test ! "$found" &&
+        echo "WARNING: SAOImage $ds9name is not running." >&2 &&
+        return 255
+    return 0
+}
+
 wait_for_frame () {
     # wait until image is loaded into current ds9 frame
     # return last frame number
@@ -23685,6 +23782,9 @@ AIsetinfo () {
     local black
     local rhdr
     local retval
+    local ra
+    local de
+    local ha
 
     test "$showhelp" &&
         echo "usage: AIsetinfo [-o|-c] [-b|-l] [-x] [setname]" >&2 &&
@@ -23712,8 +23812,8 @@ AIsetinfo () {
             then
                 echo "# LT  set  target type texp n1 n2   nref dark flat tel"
             else
-                echo "# date  set   object   ra+de     jd_ref     texp n  rms   bg fwhm tel site"
-                #     170802m co01  2017O1   0000+000       0.000 120  5  0.0    0 0.0  T14 Mayhill
+                echo "# date  set   object   ra+de     ha  jd_ref      texp n  rms   bg fwhm tel site"
+                #     200120  co01  2017T2   0234+572  1.8 2458869.319 120 14  0.0    0 0.0  GSOG Weimar
             fi
         fi
     fi
@@ -23814,7 +23914,7 @@ AIsetinfo () {
         # TODO: convert jdref to UT date and time
         
         # try to get ra/de from wcs header file
-        ra=""; de=""
+        ra=""; de=""; ha="    "
         if [ "$longinfo" ]
         then
 			if [ -f $sname.wcs.head ]
@@ -23854,6 +23954,18 @@ AIsetinfo () {
 			if [ -z "$ra" ] || [ -z "$de" ]
 			then
 				ra="0000"; de="+000"
+            else
+                # determine hour angle
+                rhdr=$(get_rawfile $nref | sed -e 's,\.[a-zA-Z]*$,.hdr,')
+				if [ -f "$rhdr" ]
+				then
+					x=$(grep "^st=" $rhdr | cut -d "=" -f2)
+                    test "$x" && ha=$(echo $(sexa2dec "$x" 15) $(sexa2dec "$ra" 15) | \
+                        awk '{
+                            x=($1-$2)/15
+                            if (x<-12) {x=x+24} else {if (x>12) x=x-24}
+                            printf("%4.1f", x)}')
+                fi
 			fi
         fi
 
@@ -23907,8 +24019,8 @@ AIsetinfo () {
             test -z "$inst" && test "$flength" && test "$fratio" && inst="f=$flength,f/$fratio"
             test "$inst $AI_SITE" == "f=0.0,f/0 Weimar" && inst="GSO"
             test -z "$inst" && inst="-"
-            printf "%-7s %-5s %-8s %s %011.3f %3s %2s %4.1f %4d %3.1f  %s %s\n" \
-            $(basename $(pwd)) $sname $target $pos $jdref $texp $nexp $rms $bg $fwhm $inst $AI_SITE
+            printf "%-7s %-5s %-8s %s %s %011.3f %3s %2s %4.1f %4d %3.1f  %s %s\n" \
+            $(basename $(pwd)) $sname $target $pos "$ha" $jdref $texp $nexp $rms $bg $fwhm $inst $AI_SITE
         else
             printf "%s %-8s %s  %-4s %4.0f %3.1f %4s %5.1f %2d %2s %4s  %s\n" \
                 $sname $target $type $nref "$flength" "$fratio" $iso $texp $nexp $tsens $black $telid

@@ -13,8 +13,10 @@
 #       AO_AMASK and AO_ACCOO in _astrometry
 #
 ########################################################################
-VERSION="1.1"
-VINFO="T. Lehmann, Dec. 2019"
+AOVARS="AO_FLATS AO_LIGHT AO_BGVAR AO_REGIS AO_STACK AO_AMASK AO_ACCOO"
+
+VERSION="1.1.1"
+VINFO="T. Lehmann, Jan. 2020"
 PINFO="\
     options:
       -h            show this help text
@@ -28,6 +30,16 @@ PINFO="\
       task          run given task    
 "
 CHANGELOG="
+    1.1.1 - 28 Jan 2020
+        * bgvar: bugfix: correctly deal with multiple set names
+        * correctly handle task mode 'normal'
+        * stack: always use target from set.dat to set OBJECT keyword
+        * load_images: use wait_for_saoimage if SAOImage window is newly
+            created
+        * astrometry: improved stability when fitting large fields (>10 deg),
+            if first attempt of AIwcs fails try again using fewer catalog stars
+        * added check for allowed AO_ variables (defined by AOVARS)
+
     1.1 - 15 Dec 2019
         * darks, bgvar: bugfix for newer versions of imagemagick: when writing
           result to stdout in a specific image format then a hyphen character
@@ -179,6 +191,13 @@ is_time () {
         print x
     }')
     return $err
+}
+
+match () {
+    local needle=$1
+    local stack=$2  # values separated by , or ; or | or space
+    local sep=${3:-"|, "}   # values separated by | or , or space
+    echo "$stack" | tr "$sep" ' ' | grep -qiE "$needle"
 }
 
 select_item () {
@@ -769,7 +788,7 @@ _bgvar () {
         then
             for set in $slist
             do
-                AIbgdiff -k -a -p $AO_BGVAR "$setname" >> bgdiff.dat
+                AIbgdiff -k -a -p $AO_BGVAR "$set" >> bgdiff.dat
                 test $? -ne 0 && return 255
                 #AIbgdiff -k -a le01 >> bgdiff.dat
                 #AIbgdiff -k "" 64 >> bgdiff.dat    # small images
@@ -787,6 +806,7 @@ _bgvar () {
         for set in $(AIsetinfo -o | grep -v "^#" | \
             awk -v t=$tel '{if(tolower($12)==t){print $1}}')
         do
+            echo $slist | grep -qw $set || continue
             nlist="$nlist $(AIimlist -x -q -n $set)"
         done
         test -z "${nlist// /}" && continue
@@ -954,6 +974,8 @@ _stack () {
     local bin
     local bgoff
     local imlist
+    local last
+    local has_saoimage
     local x
     
     # normal stacking for all sets (default: resampling_type lanczos3)
@@ -1053,9 +1075,8 @@ _stack () {
             then
                 str=" # orig. OBJECT=$object"
                 test "$object" == "$target" && str=""
-            else
-                set_header $set.head OBJECT=$target
             fi
+            set_header $set.head OBJECT=$target
         else
             fwhm=$(grep -E "$filter" reg.dat | mean - 7)
         fi
@@ -1103,8 +1124,23 @@ _stack () {
             ext="pgm"; test -f $set.ppm && ext="ppm"
             test -f $set.$ext && echo $set.$ext
         done)
-    (test -z "$TASKMODE" || test "$TASKMODE" == "statusall") &&
-        test "$imlist" && AIexamine $imlist &
+    last=$(echo $imlist | awk '{print $NF}')
+    if [ -z "$TASKMODE" ] || [ "$TASKMODE" == "statusall" ]
+    then
+        if [ "$imlist" ]
+        then
+            has_saoimage=$(xpaaccess -c -t "2,2" AIRTOOLS)
+            AIexamine $imlist &
+            if [ "$has_saoimage" != "yes" ]
+            then
+                # start new SAOImage window and load frames
+                wait_for_saoimage
+            else
+                # append frames to a runnung SAOImage
+                fid=$(wait_for_frame $last)
+            fi
+        fi
+    fi
 
     return $retval
 }
@@ -1131,6 +1167,7 @@ _astrometry () {
     local pixscale
     local binning
     local opts
+    local xopts
     local north
     local catalog
     local maglim
@@ -1138,9 +1175,9 @@ _astrometry () {
     local x
     local msg
     local cpulim
-    local wcsopts
     local amask
     local rlim
+    local crossrad
     local wcslog=wcs/astrometry.log
     local retval=0
     local tdir=${AI_TMPDIR:-"/tmp"}
@@ -1248,11 +1285,13 @@ _astrometry () {
                 is_ppm $ststack && x="-2"
                 rlim=""
                 test "$AO_AMASK" && is_number "$AO_AMASK" && rlim=$AO_AMASK
-                sexselect -f $x $set.src.dat "" 0.03 "$rlim" "" "" 99 > $tmpcat
+                sexselect -f $x $set.src.dat "" 0.01 "$rlim" "" "" 99 > $tmpcat
                 stilts tcopy ifmt=fits ofmt=fits-basic in=$tmpcat"#2" out=$tmpxy
+                nsrc=$(get_header $tmpxy NAXIS2)
+                # TODO: if nsrc < 200 relax detections
                 x=""
                 test "$rlim" && x="(limited to r<$rlim pix)"
-                echo "# $(get_header $tmpxy NAXIS2) sources" $x | tee -a $wcslog
+                echo "# $nsrc sources" $x | tee -a $wcslog
                 solve-field -O -o $tmpsolve -p -l $cpulim $opts $tmpxy >> $wcslog
             else
                 echo "# running: solve-field -O -p -l $cpulim $opts $tmpfits" | tee -a $wcslog
@@ -1284,6 +1323,15 @@ _astrometry () {
             echo "ERROR: unable to determine star density." >&2 && return 255
         dens=$1; nsrc=$2; area=$3
         
+        # determine crossid_radius
+        # expert options for AIwcs: set crossid_radius for wide fields
+        xopts=""
+        crossrad=""
+        test ${pixscale%.*} -gt 5 &&
+            crossrad=$(echo $pixscale | awk '{printf("%.0f", $1/2)}') &&
+            xopts="-crossid_radius $crossrad"
+
+
         # choose sensible parameters for AIwcs
         catalog="ucac4"; maglim=""; thres=10
         test ${area%.*} -gt 2 && maglim=15.5
@@ -1292,6 +1340,9 @@ _astrometry () {
         test ${area%.*} -gt 20 && maglim=13
         test ${area%.*} -gt 40 && maglim=12
         test ${area%.*} -gt 80 && maglim=11
+        test ${area%.*} -gt 150 && maglim=10
+        test ${area%.*} -gt 300 && maglim=9
+        test ${area%.*} -gt 600 && maglim=8
         test $nsrc -gt 2000 && thres=20
         test $nsrc -gt 5000 && thres=30
         test $nsrc -gt 12000 && thres=40
@@ -1322,8 +1373,20 @@ _astrometry () {
         fi
         
         # running AIwcs
-        echo "# running: AIwcs $opts $set $catalog \"$maglim\" $thres" | tee -a $wcslog
-        AIwcs $opts $set $catalog "$maglim" $thres >> $wcslog 2>&1
+        if [ "$xopts" ]
+        then
+            echo "# running: AIwcs -x \"$xopts\" $opts $set $catalog \"$maglim\" $thres" | tee -a $wcslog
+            AIwcs -x "$xopts" $opts $set $catalog "$maglim" $thres >> $wcslog 2>&1
+            test $? -ne 0 && maglim=$(echo $maglim 16 | awk '{print $1-1.0}') &&
+                echo "# running: AIwcs -x \"$xopts\" $opts $set $catalog \"$maglim\" $thres" | tee -a $wcslog &&
+                AIwcs -x "$xopts" $opts $set $catalog "$maglim" $thres >> $wcslog 2>&1
+        else
+            echo "# running: AIwcs $opts $set $catalog \"$maglim\" $thres" | tee -a $wcslog
+            AIwcs $opts $set $catalog "$maglim" $thres >> $wcslog 2>&1
+            test $? -ne 0 && maglim=$(echo $maglim 16 | awk '{print $1-1.0}') &&
+                echo "# running: AIwcs $opts $set $catalog \"$maglim\" $thres" | tee -a $wcslog &&
+                AIwcs -x "$xopts" $opts $set $catalog "$maglim" $thres >> $wcslog 2>&1
+        fi
         test $? -ne 0 && retval=255 &&
             echo "ERROR: AIwcs failed (see $wcslog)" &&
             test -e $set.wcs.head && mv $set.wcs.head x.$set.wcs.failed.head
@@ -1620,6 +1683,7 @@ __load_images () {
     local n
     local first
     local last
+    local has_saoimage
     local fid
     local retval=0
     local tmp1=$(mktemp "/tmp/tmp1_$$_XXXXXX.dat")
@@ -1658,16 +1722,14 @@ __load_images () {
     test ! -d bgvar && mkdir bgvar # to allow storage of bad region files
 
     # check for running SAOImage AIRTOOLS
-    xpaaccess -c -t "2,2" AIRTOOLS > /dev/null
-    if [ $? -eq 0 ]
+    has_saoimage=$(xpaaccess -c -t "2,2" AIRTOOLS)
+    AIexamine $imlist &
+    if [ "$has_saoimage" != "yes" ]
     then
-        # start SAOImage and load frames
-        echo "# loading $ststack ..."
-        AIexamine $imlist &
-        fid=$(wait_for_frame $first)
+        # start new SAOImage window and load frames
+        wait_for_saoimage
     else
         # append frames to a runnung SAOImage
-        AIexamine $imlist &
         fid=$(wait_for_frame $last)
     fi
 
@@ -1803,8 +1865,10 @@ Miscellaneous tools:
 fi
 
 test "$TASKMODE" && case "$TASKMODE" in
-    nodisplay|status|statusall) ;;
+    normal|nodisplay|status|statusall) ;;
     *)  echo "\
+WARNING: skipped processing due to unknown task mode $TASKMODE
+
 available task modes:
     nodisplay   - skip display of new windows (images, plots)
     status      - show available results (measurements) only
@@ -1852,13 +1916,25 @@ test ! -d "$AI_TMPDIR" &&
     error "temp directory $AI_TMPDIR is missing."
 if [ ! -d "$AI_RAWDIR" ]
 then
-    if [ "$TASKMODE" == "status" ] || [ "$TASKMODE" == "statusall" ]
+    if [ "$TASKMODE" != "status" ] && [ "$TASKMODE" != "statusall" ] &&
+        match "$task" "imageinfo|darks|flats|lights|imexa_raw" 
     then
-        echo "WARNING: raw image directory $AI_RAWDIR is missing."
-    else
         error "raw image directory $AI_RAWDIR is missing."
+    else
+        echo "WARNING: raw image directory $AI_RAWDIR is missing."
     fi
 fi
+
+# check for allowed AO_* variables
+varlist=$(env | grep "^AO_" | sed -e 's,=.*,,')
+for var in $varlist
+do
+    echo "$AOVARS AO_ARGS" | \
+        grep -qw $var
+    test $? -ne 0 &&
+        echo "ERROR: variable $var is not supported" >&2 &&
+        exit 255
+done
 
 airfun=$(which airfun.sh)
 echo "# airfun=$airfun"
