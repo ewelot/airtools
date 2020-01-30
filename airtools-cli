@@ -1377,15 +1377,21 @@ _astrometry () {
         then
             echo "# running: AIwcs -x \"$xopts\" $opts $set $catalog \"$maglim\" $thres" | tee -a $wcslog
             AIwcs -x "$xopts" $opts $set $catalog "$maglim" $thres >> $wcslog 2>&1
-            test $? -ne 0 && maglim=$(echo $maglim 16 | awk '{print $1-1.0}') &&
-                echo "# running: AIwcs -x \"$xopts\" $opts $set $catalog \"$maglim\" $thres" | tee -a $wcslog &&
+            if [ $? -ne 0 ]
+            then
+                maglim=$(echo $maglim 16 | awk '{print $1-1.0}')
+                echo "# running: AIwcs -x \"$xopts\" $opts $set $catalog \"$maglim\" $thres" | tee -a $wcslog
                 AIwcs -x "$xopts" $opts $set $catalog "$maglim" $thres >> $wcslog 2>&1
+            fi
         else
             echo "# running: AIwcs $opts $set $catalog \"$maglim\" $thres" | tee -a $wcslog
             AIwcs $opts $set $catalog "$maglim" $thres >> $wcslog 2>&1
-            test $? -ne 0 && maglim=$(echo $maglim 16 | awk '{print $1-1.0}') &&
-                echo "# running: AIwcs $opts $set $catalog \"$maglim\" $thres" | tee -a $wcslog &&
+            if [ $? -ne 0 ]
+            then
+                maglim=$(echo $maglim 16 | awk '{print $1-1.0}')
+                echo "# running: AIwcs $opts $set $catalog \"$maglim\" $thres" | tee -a $wcslog
                 AIwcs -x "$xopts" $opts $set $catalog "$maglim" $thres >> $wcslog 2>&1
+            fi
         fi
         test $? -ne 0 && retval=255 &&
             echo "ERROR: AIwcs failed (see $wcslog)" &&

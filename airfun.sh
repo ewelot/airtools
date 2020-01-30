@@ -3,7 +3,7 @@
 # airfun.sh
 #   shell functions aimed towards astronomical image reduction
 #
-# Copyright: Thomas Lehmann, 2011-2019
+# Copyright: Thomas Lehmann, 2011-2020
 # License: GPL v3
 #
 # note:
@@ -26,7 +26,7 @@ CHANGELOG
             psfphot file and option -n nbright to set number of bright stars
             to use (default 30)
         * AIsetinfo: added output of hour angle when requesting longinfo (-l)
-		* new function wait_for_saoimage
+		* new function wait_for_saoimage, cometreg, rgbscale
 
     4.2 - 17 Dec 2019
         * AIstack: use parallel jobs when converting to FITS
@@ -3115,6 +3115,44 @@ get_jd_dmag () {
     return
 }
 
+cometreg () {
+    # create region file for comet position
+    local hdr=$1
+    local whdr=$2
+    local ra=$3 # sexagesimal coordinates
+    local de=$4
+    local size
+    local tmpim=$(mktemp /tmp/tmp_im1_XXXXXX.pgm)
+    
+    (test $# -lt 1 || test "$1" == "-h") &&
+        echo "usage: cometreg <hdr> <whdr> [ra] [de]" >&2 && return
+    
+    # check for header files
+    test ! -f $hdr &&
+        echo "ERROR: header file $hdr does not exist" >&2 &&
+        return 255
+    test -z "$whdr" && whdr=${hdr/.head/.wcs.head}
+    test ! -f $whdr &&
+        echo "ERROR: wcs header file $whdr does not exist" >&2 &&
+        return 255
+    
+    # if necessary read coordinates from header file
+    test -z "$ra" && ra=$(get_header $hdr AI_CORA)
+    test -z "$de" && de=$(get_header $hdr AI_CODEC)
+    (test -z "$ra" || test -z "$de") &&
+        echo "ERROR: missing coordinates" >&2 &&
+        return 255
+
+    # create artificial image
+    size=$(get_header -s $hdr NAXIS1,NAXIS2 | tr '\n' ' ')
+    mkpgm 0 $size $tmpim
+
+    echo mpc $ra $de | rade2xy - $whdr | xy2reg $tmpim -
+    
+    rm -f $tmpim
+    return 0
+}
+
 cometcenter () {
     # determine comet center
     # returns ds9 region file
@@ -3722,6 +3760,70 @@ rgbsmooth () {
         -set colorspace HSL \
         -colorspace rgb     \
         ppm:-
+}
+
+
+rgbscale () {
+    # scale intensity of 16bit rgb image to examine background
+    local img=$1
+    local sd=$2
+    local high=8
+    local low=5
+    local outsize=240   # output image size (only enlarge)
+    local rmult
+    local radd
+    local gmult
+    local gadd
+    local bmult
+    local badd
+    local x
+    local tmpimg=$(mktemp /tmp/tmp_im1_XXXXXX.ppm)
+    local tmpdat=$(mktemp /tmp/tmp_val_XXXXXX.dat)
+    ! is_ppm $img &&
+        echo "ERROR: input image is not in PPM format" >&2 && return 255
+        
+    # shrink large input image (max 400px), remove border
+    convert $img -sample 400\> $tmpimg
+    imcrop $tmpimg 90 | AIval -a - > $tmpdat
+    
+    # red channel
+    x=""; test "$sd" && x=$((sd*100/170))
+    set -- $(kappasigma $tmpdat 1)
+    echo -ne "\tsd=${2%%.*}" >&2
+    set -- $(echo $1 $2 $x | awk -v b=16 -v l=$low -v h=$high '{
+            m=2^b/$NF/(l+h)
+            a=2^b*l/(l+h)-$1*m
+            printf("%.1f %.0f\n", m, a)
+        }')
+    rmult=$1; radd=$2
+    
+    # green channel
+    set -- $(kappasigma $tmpdat 2)
+    echo -n ",${2%%.*}" >&2
+    set -- $(echo $1 $2 $sd | awk -v b=16 -v l=$low -v h=$high '{
+            m=2^b/$NF/(l+h)
+            a=2^b*l/(l+h)-$1*m
+            printf("%.1f %.0f\n", m, a)
+        }')
+    gmult=$1; gadd=$2
+    
+    # blue channel
+    x=""; test "$sd" && x=$((sd*100/125))
+    set -- $(kappasigma $tmpdat 3)
+    echo ",${2%%.*}" >&2
+    set -- $(echo $1 $2 $x | awk -v b=16 -v l=$low -v h=$high '{
+            m=2^b/$NF/(l+h)
+            a=2^b*l/(l+h)-$1*m
+            printf("%.1f %.0f\n", m, a)
+        }')
+    bmult=$1; badd=$2
+    
+    pnmccdred -m $rmult,$gmult,$bmult -a $radd,$gadd,$badd $tmpimg - | \
+        convert - -depth 8 -scale $outsize\< -
+
+    wc -l $tmpdat >&2
+    rm -f $tmpimg $tmpdat
+    return 0
 }
 
 
@@ -18885,7 +18987,7 @@ EOF
             then
                 # determine shifted reference pixel coordinates
                 #dsec=$(echo $(getImageDateSec $num) - $(getImageDateSec $nref) | bc)
-                jd=$(grep -E "^MJD_OBS =|^JD " $wcs | head -1 | awk '{printf("%s", $3)}')
+                jd=$(grep -E "^MJD_OBS =|^JD " $wcs | lines 1 | awk '{printf("%s", $3)}')
                 if [ -z "$jd" ]
                 then
                     dateobs=$(grep "^DATE-OBS=" $wcs | tr -d "'" | awk '{print $2}')
@@ -19096,7 +19198,7 @@ EOF
             do
                 case "$out" in
                     "${sname}a$outsuffix")
-                        flist=$(ls -tr $wdir/[0-9]*.$c.fits | head -$((n/2)));;
+                        flist=$(ls -tr $wdir/[0-9]*.$c.fits | lines $((n/2)));;
                     "${sname}b$outsuffix")
                         flist=$(ls -tr $wdir/[0-9]*.$c.fits | tail -$((n - n/2)));;
                     *)  flist="$wdir/[0-9]*.$c.fits";;
@@ -21555,7 +21657,7 @@ AIcosnap () {
     done
 
     local set=$1
-    local smoothreg=comet/$set.smooth.reg
+    local smoothreg=comet/$set.smooth.reg   # core inner outer
     local coreg=comet/$set.comet.reg
     local bgreg=comet/$set.cometbg.reg
     local badreg=comet/$set.bad.reg
