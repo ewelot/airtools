@@ -10,13 +10,13 @@
 #       AO_BGVAR in _bgvar
 #       AO_REGIS in _register
 #       AO_STACK in _stack and _costack
-#       AO_AMASK and AO_ACCOO in _astrometry
+#       AO_AMASK and AO_ACOOR and AO_ABINN in _astrometry
 #
 ########################################################################
-AOVARS="AO_FLATS AO_LIGHT AO_BGVAR AO_REGIS AO_STACK AO_AMASK AO_ACCOO"
+AOVARS="AO_FLATS AO_LIGHT AO_BGVAR AO_REGIS AO_STACK AO_AMASK AO_ACOOR AO_ABINN"
 
-VERSION="1.1.1"
-VINFO="T. Lehmann, Jan. 2020"
+VERSION="1.1.4"
+VINFO="T. Lehmann, May. 2020"
 PINFO="\
     options:
       -h            show this help text
@@ -30,6 +30,22 @@ PINFO="\
       task          run given task    
 "
 CHANGELOG="
+    1.1.4 - 12 May 2020
+        * added check for correct parameter file structure
+        
+    1.1.3 - 24 Mar 2020
+        * flats: do not use option -b if camera sensor is CCD
+        * lights: add pedestal of 100 ADU if camera sensor is CCD
+        
+    1.1.2 - 02 Mar 2020
+        * bgvar: bugfix: correctly determine column of background values to
+            plot for every telescope used
+        * astrometry:
+            - do not write result from solve-field to image header anymore
+            - rename of AO_ACCOO to AO_ACOOR
+            - new env variable AO_ABINN to set value of binning
+            - allow to skip solve-field by using AO_ACOOR=skipfirst
+
     1.1.1 - 28 Jan 2020
         * bgvar: bugfix: correctly deal with multiple set names
         * correctly handle task mode 'normal'
@@ -164,7 +180,7 @@ longhelp ()
 error ()
 {
     f_str="$1"
-    echo "ERROR:  $f_str" >&2
+    echo "ERROR: $f_str" >&2
     exit 1
 }
 
@@ -371,7 +387,7 @@ _imageinfo () {
             test $? -ne 0 && return 255
         fi
     fi
-    ( mousepad $infofile 3>&1 1>&2 2>&3 | grep -v "Gtk-WARNING .* Theme parsing error" ) 3>&1 1>&2 2>&3 &
+    ( mousepad $infofile 3>&1 1>&2 2>&3 | grep -v "Gtk-WARNING .* Theme parsing error" | grep "[[:alnum:]]") 3>&1 1>&2 2>&3 &
     return 0
 }
 
@@ -624,6 +640,8 @@ _flats () {
     local cam
     local type
     local badpix
+    local ctype
+    local opts
     local set
     slist=$(AIsetinfo -b | awk '{if($4=="f"){print $2}}')
     test "$setname" && slist=$setname
@@ -635,14 +653,17 @@ _flats () {
         texp=$(AIsetinfo $set | awk '{printf("%.0f", $8)}')
         tel=$(AIsetinfo $set | awk '{printf("%s", $12)}')
         cam=$(get_param camera.dat camera $tel | awk '{print tolower($1)}')
-        echo "# tel=$tel  cam=$cam"
+        ctype=$(get_param camera.dat ctype $tel | awk '{print $1}')
+        echo "# tel=$tel  cam=$cam ($ctype)"
+        opts="-b"
+        test "$ctype" == "CCD" && opts=""
         type=long; test $texp -lt 32 && type=short
         badpix=hotpix.${cam}_$type.dat
         test ! -e $badpix && badpix=hotpix.${cam}.dat
         test ! -e $badpix && badpix=""
         test "$badpix" && echo "# using hotpixel file $badpix"
-        echo "# AI_BADPIX=\"$badpix\" AIflat $AO_FLATS -b $set"
-        AI_BADPIX="$badpix" AIflat $AO_FLATS -b $set
+        echo "# AI_BADPIX=\"$badpix\" AIflat" $opts $AO_FLATS $set
+        AI_BADPIX="$badpix" AIflat $opts $AO_FLATS $set
         test $? -ne 0 && return 255
     done
     # statistics
@@ -651,7 +672,11 @@ _flats () {
         test ! -f $set.pgm &&
             echo "WARNING: flat $set.pgm does not exist" &&
             continue
-        AIstat -b -c $set.pgm
+        tel=$(AIsetinfo $set | awk '{printf("%s", $12)}')
+        ctype=$(get_param camera.dat ctype $tel | awk '{print $1}')
+        opts="-b"
+        test "$ctype" == "CCD" && opts=""
+        AIstat $opts -c $set.pgm
     done
     # show normalized flat image
     if [ -z "$TASKMODE" ] || [ "$TASKMODE" == "statusall" ]
@@ -678,6 +703,7 @@ _lights () {
     local tel
     local cam
     local type
+    local ctype
     local ccdopts
     local badpix
     
@@ -698,15 +724,19 @@ _lights () {
             continue
             
         ccdopts="$AO_LIGHT"
-        test -z "$ccdopts" && if echo "Mayhill SSO Nerpio Bathurst" | grep -w -q $AI_SITE
+        if [ -z "$ccdopts" ]
         then
-            ccdopts="-a 100"
-        else
-            ccdopts="-q 1"
             texp=$(AIsetinfo $set | awk '{printf("%.0f", $8)}')
             tel=$(AIsetinfo $set | awk '{printf("%s", $12)}')
             cam=$(get_param camera.dat camera $tel | awk '{print tolower($1)}')
-            echo "# tel=$tel  cam=$cam"
+            ctype=$(get_param camera.dat ctype $tel | awk '{print $1}')
+            echo "# tel=$tel  cam=$cam ($ctype)"
+            if [ "$ctype" == "CCD" ]
+            then
+                ccdopts="-a 100"
+            else
+                ccdopts="-q 1"
+            fi
             type=long; test $texp -lt 32 && type=short
             badpix=hotpix.${cam}_$type.dat
             test ! -e $badpix && badpix=hotpix.${cam}.dat
@@ -715,7 +745,7 @@ _lights () {
         fi
         test -d bgvar || mkdir bgvar
         
-        echo "# running: AI_BADPIX=\"$badpix\" AIccd $ccdopts $set"
+        echo "# running: AI_BADPIX=\"$badpix\" AIccd" $ccdopts $set
         AI_BADPIX="$badpix" AIccd $ccdopts $set
         test $? -ne 0 && return 255
     done
@@ -738,6 +768,7 @@ _bgvar () {
     local imlist
     local tellist
     local tel
+    local ncol
     local title
     local doit
     
@@ -797,8 +828,6 @@ _bgvar () {
     fi
     
     # plot mean bg values
-    test $(head -1 bgdiff.dat | wc -w) -gt 14 && bgcol=16   # rgb in 15 16 17
-    test $(head -1 bgdiff.dat | wc -w) -eq 7  && bgcol=7    # gray in 7
     tellist=$(AIsetinfo -o | grep -v "^#" | awk '{printf("%s\n", tolower($12))}' | sort -u)
     test "$TASKMODE" != "nodisplay" && for tel in $tellist
     do
@@ -816,6 +845,9 @@ _bgvar () {
             test "$filter" && filter="$filter|"
             filter="${filter}^$num"
         done
+        ncol=$(grep -wE "$filter" bgdiff.dat | lines 1 | wc -w)
+        bgcol=7 # gray in 7
+        test $ncol -gt 14 && bgcol=16   # rgb in 15 16 17
         title="$tel: Average background per image"
         grep -wE "$filter" bgdiff.dat | AIplot -o $AI_TMPDIR/x.$tel.bg.png -t "$title" -p - 2 $bgcol
     done
@@ -1108,9 +1140,12 @@ _stack () {
             set_header $set.head AI_BGOFF=$bgoff
         test -z "$bgoff" && bgoff=0
         rms=$(get_header -q $set.head AI_RMSG)
-        test -z "$rms" &&
-            rms=$(AIbg $img 10 | awk '{printf("%.1f", $2)}') &&
+        if [ -z "$rms" ]
+        then
+            test "$ext" == "pgm" && rms=$(AIbg $img 10 | awk '{printf("%.1f", $3)}')
+            test "$ext" == "ppm" && rms=$(AIbg $img 10 | grep "^2 " | awk '{printf("%.1f", $3)}')
             set_header $set.head AI_RMSG=$rms
+        fi
         
         x=$(get_header -q $set.head AI_SITE)
         test -z "$x" && set_header $set.head AI_SITE=$AI_SITE
@@ -1147,20 +1182,27 @@ _stack () {
 
 _astrometry () {
     # algorithm:
-    # - check for coordinates
-    # - if not found, try to get comet ephemerides
-    # - if not found or AI_NPA is unknown, run solve-field and AIwcs
+    # 1. check for image center coordinates
+    # 2. run solve-field using center coordinates if available
+    #     - if not succesful and image coordinates are unknown, try to get
+    #       comet ephemerides and run solve-field again
+    # 3. run AIwcs
+    #     - if solve-field failed and image coordinates are known, try AIwcs
+    #       using position angle from AI_NPA or from camera.dat
+    #     - if solve-field has finished successfully improve solution using
+    #       AIwcs
+    #     - if AIwcs failes retry using limited number of source detections
     # notes about optional env variables to control program
     #   AO_AMASK - source mask, either name of a ds9 region file or
     #       a number representing max radius from image center to use
-    #   AO_ACCOO - image center coordinates (RA,DEC) overwriting the
+    #   AO_ACOOR - image center coordinates (RA,DEC) overwriting the
     #       values determined by imcoord automatically
     #       if set to "unknown" then do full sky search
+    #       if set to "skipfirst" then skip solve_field and run AIwcs only
     local slist
-    local use_scat=1
     local set
     local ststack
-    local line
+    local imcoord
     local ra
     local dec
     local do_solve_field
@@ -1185,6 +1227,7 @@ _astrometry () {
     local tmpcat=$(mktemp "$tdir/tmp_scat_XXXXXX.fits")
     local tmpxy=$(mktemp "$tdir/tmp_xy_XXXXXX.fits")
     local tmpmask=$(mktemp "$tdir/tmp_mask_XXXXXX.reg")
+    local tmpcancel=$(mktemp "$tdir/tmp_astrometry_XXXXXX.cancel")
     
     slist=$(AIsetinfo -b | awk '{if($4=="o"){print $2}}')
     test "$setname" && slist=$setname
@@ -1192,7 +1235,6 @@ _astrometry () {
     msg="# Astrometric calibration ..."
     (test -z "$TASKMODE" || test "$TASKMODE" == "nodisplay") && for set in $slist
     do
-        test $retval -ne 0 && continue
         echo "$msg" && msg=""
         echo "set=$set"
         ststack=""
@@ -1212,7 +1254,7 @@ _astrometry () {
         
         # determine pixscale
         pixscale=""
-        binning=""
+        binning="$AO_ABINN"
         test -z "$binning" && binning=$(get_header -q $set.head BINNING)
         test -z "$binning" && binning=$(get_header -q $set.head XBINNING)
         test -z "$binning" && binning=1
@@ -1222,117 +1264,119 @@ _astrometry () {
             error "unknown pixscale in $set"
 
         # check for image center coordinates
-        do_solve_field=""
-        if [ "$AO_ACCOO" ]
-        then
-            line=${AO_ACCOO/,/ }
-        else
-            line=$(imcoord $set 2>/dev/null)
-            if [ $? -ne 0 ]
-            then
-                # get ephemerides
-                #get_mpcephem -w $set 2>/dev/null
-                #test $? -ne 0 &&
-                    do_solve_field=1 &&
-                    echo "WARNING: missing (approx.) field coordinates in $set.head" >&2
-            fi
-        fi
-        
-        # check for north angle
-        north=$(get_header -q $set.head AI_NPA)
-        test $? -ne 0 && do_solve_field=1
-        
-        # force full sky search
-        if [ "$line" == "unknown" ]
-        then
-            do_solve_field=1
-            line=""
-        fi
-        
+        do_solve_field=1
+        imcoord=$(imcoord $set 2>/dev/null)
+        test "$AO_ACOOR" && case $AO_ACOOR in
+            unknown)    imcoord="";;
+            skipfirst)  do_solve_field="";;
+            *)          imcoord=${AO_ACOOR/,/ };;
+        esac
+        # workaraoud for missing coordinates in case of image acquisition using gacam
+        test "$imcoord" == "00:00:00.0 +00:00:00" &&
+            test "$(get_header $set.head AI_SITE)" == "Weimar" &&
+            imcoord=""
+
         # run solve-field if necessary
         opts=""
         if [ "$do_solve_field" ]
         then
             ! type -p solve-field > /dev/null &&
                 error "program solve-field (astrometry.net) is not installed."
-
-            # search radius on the sky
-            radius=$(imsize $ststack | awk -v p=$pixscale '{printf("%.1f", 0.5*sqrt($1*$1+$2*$2)*p/3600)}')
-            cpulim=300
-            test ${radius%.*} -gt 4 && cpulim=600
             
-            # using approx center coordinates in solve-field
-            if [ "$(echo $line)" ]
+            # using approx center coordinates (sexagesimal) in solve-field
+            if [ "$(echo $imcoord)" ]
             then
-                set - $line
+                cpulim=90
+                radius=$(imsize $ststack | awk -v p=$pixscale '{printf("%.1f", 0.5*sqrt($1*$1+$2*$2)*p/3600)}')
+                set - $imcoord
                 opts="--ra $1 --dec $2 --radius $radius"
+            else
+                cpulim=180
             fi
-            # range of pixel scales to check (+-10%)
-            opts="$opts "$(echo $pixscale | awk -v t=10 '{
+            # range of pixel scales to check (+-20%)
+            opts="$opts "$(echo $pixscale | awk -v t=20 '{
                 x=1+t/100
                 printf("-L %.1f -H %.1f -u app", $1/x-0.1, $1*x+0.1)}')
+            # image dimension and source catalog columns to use
+            set - $(imsize $ststack)
+            opts="$opts -w $1 -e $2 -X XWIN_IMAGE -Y YWIN_IMAGE -s MAG_AUTO -a"
+
+            # select sources from image
+            test ! -e $set.src.dat && AIsource -q $ststack
+            x=""
+            is_ppm $ststack && x="-2"
+            rlim=""
+            test "$AO_AMASK" && is_number "$AO_AMASK" && rlim=$AO_AMASK
+            sexselect -f $x $set.src.dat "" 0.01 "$rlim" "" "" 99 > $tmpcat
+            stilts tcopy ifmt=fits ofmt=fits-basic in=$tmpcat"#2" out=$tmpxy
+            nsrc=$(get_header $tmpxy NAXIS2)
+            # TODO: if nsrc < 200 relax detections
+            x=""
+            test "$rlim" && x="(limited to r<$rlim pix)"
+            echo "# $nsrc sources selected" $x
 
             # run solve-field
             tmpsolve="tmp_${set}_solve_$RANDOM"
-            if [ "$use_scat" ]
+            echo "# running: solve-field -O -p -l $cpulim $opts $tmpxy" | tee -a $wcslog
+            sleep 1
+            rm -f $tmpcancel
+            solve-field -O -C $tmpcancel -o $tmpsolve -p -l $cpulim $opts $tmpxy >> $wcslog
+            retval=$?
+            
+            # cancel process if failed
+            (test ! $retval -eq 0 || test ! -s $tdir/$tmpsolve.wcs) && touch $tmpcancel
+            
+            # if required try second time using comet coordinates
+            if [ $retval -ne 0 ] && [ -z "$imcoord" ] &&
+                get_mpcephem -w $set 2>/dev/null
             then
-                set - $(imsize $ststack)
-                opts="$opts -w $1 -e $2 -X XWIN_IMAGE -Y YWIN_IMAGE -s MAG_AUTO -a"
+                cpulim=90
+                radius=$(imsize $ststack | awk -v p=$pixscale '{printf("%.1f", 0.5*sqrt($1*$1+$2*$2)*p/3600)}')
+                imcoord=$(imcoord -c $set 2>/dev/null)
+                set - $imcoord
+                opts="--ra $1 --dec $2 --radius $radius $opts"
                 echo "# running: solve-field -O -p -l $cpulim $opts $tmpxy" | tee -a $wcslog
-                sleep 3
-                test ! -e $set.src.dat && AIsource -q $ststack
-                x=""
-                is_ppm $ststack && x="-2"
-                rlim=""
-                test "$AO_AMASK" && is_number "$AO_AMASK" && rlim=$AO_AMASK
-                sexselect -f $x $set.src.dat "" 0.01 "$rlim" "" "" 99 > $tmpcat
-                stilts tcopy ifmt=fits ofmt=fits-basic in=$tmpcat"#2" out=$tmpxy
-                nsrc=$(get_header $tmpxy NAXIS2)
-                # TODO: if nsrc < 200 relax detections
-                x=""
-                test "$rlim" && x="(limited to r<$rlim pix)"
-                echo "# $nsrc sources" $x | tee -a $wcslog
-                solve-field -O -o $tmpsolve -p -l $cpulim $opts $tmpxy >> $wcslog
-            else
-                echo "# running: solve-field -O -p -l $cpulim $opts $tmpfits" | tee -a $wcslog
-                sleep 3
-                imcrop $ststack 70 | ppm2gray -f - > $tmpfits
-                solve-field -O -o $tmpsolve -p -l $cpulim $opts $tmpfits >> $wcslog
+                sleep 1
+                rm -f $tmpcancel
+                solve-field -O -C $tmpcancel -o $tmpsolve -p -l $cpulim $opts $tmpxy >> $wcslog   
+                retval=$?
             fi
-            test $? -ne 0 &&
-                echo "ERROR: solve-field failed for $set" >&2 && retval=255
-            test $retval -eq 0 && if [ -s $tdir/$tmpsolve.wcs ]
+            
+            # get ra dec north
+            if [ $retval -eq 0 ] && [ -s $tdir/$tmpsolve.wcs ]
             then
                 wcsinfo $tdir/$tmpsolve.wcs > x.wcsinfo
                 set - $(grep -wE "^orientation|^ra_center_hms|^dec_center_dms" x.wcsinfo)
-                echo "# writing to $set.head: RA=$4 DEC=$6"
-                set_header $set.head RA="$4" DEC="$6"
                 north=$(echo $2 | awk '{print -1*$1}')
+                imcoord="$4 $6"
+                echo "# image center from solve-field: $imcoord"
+                #set_header $set.head RA="$4" DEC="$6"
                 mv $tdir/$tmpsolve.wcs wcs/$set.an.wcs &&
                     (cd $tdir; rm -f $tmpsolve.* ${tmpsolve}-indx.xyls) &&
                     rm x.wcsinfo
             else
+                touch $tmpcancel
                 echo "ERROR: solve-field failed for $set" >&2 && retval=255
             fi
         fi
         test $retval -ne 0 && continue
         
+
+        # choose sensible parameters for AIwcs
         # determine density of sources
         set - $(sdensity -q -a $set) x
         test $# -ne 4 &&
             echo "ERROR: unable to determine star density." >&2 && return 255
         dens=$1; nsrc=$2; area=$3
         
-        # determine crossid_radius
-        # expert options for AIwcs: set crossid_radius for wide fields
+        # on low resolution images set crossid_radius expert options in AIwcs
         xopts=""
         crossrad=""
         test ${pixscale%.*} -gt 5 &&
             crossrad=$(echo $pixscale | awk '{printf("%.0f", $1/2)}') &&
             xopts="-crossid_radius $crossrad"
 
-
-        # choose sensible parameters for AIwcs
+        # choose catalog, maglim and thres
         catalog="ucac4"; maglim=""; thres=10
         test ${area%.*} -gt 2 && maglim=15.5
         test ${area%.*} -gt 5 && catalog="ppmx" && maglim=14.5
@@ -1351,8 +1395,9 @@ _astrometry () {
 
         # options for AIwcs
         opts=""
-        test -z "$north" && north=$(get_header -q $set.head AI_NPA)
-        test "$north" && opts="-n $north"
+        test "$AO_ABINN" && opts="-b $AO_ABINN"
+        test "$imcoord" && opts="$opts -c $imcoord"
+        test "$north"   && opts="$opts -n $north"
         if [ "$AO_AMASK" ]
         then
             if [ -e $AO_AMASK ] && is_reg $AO_AMASK
@@ -1375,31 +1420,33 @@ _astrometry () {
         # running AIwcs
         if [ "$xopts" ]
         then
-            echo "# running: AIwcs -x \"$xopts\" $opts $set $catalog \"$maglim\" $thres" | tee -a $wcslog
+            echo "# running: AIwcs -x \"$xopts\"" $opts "$set $catalog \"$maglim\" $thres" | tee -a $wcslog
             AIwcs -x "$xopts" $opts $set $catalog "$maglim" $thres >> $wcslog 2>&1
             if [ $? -ne 0 ]
             then
                 maglim=$(echo $maglim 16 | awk '{print $1-1.0}')
-                echo "# running: AIwcs -x \"$xopts\" $opts $set $catalog \"$maglim\" $thres" | tee -a $wcslog
+                echo "# running: AIwcs -x \"$xopts\"" $opts "$set $catalog \"$maglim\" $thres" | tee -a $wcslog
                 AIwcs -x "$xopts" $opts $set $catalog "$maglim" $thres >> $wcslog 2>&1
             fi
         else
-            echo "# running: AIwcs $opts $set $catalog \"$maglim\" $thres" | tee -a $wcslog
+            echo "# running: AIwcs" $opts "$set $catalog \"$maglim\" $thres" | tee -a $wcslog
             AIwcs $opts $set $catalog "$maglim" $thres >> $wcslog 2>&1
             if [ $? -ne 0 ]
             then
                 maglim=$(echo $maglim 16 | awk '{print $1-1.0}')
-                echo "# running: AIwcs $opts $set $catalog \"$maglim\" $thres" | tee -a $wcslog
+                echo "# running: AIwcs" $opts "$set $catalog \"$maglim\" $thres" | tee -a $wcslog
                 AIwcs -x "$xopts" $opts $set $catalog "$maglim" $thres >> $wcslog 2>&1
             fi
         fi
         test $? -ne 0 && retval=255 &&
-            echo "ERROR: AIwcs failed (see $wcslog)" &&
+            echo "ERROR: AIwcs failed" &&
             test -e $set.wcs.head && mv $set.wcs.head x.$set.wcs.failed.head
         # TODO: if AIwcs failed check ncat: e.g. get_header -e LDAC_OBJECTS wcs/sa01.ucac-4.dat NAXIS2
         #   if it is > 3*nimg limit to 2*nimg, otherwise limit to 40% of ncat
         #   unfortunately the catalog file does not fill the mag column (it is always 0)
     done
+    test $retval -ne 0 &&
+        echo "ERROR: wcs calibration failed for some sets (see $wcslog)"
     
     # display results
     msg="# Summary for astrometry:
@@ -1422,6 +1469,7 @@ _astrometry () {
     test "$TASKMODE" != "nodisplay" &&
         test "$x" && display $x &
     test $retval -eq 0 && rm -f $tmpfits $tmpcat $tmpxy $tmpmask
+    # rm -f $tmpcancel
     return $retval
 }
 
@@ -1695,8 +1743,12 @@ __load_images () {
     local tmp1=$(mktemp "/tmp/tmp1_$$_XXXXXX.dat")
     local tmp2=$(mktemp "/tmp/tmp2_$$_XXXXXX.dat")
 
-    #slist=$(AIsetinfo -b | awk '{if($4=="o"){print $2}}')
-    slist=$(AIsetinfo -b)
+    if [ -z "$raw" ]
+    then
+        slist=$(AIsetinfo -b | awk '{if($4=="o"){print $2}}')
+    else
+        slist=$(AIsetinfo -b)
+    fi
     test "$1" && is_setname $1 && slist=$1 && shift 1
     test -z "$slist" && rm -f $tmp1 $tmp2 && return
     msg="# Searching images ..."
@@ -1777,9 +1829,17 @@ _status () {
 }
 
 _check () {
-    echo "# running checks ..."
+    echo "# running AIcheck ..."
     echo "# PATH=$PATH"
     AIcheck
+}
+
+_kill () {
+    # kill process including descendants
+    pid=$1
+    echo "# running kill $pid ..."
+    pstree -p $pid
+    kill -9 $(pstree -A -p $pid | tr '()' '\n' | grep -E "^[0-9]+$")
 }
 
 _args () {
@@ -1966,6 +2026,10 @@ test ! "$quiet" &&
 ! AIcheck_ok &&
     error "Unable to initialize AIRTOOLS functions."
 
+# check structure of parameter files
+checkparamdat sites.dat 5 || error "Check of sites.dat failed."
+checkparamdat camera.dat 15 || error "Check of camera.dat failed."
+test -s "set.dat" && ! checkparamdat -s set.dat 11 && error "Check of set.dat failed."
 
 
 #-----------------------
@@ -1995,7 +2059,7 @@ do
 done
 
 # Run task
-test "$task" != "imageinfo" && test "$task" != "usercmd" &&
+test "$task" != "imageinfo" && test "$task" != "usercmd" && test "$task" != "check" &&
     test ! -e "set.dat" &&
     error "Missing file set.dat."
 

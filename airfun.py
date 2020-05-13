@@ -47,13 +47,13 @@ def lcoma(coma, d_earth):
 
 def addephem (param):
     # param
-    #   csvfile   reqired fields: date, source, obsid, mag, coma, method, filter
-    #               where date is yyyymmdd.dd
+    #   csvfile   reqired fields: utime, date, source, obsid, mag, coma, method, filter
+    #               where utime is unix time in seconds and date is yyyymmdd.dd
     #   cephem    comet ephemeris record from xephem edb file
     #
     # output: text file with following fields:
-    #   position 1  2    3      4     5   6    7    8     9      10     11         12    13
-    #   fields:  jd date source obsid mag hmag coma lcoma method filter log(r_sun) r_sun d_earth
+    #   position 1     2    3      4     5   6    7    8     9      10     11         12    13
+    #   fields:  utime date source obsid mag hmag coma lcoma method filter log(r_sun) r_sun d_earth
     if (len(param) != 2):
         print("usage: addephem csvfile cephem")
         exit(-1)
@@ -67,13 +67,14 @@ def addephem (param):
     data=parse_csv(csvfile)
     n=len(data['date'])
     for i in range(n):
-        str=data['date'][i]
-        if (str[0]=='#'):
+        if (data['utime'][i][0]=='#'):
             continue
+        str=data['date'][i]
         datestr=str[0:4] + '/' + str[4:6] + '/' + str[6:]
         k2.compute(datestr)
-        print('{:.3f} {} {} {}'.format(
-            ephem.julian_date(datestr),
+        #ephem.julian_date(datestr),
+        print('{} {} {} {}'.format(
+            data['utime'][i],
             data['date'][i],
             data['source'][i],
             data['obsid'][i]
@@ -104,8 +105,8 @@ def mkephem (param):
     #   g         model parameter
     #   k         model parameter
     # output: text file with following fields:
-    #   position 1  2    3   4    5          6     7
-    #   fields:  jd date mag hmag log(r_sun) r_sun d_earth
+    #   position 1     2    3   4    5          6     7
+    #   fields:  utime date mag hmag log(r_sun) r_sun d_earth
     # reading command line parameters
     if (len(param) < 3):
         print("usage: mkephem cephem start end [g] [k] [num]")
@@ -121,9 +122,12 @@ def mkephem (param):
         num=int(param[5])
 
     # convert start and end from yyyymmdd to JD
-    if (start > 10000000): start=ymd2jd(start)
-    if (end > 10000000): end=ymd2jd(end)
-
+    if (start > 10000000 and start < 30000000): start=ymd2jd(start)
+    if (end   > 10000000 and end   < 30000000): end=ymd2jd(end)
+    # convert start and end from unix time to JD
+    if (start > 30000000): start=2440587.5+start/86400.0
+    if (end   > 30000000): end=2440587.5+end/86400.0
+    
     # TODO: parse comet ephem database
     k2=ephem.readdb(cephem)
     if 'g' in locals(): k2._g=g
@@ -132,19 +136,20 @@ def mkephem (param):
 
 
     # print header line
-    print('# jd        date        mag   hmag  log(r) r      d')
+    print('# utime        date        mag   hmag  log(r) r      d')
 
     if not 'num' in locals(): num=100   # number of intervals
     for i in range(num+1):
         jd=start+i*(end-start)/(num)
+        unixtime=(jd-2440587.5)*86400.0
         utdate=jd2ymd(jd)
         k2.compute(ephem.Date(jd - ephem.julian_date(0)))
-        print('{:.3f} {}'.format(
-            jd,
+        print('{:.0f} {}'.format(
+            unixtime,
             utdate
             ),
             end='')
-        print(' {} {:.2f}'.format(
+        print(' {:.3f} {:.3f}'.format(
             k2.mag,
             hmag(k2.mag, k2.earth_distance)
             ),

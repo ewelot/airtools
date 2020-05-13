@@ -1,4 +1,4 @@
-# ID    location      long    lat     alt     comments
+# ID    location      long    lat     alt     # comments
 #                     /deg    /deg    /m
 WEG     Weimar        11.32   +50.98   220
 MNM     Mayhill     -105.53   +32.90  2225    # iTelescope, NM, USA

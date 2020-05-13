@@ -37,9 +37,28 @@ test "$DEBUG" && echo packages=$packages && set -x || true
 echo "# Current Linux distribution:"
 lsb_release -idrc
 dist=$(lsb_release -s -c)
-# mapping linuxmint to ubuntu distribution it is based on
-test "$dist" == "tessa" && dist=bionic &&
-    echo "# mapping to ubuntu $dist"
+
+# check for supported distribution
+case "$dist" in
+    # Debian
+    stretch)    echo "# WARNING: use of this outdated distribution is discouraged"
+                ;;
+    buster)     ;;
+    # Ubuntu
+    xenial)     echo "# WARNING: use of this outdated distribution is discouraged"
+                ;;
+    bionic)     ;;
+    # Others
+    tessa)      dist=bionic
+                echo "# WARNING: mapping to ubuntu $dist"
+                ;;
+    *)          echo "
+ERROR: You are running a Linux distribution which is NOT supported by the
+installer. There are no pre-compiled binaries for this Linux distribution."
+                exit -1
+                ;;
+esac
+
 sleep 3
 url=https://github.com/ewelot/airtools-deb.git
 ddir=/opt/airtools-deb/$dist
