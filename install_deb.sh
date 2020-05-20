@@ -60,7 +60,8 @@ installer. There are no pre-compiled binaries for this Linux distribution."
                 ;;
 esac
 
-sleep 3
+echo ""
+sleep 5
 url=https://github.com/ewelot/airtools-deb.git
 ddir=/opt/airtools-deb/$dist
 test ! -d $ddir && mkdir -p $ddir
@@ -69,7 +70,7 @@ test ! -d $ddir && mkdir -p $ddir
 str=$(dpkg -l | grep "^ii  subversion " || true)
 if [ -z "$str" ]
 then
-    apt-get update
+    apt-get --allow-insecure-repositories update
     apt-get -y install subversion
 fi
 
@@ -101,7 +102,7 @@ then
     echo "deb [trusted=yes] file://$ddir main/" > $aptsrc
 fi
 rm -f $ddir/main/Release
-apt-get --allow-unauthenticated update
+apt-get --allow-insecure-repositories update
 
 # install airtools
 if [ "$do_not_install" ]

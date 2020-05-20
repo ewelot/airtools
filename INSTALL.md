@@ -3,10 +3,11 @@
 ## Installation of binary packages
 
 Binary packages are provided for the following Linux distributions:
+  - Ubuntu 20.04 "Focal" 
   - Ubuntu 18.04 "Bionic" 
   - Ubuntu 16.04 "Xenial"
+  - Debian 10 "Buster"
   - Debian 9 "Stretch"
-  - Debian 8 "Jessie" (discontinued)
 
 Ubuntu packages were tested on XUbuntu distributions and should work on
 any Ubuntu desktop flavour (e.g. native Ubuntu, KUbuntu, LUbuntu). 
