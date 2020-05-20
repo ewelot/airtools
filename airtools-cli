@@ -15,7 +15,7 @@
 ########################################################################
 AOVARS="AO_FLATS AO_LIGHT AO_BGVAR AO_REGIS AO_STACK AO_AMASK AO_ACOOR AO_ABINN"
 
-VERSION="1.1.4"
+VERSION="1.1.5"
 VINFO="T. Lehmann, May. 2020"
 PINFO="\
     options:
@@ -30,6 +30,11 @@ PINFO="\
       task          run given task    
 "
 CHANGELOG="
+    1.1.5 - 19 May 2020
+        * ds9cmd: quote arguments containing special characters
+        * new environment variable AI_MAXPROCS to set number of jobs to run
+          in parallel when calling program parallel
+
     1.1.4 - 12 May 2020
         * added check for correct parameter file structure
         
@@ -381,7 +386,7 @@ _imageinfo () {
             done
         else
             echo "# scanning fits files ..."
-            map_rawfiles -x $(find $AI_RAWDIR -type f \
+            map_rawfiles -x $(find $AI_RAWDIR/ -type f \
                    -name "*.fit"  -o -name "*.FIT" \
                 -o -name "*.fits" -o -name "*.FITS") >> $infofile
             test $? -ne 0 && return 255
@@ -408,6 +413,7 @@ _darks () {
     local x
     local msg
     local bs
+    local popts
     local tmpargs=$(mktemp "/tmp/tmp_args_XXXXXX")
     local tmpsh=$(mktemp "/tmp/tmp_script_XXXXXX.sh")
     chmod u+x $tmpsh
@@ -483,7 +489,8 @@ EOF
                     AIraw2gray $opts $fname > $AI_TMPDIR/$num.pgm
             }
             export -f _run_parallel
-            cat $tmpargs | parallel -k $tmpsh
+            popts=""; test "$AI_MAXPROCS" && popts="-P $AI_MAXPROCS"
+            cat $tmpargs | parallel $popts -k $tmpsh
             unset -f _run_parallel
         fi
     done
@@ -520,7 +527,8 @@ EOF
                     print $0}'
             }
             export -f _run_parallel
-            parallel -k $tmpsh ::: $nlist >> mstat.dk.dat
+            popts=""; test "$AI_MAXPROCS" && popts="-P $AI_MAXPROCS"
+            parallel $popts -k $tmpsh ::: $nlist >> mstat.dk.dat
             unset -f _run_parallel
         fi
     fi
@@ -591,7 +599,8 @@ EOF
                 rm x.$num.bgm1.pgm x.$num.bg.pgm x.$num.pgm
             }
             export -f _run_parallel
-            cat $tmpargs | parallel $tmpsh
+            popts=""; test "$AI_MAXPROCS" && popts="-P $AI_MAXPROCS"
+            cat $tmpargs | parallel $popts -k $tmpsh
             unset -f _run_parallel
         fi
         
@@ -1585,7 +1594,7 @@ _load_stacks () {
             # start SAOImage and load frames
             echo "# loading $ststack $costack ..."
             AIexamine $ststack $costack &
-            idstack=$(wait_for_frame $ststack)
+            wait_for_saoimage
         else
             # append frames to a runnung SAOImage if not already loaded
             idststack=$(get_frameno $ststack)
@@ -1615,11 +1624,25 @@ _ds9cmd () {
     #   set   - psfextract, cometextract, manualdata, photcal
     local cmd=$1
     local set=$2
-    local msg="# ds9cmd $@"
+    local msg="# ds9cmd"
     local ststack
     local fid
-
+    local i
+    local arg
+    
+    # quote arguments with special characters
+    for i in $(seq 1 $#)
+    do
+        arg=${!i}
+        if [ "$arg" ] && [ "${arg/ /}" == "$arg" ] && [ "${arg/-/}" == "$arg" ]
+        then
+            msg="$msg $arg"
+        else
+            msg="$msg \"$arg\""
+        fi
+    done
     echo "$msg"
+    
     # determine name of star stack
     test -f "$set" && ststack=$set
     if [ -z "$ststack" ]
@@ -1806,7 +1829,20 @@ _imexa_raw () {
 }
 
 _usercmd () {
-    echo "# Execute: $usercmd" "$@"
+    local msg="# Execute: $usercmd"
+    # quote arguments with special characters
+    for i in $(seq 1 $#)
+    do
+        arg=${!i}
+        if [ "$arg" ] && [ "${arg/ /}" == "$arg" ] && [ "${arg/-/}" == "$arg" ]
+        then
+            msg="$msg $arg"
+        else
+            msg="$msg \"$arg\""
+        fi
+    done
+    
+    echo "$msg"
     test "$AI_DEBUG" && echo "nargs=$#"
     $usercmd "$@"
     return $?

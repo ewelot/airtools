@@ -41,13 +41,14 @@ dist=$(lsb_release -s -c)
 # check for supported distribution
 case "$dist" in
     # Debian
-    stretch)    echo "# WARNING: use of this outdated distribution is discouraged"
-                ;;
+    stretch)    ;;
     buster)     ;;
     # Ubuntu
     xenial)     echo "# WARNING: use of this outdated distribution is discouraged"
                 ;;
     bionic)     ;;
+    focal)      echo "# WARNING: packages for this distribution are UNTESTED"
+	        ;;
     # Others
     tessa)      dist=bionic
                 echo "# WARNING: mapping to ubuntu $dist"

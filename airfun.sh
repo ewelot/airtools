@@ -14,9 +14,18 @@
 # - in order to use SAOImage DS9 analysis tasks (via AIexamine) you must
 #   have installed files airds9.ana and aircmd.sh
 ########################################################################
-AI_VERSION="4.3"
+AI_VERSION="4.3.1"
 : << '----'
 CHANGELOG
+    4.3.1 19 May 2020
+        * AIphotcal: bugfix to correct issues when plotting the color term
+          (apass: plot was shifted vertically, tycho2: just garbage)
+        * map_rawfiles: bugfix to remove $AI_RAWDIR part of FITS file name
+        * new environment variable AI_MAXPROCS to set number of jobs to run
+          in parallel when calling program parallel
+        * use alias for new program name source-extractor (e.g. used in
+          package sextractor on Ubuntu 20.04)
+
     4.3 - 12 May 2020
         * parameter files camera.dat and sites.dat now require more strict
           syntax (e.g. matching number of columns, comments after #)
@@ -1686,6 +1695,8 @@ load_aliases () {
     shopt -s expand_aliases
     type -p sextractor > /dev/null 2>&1 &&
         alias sex=sextractor
+    type -p source-extractor > /dev/null 2>&1 &&
+        alias sex=source-extractor
     type -p SWarp > /dev/null 2>&1 &&
         alias swarp=SWarp
 }
@@ -1713,7 +1724,7 @@ AIenv () {
         fi
     done
     
-    for var in AI_TELESCOPE AI_EXCLUDE AI_DEBUG \
+    for var in AI_TELESCOPE AI_EXCLUDE AI_DEBUG AI_MAXPROCS \
         AI_RAWBITS AI_PIXSCALE AI_GAIN AI_SATURATION AI_MAGZERO \
         AI_BADPIX AI_OVERSCAN AI_LATITUDE AI_LONGITUDE AI_TZOFF \
         AI_OBSERVER AI_CCDREGION AI_SETS AI_XSKIP AI_DCRAWPARAM
@@ -5378,9 +5389,10 @@ EOF
         test "$verbose" && echo "# $f" >&2
         test ! -e "$f" && return
         b=$(basename "$f" | tr ' ' '_')
-        d=$(dirname "$f" | sed -e 's,^'$AI_RAWDIR'/,,')
+        d=$(dirname "$f" | sed -e 's,^'$AI_RAWDIR',,')
+        test "$d" && d="$d/"
         test "$skip_existing" && test -e "$rdat" &&
-            grep -q "^[0-9][0-9][0-9][0-9] $d/$b " $rdat &&
+            grep -q "^[0-9][0-9][0-9][0-9] $d$b " $rdat &&
             echo "# file $b exists" && return
         if is_fits "$f" || is_fitzip "$f" || is_fitsgz "$f"
         then
@@ -5416,7 +5428,7 @@ EOF
         # get ccd temp
         temp=$(get_header -q $tmphdr CCD-TEMP | awk '{printf("%.0f", 1*$1)}')
         test -z "$temp" && temp="-"
-        echo $d"/"$b $tstart $texp $jd $w $h $temp
+        echo $d$b $tstart $texp $jd $w $h $temp
     }
 
     export -f _run_parallel
@@ -10000,7 +10012,7 @@ rade2xy () {
     
     test "$AI_DEBUG"    && echo $fits $tmp1 $tmp2 $tmp3 >&2
     test -z "$AI_DEBUG" && rm $fits $tmp1 $tmp2 $tmp3
-    return
+    return 0
 }
 
 
@@ -13947,6 +13959,7 @@ AIexamine () {
         test -z "$ftype" && ftype=$(identify $infile | cut -d " " -f2)
         test -z "$ftype" &&
             echo "ERROR: $infile is neither region file nor image." >&2 && return 255
+
         test "$AI_DEBUG" && echo "$ftype: $infile" >&2
         b=$(basename ${infile%.*})
         case "$ftype" in
@@ -13984,13 +13997,6 @@ AIexamine () {
                         RAW) AIraw2rgb -q 0 $infile | ppm2gray -q -f - $hdr > $tfits;;
                         *)	 gm convert $infile pgm:- | ppm2gray -q -f - $hdr > $tfits;;
                     esac
-                    # TODO: the arbitrary wcs header should be removed by AIstack
-                    false && test "$hdr" &&
-                        str=$(get_header -q $hdr SOFTNAME) &&
-                        test "$(echo $str | tr '[A-Z]' '[a-z]')" == "swarp" &&
-                        str=$(get_header -q $hdr AUTHOR) &&
-                        test "$(echo $str | tr '[A-Z]' '[a-z]')" == "lehmann" &&
-                        delwcs $tfits
                     test "$hdr" && delwcs $tfits
                     sethead $tfits AI_IMAGE=$infile
                     if [ "$wcshead" ]
@@ -16000,6 +16006,7 @@ AIccd () {
     local lastdark
     local lastflat
     local ccdopts
+    local popts
     local retval=0
     local tmpsh=$(mktemp "/tmp/tmp_script_XXXXXX.sh")
     chmod u+x $tmpsh
@@ -16237,7 +16244,8 @@ EOF
 		}
 
         export -f _aiccd_parallel
-        cat $imlist2 | parallel -k $tmpsh
+        popts=""; test "$AI_MAXPROCS" && popts="-P $AI_MAXPROCS"
+        cat $imlist2 | parallel $popts -k $tmpsh
         unset -f _aiccd_parallel
 		# TODO: error handling
 
@@ -16713,6 +16721,7 @@ AIregister () {
     local nmax
     local mm
     local rfile
+    local popts
     local tmpsh=$(mktemp "/tmp/tmp_script_XXXXXX.sh")
     chmod u+x $tmpsh
     
@@ -17218,7 +17227,8 @@ EOF
 		if [ "$nlist" ]
 		then
 			export -f _airegister_parallel
-			parallel -k $tmpsh ::: $nlist
+            popts=""; test "$AI_MAXPROCS" && popts="-P $AI_MAXPROCS"
+			parallel $popts -k $tmpsh ::: $nlist
 			unset -f _airegister_parallel
 		fi
 
@@ -17468,6 +17478,7 @@ AIbgdiff () {
     local ref
     local nbad
     local filter
+    local popts
     local tmpsh=$(mktemp "/tmp/tmp_script_XXXXXX.sh")
     chmod u+x $tmpsh
 
@@ -17674,7 +17685,8 @@ EOF
 		}
 
         export -f _aibgdiff_parallel
-        cat $imlist | parallel -k $tmpsh
+        popts=""; test "$AI_MAXPROCS" && popts="-P $AI_MAXPROCS"
+        cat $imlist | parallel $popts -k $tmpsh
         unset -f _aibgdiff_parallel
 		# TODO: error handling
 
@@ -19227,6 +19239,7 @@ AIstack () {
     local pierside
     local filter
     local binning
+    local popts
     local retval=0
     local tmpsh=$(mktemp "/tmp/tmp_script_XXXXXX.sh")
     chmod u+x $tmpsh
@@ -19704,11 +19717,12 @@ CD2_2   =      0.0003   / Linear projection matrix
 
         export -f _fitsconv_parallel
         i=0
+        popts=""; test "$AI_MAXPROCS" && popts="-P $AI_MAXPROCS"
         for img in $ilist
         do
             i=$((i + 1))
             echo $i "$img"
-        done | parallel -k $tmpsh
+        done | parallel $popts -k $tmpsh
         unset -f _fitsconv_parallel
         # TODO: error handling
 
@@ -20826,6 +20840,10 @@ AIphotcal () {
     # 3. to view extinction (assume e=1)
     # output: id x y  apmag refinstr  color airmass  resid res1 res2 res3
     #    col: 1  2 3   4     5         6     7        8     9    10   11
+    test "$AI_DEBUG" &&
+        echo "# cmag=$apcolumn cref=$refcolumn cc1=$ct1column cc2=$ct2column cmd=$colormd" >&2 &&
+        echo "# cam=$amcolumn c=${cfit%,*} e=${efit%,*}" >&2 &&
+        head -5 $tmp1
     echo "# id      x       y        apmag refinstr  color am     res   reslin rescol resext" > $tmpres
     cat $tmp1 | awk -v cmag=$apcolumn -v cref=$refcolumn -v rmd=$refmd \
         -v cc1=$ct1column -v cc2=$ct2column -v cmd=$colormd \
@@ -20836,7 +20854,7 @@ AIphotcal () {
             if (e!="") refinstr+=e*$cam
             reslin=$cmag-refinstr+(b-1)*($cref-rmd)
             rescol=0
-            if (c!="") rescol=$cmag-refinstr+c*($cc1-$cc2-$cmd)
+            if (c!="") rescol=$cmag-refinstr+c*($cc1-$cc2-cmd)
             resext=0
             if (e!="") resext=$cmag-refinstr+e*$cam
             printf("%-9s %7.2f %7.2f  %6.3f %6.3f  %6.3f %4.2f  %6.3f %6.3f %6.3f %6.3f\n",
@@ -21360,6 +21378,7 @@ physical" > $tmpreg
     x=$(echo $r $gap | awk '{printf("%.1f", 5+$1/2+$2)}')
     echo "# bg annulus r=$gap-$x (aprad=$r)" >&2
     x=$(echo $x $gap | awk '{printf("%.1f", $1-$2)}')
+    # TODO: AIaphot -bg $img $psfphot $r $gap $x > $tmpdat
     AIaphot -bg $starstack $psfphot $r $gap $x > $tmpdat
     psfbg=$(grep -v "^#" $tmpdat | awk '{
         r=r+$2; g=g+$3; b=b+$4}END{printf("%.1f,%.1f,%.1f", r/NR, g/NR, b/NR)}')
@@ -24581,7 +24600,7 @@ get_frameno () {
 wait_for_saoimage () {
 	# wait until SAOImage display is shown
 	local showhelp
-    local timeout=120
+    local timeout=600
     local verbose
     local ds9name="AIRTOOLS"
     local i
@@ -24616,7 +24635,7 @@ wait_for_saoimage () {
         test $t -ge 20 && dt=5
     done
     test ! "$found" &&
-        echo "WARNING: SAOImage $ds9name is not running." >&2 &&
+        echo "WARNING: still waiting for display of SAOImage $ds9name (maybe loading many images)." >&2 &&
         return 255
     return 0
 }

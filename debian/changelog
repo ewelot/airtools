@@ -1,3 +1,10 @@
+airtools (3.2.3-1) experimental; urgency=medium
+
+  * Update to airfun.sh version 4.3.1 and airtools-cli version 1.1.5
+  * Fixed regression in photometric calibration by updating refcat.dat 
+
+ -- Thomas Lehmann <t_lehmann@freenet.de>  Tue, 19 May 2020 20:51:02 +0200
+
 airtools (3.2.2-1) experimental; urgency=medium
 
   * Update to airfun.sh version 4.3 and airtools-cli version 1.1.4
