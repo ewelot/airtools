@@ -8,6 +8,10 @@
 #     ds9cmd from airfun.sh
 #
 # ChangeLog:
+#   4.0.2 23 May 2020
+#       * removed task astrometry
+#       * new task coordinates
+#
 #   4.0.1 02 Jul 2019
 #       * new tasks movestars, nostars
 #
@@ -73,10 +77,6 @@ param regphot
 @regphot.par
 end
 
-param wcscalib
-@wcscalib.par
-end 
-
 
 # menu entries
 #---------------
@@ -96,9 +96,9 @@ imload (l)       - Load image or region file
 movestars (m)    - Modify object center 
 nostars (n)      - Classify selected objects as non-stellar
 regswitch (o)    - Switch region marker on/off
-regstat (s)      - Statistics in image regions
 regphot (p)      - Photometry in selected regions
-wcscalib (w)     - Astrometric calibration
+regstat (s)      - Statistics in image regions
+coordinates (w)  - Show object coordinates (WCS and image)
 
 usermanual (u)   - Show user manual (in web browser)
 project (q)      - Query project status
@@ -168,6 +168,11 @@ Classify objects as non-stellar
 bind n
 aircmd.sh nostars |& $text
 
+Show object coordinates (WCS and image)
+*
+bind w
+aircmd.sh coordinates |& $text
+
 
 Statistics in image regions
 *
@@ -193,9 +198,4 @@ Show DSS image using Aladin sky atlas web interface
 *
 bind a
 aircmd.sh aladindss |& $text
-
-Astrometric calibration
-*
-bind w
-$param(wcscalib); aircmd.sh wcscalib "$starstack" $catalog "$maglim" "$thres" "$north" "$opts" |& $text
 

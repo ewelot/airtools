@@ -1173,6 +1173,7 @@ _stack () {
     then
         if [ "$imlist" ]
         then
+            echo "# Loading stacked images ..."
             has_saoimage=$(xpaaccess -c -t "2,2" AIRTOOLS)
             AIexamine $imlist &
             if [ "$has_saoimage" != "yes" ]
@@ -1693,56 +1694,6 @@ _ds9cmd () {
     return $?
 }
 
-_remove () {
-    local slist
-    local set
-    local msg
-    local nlist
-    local num
-    local ext
-    local f
-    local tmp1=$(mktemp "/tmp/tmp1_$$_XXXXXX.dat")
-
-    #slist=$(AIsetinfo -b | awk '{if($4=="o"){print $2}}')
-    test "$setname" && slist=$setname
-    test -z "$slist" &&
-        error "you must provide at least one set name."
-    for set in $slist
-    do
-        AIsetinfo -b $set
-    done
-    for set in $slist
-    do
-        nlist="$nlist $(AI_EXCLUDE="" AIimlist -x -n $set)"
-    done
-    
-    for num in $nlist
-    do
-        f=bgvar/$num.bgm1.ppm;   test -e $f && echo "rm $f"
-        f=bgvar/$num.bgm1.pgm;   test -e $f && echo "rm $f"
-        f=bgvar/$num.bgdiff.ppm; test -e $f && echo "rm $f"
-        f=bgvar/$num.bgdiff.pgm; test -e $f && echo "rm $f"
-        f=measure/$num.src.dat;  test -e $f && echo "rm $f"
-        f=measure/$num.src.head; test -e $f && echo "rm $f"
-        f=$AI_TMPDIR/$num.ppm;   test -e $f && echo "rm $f"
-        f=$AI_TMPDIR/$num.pgm;   test -e $f && echo "rm $f"
-    done | sort > $tmp1
-    for num in $nlist
-    do
-        test -s bgdiff.dat && echo "sed -i '/^$num.bgdiff/d' bgdiff.dat"
-        test -s bgsfit.dat && echo "sed -i '/^$num /d' bgsfit.dat"
-        test -s reg.dat    && echo "sed -i '/^$num /d' reg.dat"
-    done >> $tmp1
-    if [ -s $tmp1 ]
-    then
-        echo "Run: bash $tmp1"
-    else
-        echo "No files to remove."
-        rm $tmp1
-    fi
-    return 0
-}
-
 
 #-------------------------
 #   miscellaneous tools
@@ -1826,6 +1777,56 @@ _imexa_calib () {
 _imexa_raw () {
     # examine raw images
     __load_images -r "$@"
+}
+
+_remove () {
+    local slist
+    local set
+    local msg
+    local nlist
+    local num
+    local ext
+    local f
+    local tmp1=$(mktemp "/tmp/tmp1_$$_XXXXXX.dat")
+
+    #slist=$(AIsetinfo -b | awk '{if($4=="o"){print $2}}')
+    test "$setname" && slist=$setname
+    test -z "$slist" &&
+        error "you must provide at least one set name."
+    for set in $slist
+    do
+        AIsetinfo -b $set
+    done
+    for set in $slist
+    do
+        nlist="$nlist $(AI_EXCLUDE="" AIimlist -x -n $set)"
+    done
+    
+    for num in $nlist
+    do
+        f=bgvar/$num.bgm1.ppm;   test -e $f && echo "rm $f"
+        f=bgvar/$num.bgm1.pgm;   test -e $f && echo "rm $f"
+        f=bgvar/$num.bgdiff.ppm; test -e $f && echo "rm $f"
+        f=bgvar/$num.bgdiff.pgm; test -e $f && echo "rm $f"
+        f=measure/$num.src.dat;  test -e $f && echo "rm $f"
+        f=measure/$num.src.head; test -e $f && echo "rm $f"
+        f=$AI_TMPDIR/$num.ppm;   test -e $f && echo "rm $f"
+        f=$AI_TMPDIR/$num.pgm;   test -e $f && echo "rm $f"
+    done | sort > $tmp1
+    for num in $nlist
+    do
+        test -s bgdiff.dat && echo "sed -i '/^$num.bgdiff/d' bgdiff.dat"
+        test -s bgsfit.dat && echo "sed -i '/^$num /d' bgsfit.dat"
+        test -s reg.dat    && echo "sed -i '/^$num /d' reg.dat"
+    done >> $tmp1
+    if [ -s $tmp1 ]
+    then
+        echo "Run: bash $tmp1"
+    else
+        echo "No files to remove."
+        rm $tmp1
+    fi
+    return 0
 }
 
 _usercmd () {
