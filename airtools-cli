@@ -1,10 +1,13 @@
 #!/bin/bash
 
 ########################################################################
-#   airtools-cli [-h] [-p projectdir] [-s setname] <task> [parameters]
+# airtools-cli
+#   AIRTOOLS tasks command-line interface
 #
-#   AIRTOOLS Tasks CLI
-#   note: the following environment variables may be used
+# Copyright: Thomas Lehmann, 2018-2020
+# License: GPL v3
+#
+# note: the following environment variables may be used
 #       AO_FLATS in _flats
 #       AO_LIGHT in _lights
 #       AO_BGVAR in _bgvar
@@ -15,8 +18,8 @@
 ########################################################################
 AOVARS="AO_FLATS AO_LIGHT AO_BGVAR AO_REGIS AO_STACK AO_AMASK AO_ACOOR AO_ABINN"
 
-VERSION="1.1.5"
-VINFO="T. Lehmann, May. 2020"
+VERSION="1.1.6"
+VINFO="T. Lehmann, Jun. 2020"
 PINFO="\
     options:
       -h            show this help text
@@ -30,6 +33,11 @@ PINFO="\
       task          run given task    
 "
 CHANGELOG="
+    1.1.6 - 04 Jun 2020
+        * bugfix in darks: compute dark variation for user provided image sets
+          only (if specified)
+        * stack: prefer badpix mask image specific to set if present
+
     1.1.5 - 19 May 2020
         * ds9cmd: quote arguments containing special characters
         * new environment variable AI_MAXPROCS to set number of jobs to run
@@ -567,6 +575,7 @@ EOF
         for set in $(AIsetinfo -c | grep -w d | \
             awk -v t=$tel '{if(tolower($12)==t){print $1}}')
         do
+            echo "$slist" | grep -w -q $set || continue
             test ! -f $set.pgm &&
                 echo "ERROR: $set.pgm is missing." >&2 && return 255
             bs=64
@@ -705,8 +714,6 @@ _flats () {
 _lights () {
     local slist
     local set
-    local nlist1
-    local nlist2
     local num
     local texp
     local tel
@@ -725,13 +732,6 @@ _lights () {
     (test -z "$TASKMODE" || test "$TASKMODE" == "nodisplay") &&
     for set in $slist
     do
-        # check if all images have been calibrated already
-        nlist1=$(AIimlist -q -s -n $set 2>/dev/null | sort) # processed (non-empty)
-        nlist2=$(AIimlist -q -x -n $set | sort)             # all
-        test "$nlist1" == "$nlist2" &&
-            echo "WARNING: all images in $set are calibrated already" &&
-            continue
-            
         ccdopts="$AO_LIGHT"
         if [ -z "$ccdopts" ]
         then
@@ -1042,7 +1042,11 @@ _stack () {
             echo "WARNING: unknown telid for set $set, skipping set." &&
             continue
         bopts=""
-        test -e badpix.$tel.png && bopts="$bopts -bad badpix.$tel.png" &&
+        test -e badpix.$set.png &&
+            bopts="$bopts -bad badpix.$set.png" &&
+            echo "# using badpix.$set.png"
+        test -z "$bopts" && test -e badpix.$tel.png &&
+            bopts="$bopts -bad badpix.$tel.png" &&
             echo "# using badpix.$tel.png"
         stackopts="$AO_STACK"
         echo "# running: AIstack" $stackopts $bopts "-t $ctype -r $rtype $set"
