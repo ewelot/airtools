@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.CheckBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.Menu?>
+<?import javafx.scene.control.MenuBar?>
+<?import javafx.scene.control.MenuItem?>
+<?import javafx.scene.control.Separator?>
+<?import javafx.scene.control.SeparatorMenuItem?>
+<?import javafx.scene.control.Tab?>
+<?import javafx.scene.control.TabPane?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.layout.AnchorPane?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.VBox?>
+
+<BorderPane fx:id="appPane" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" prefWidth="480.0" stylesheets="@Main.css" xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="tl.airtoolsgui.controller.MainController">
+   <top>
+      <MenuBar maxWidth="1.7976931348623157E308" BorderPane.alignment="CENTER">
+         <menus>
+            <Menu fx:id="menuFile" mnemonicParsing="false" text="File">
+               <items>
+                  <MenuItem fx:id="menuNewProject" mnemonicParsing="false" text="New Project" />
+                  <MenuItem fx:id="menuOpenProject" mnemonicParsing="false" text="Open Project" />
+                  <MenuItem fx:id="menuArchive" mnemonicParsing="false" text="Archive Project Data" />
+                  <SeparatorMenuItem mnemonicParsing="false" />
+                  <MenuItem fx:id="menuExit" mnemonicParsing="false" text="Exit" />
+               </items>
+            </Menu>
+            <Menu fx:id="menuEdit" mnemonicParsing="false" text="Edit">
+               <items>
+                  <MenuItem fx:id="menuProjectSettings" mnemonicParsing="false" text="Project Settings" />
+                  <MenuItem fx:id="menuEditImageSet" mnemonicParsing="false" text="Edit Image Set Definitions" />
+                  <SeparatorMenuItem mnemonicParsing="false" />
+                  <MenuItem fx:id="menuEditSiteParam" mnemonicParsing="false" text="Edit Site Parameters" />
+                  <MenuItem fx:id="menuEditCameraParam" mnemonicParsing="false" text="Edit Camera Parameters" />
+               </items>
+            </Menu>
+            <Menu fx:id="menuAnalysis" mnemonicParsing="false" text="Analysis">
+              <items>
+                <MenuItem fx:id="menuList" mnemonicParsing="false" text="List Results" />
+                  <MenuItem fx:id="menuMapPhot" mnemonicParsing="false" text="Multi-Aperture Photometry" />
+                  <MenuItem fx:id="menuLightCurve" mnemonicParsing="false" text="Plot Light Curve" />
+              </items>
+            </Menu>
+            <Menu fx:id="menuHelp" mnemonicParsing="false" text="Help">
+               <items>
+                  <MenuItem fx:id="menuManual" mnemonicParsing="false" text="Online Manual" />
+                  <MenuItem fx:id="menuEnvironment" mnemonicParsing="false" text="Show Environment" />
+                  <MenuItem fx:id="menuDependencies" mnemonicParsing="false" text="Check Dependencies" />
+                  <SeparatorMenuItem mnemonicParsing="false" />
+                  <MenuItem fx:id="menuAbout" mnemonicParsing="false" text="About" />
+               </items>
+            </Menu>
+         </menus>
+      </MenuBar>
+   </top>
+   <center>
+      <VBox maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" spacing="16.0" BorderPane.alignment="CENTER">
+         <BorderPane.margin>
+            <Insets bottom="8.0" left="8.0" right="8.0" top="8.0" />
+         </BorderPane.margin>
+         <children>
+            <TabPane fx:id="tabPane" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" VBox.vgrow="NEVER">
+               <tabs>
+                  <Tab fx:id="tabImageReduction" closable="false" onSelectionChanged="#onSelectTabImageReduction" text=" Image Reduction ">
+                     <content>
+                        <AnchorPane>
+                            <children>
+                                <fx:include fx:id="paneImageReduction" source="ImageReduction.fxml" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0" />
+                            </children>
+                        </AnchorPane>
+                     </content>
+                  </Tab>
+                  <Tab fx:id="tabCometPhotometry" closable="false" onSelectionChanged="#onSelectTabCometPhotometry" text=" Comet Photometry ">
+                    <content>
+                      <AnchorPane>
+                            <children>
+                                <fx:include fx:id="paneCometPhotometry" source="CometPhotometry.fxml" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0" />
+                            </children>
+                        </AnchorPane>
+                    </content>
+                  </Tab>
+                  <Tab fx:id="tabMiscTools" closable="false" onSelectionChanged="#onSelectTabMiscTools" text=" Misc. Tools ">
+                    <content>
+                        <AnchorPane>
+                            <children>
+                                <fx:include fx:id="paneMiscTools" source="MiscTools.fxml" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0" />
+                            </children>
+                        </AnchorPane>
+                    </content>
+                  </Tab>
+               </tabs>
+               <VBox.margin>
+                  <Insets />
+               </VBox.margin>
+            </TabPane>
+            <HBox maxWidth="1.7976931348623157E308" VBox.vgrow="NEVER">
+               <children>
+                  <Label text="Log Output:" />
+                  <Separator maxWidth="1.7976931348623157E308" orientation="VERTICAL" prefHeight="1.0" visible="false" HBox.hgrow="ALWAYS" />
+                  <CheckBox fx:id="cbAutoScroll" mnemonicParsing="false" selected="true" text="AutoScroll" />
+               </children>
+               <padding>
+                  <Insets top="16.0" />
+               </padding>
+            </HBox>
+            <TextArea fx:id="textareaLog" editable="false" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" prefHeight="180.0" VBox.vgrow="ALWAYS" />
+         </children>
+      </VBox>
+   </center>
+   <bottom>
+      <HBox maxWidth="1.7976931348623157E308" spacing="16.0" BorderPane.alignment="CENTER">
+         <children>
+            <Label fx:id="labelInfo" maxWidth="100.0" minWidth="100.0" text="Info">
+               <padding>
+                  <Insets bottom="4.0" left="4.0" right="4.0" top="4.0" />
+               </padding></Label>
+            <Label fx:id="labelStatus" maxWidth="1.7976931348623157E308" text="Status" HBox.hgrow="ALWAYS">
+               <padding>
+                  <Insets bottom="4.0" left="8.0" right="8.0" top="4.0" />
+               </padding></Label>
+         </children>
+         <BorderPane.margin>
+            <Insets bottom="4.0" left="8.0" right="8.0" />
+         </BorderPane.margin>
+         <padding>
+            <Insets bottom="2.0" left="2.0" right="2.0" top="2.0" />
+         </padding>
+      </HBox>
+   </bottom>
+</BorderPane>

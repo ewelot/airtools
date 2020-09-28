@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.ButtonType?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.DialogPane?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.ColumnConstraints?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.RowConstraints?>
+<?import javafx.scene.layout.VBox?>
+
+<DialogPane fx:id="paramDialogPane" xmlns="http://javafx.com/javafx/8.0.171" xmlns:fx="http://javafx.com/fxml/1" fx:controller="tl.airtoolsgui.controller.ManualDataController">
+   <content>
+      <VBox prefWidth="500.0" spacing="16.0">
+         <children>
+            <VBox spacing="16.0">
+               <children>
+                  <GridPane hgap="8.0" vgap="2.0">
+                     <columnConstraints>
+                        <ColumnConstraints hgrow="NEVER" minWidth="250.0" />
+                        <ColumnConstraints hgrow="ALWAYS" minWidth="150.0" />
+                     </columnConstraints>
+                     <rowConstraints>
+                        <RowConstraints vgrow="SOMETIMES" />
+                        <RowConstraints vgrow="SOMETIMES" />
+                        <RowConstraints vgrow="SOMETIMES" />
+                        <RowConstraints vgrow="SOMETIMES" />
+                        <RowConstraints vgrow="SOMETIMES" />
+                        <RowConstraints vgrow="SOMETIMES" />
+                        <RowConstraints vgrow="SOMETIMES" />
+                        <RowConstraints vgrow="SOMETIMES" />
+                     </rowConstraints>
+                     <children>
+                        <Label text="Image Set:" />
+                        <Label text="Image plane (color channel):" GridPane.rowIndex="1" />
+                        <Label text="Manual correction of comet counts (ADU):" GridPane.rowIndex="2" />
+                        <Label text="Limiting star total ADU:" GridPane.rowIndex="3" />
+                        <Label text="Dust tail length in pixel:" GridPane.rowIndex="4" />
+                        <Label text="Dust tail angle in image (right=0):" GridPane.rowIndex="5" />
+                        <Label text="Plasma tail length in pixel:" GridPane.rowIndex="6" />
+                        <Label text="Plasma tail angle in image (right=0):" GridPane.rowIndex="7" />
+                        <TextField fx:id="tfImageSet" editable="false" focusTraversable="false" style="-fx-background-color: #bbb, #f0f0f0;" text="co01 (1P)" GridPane.columnIndex="1" />
+                        <ComboBox fx:id="cbChannel" editable="true" prefWidth="150.0" GridPane.columnIndex="1" GridPane.rowIndex="1" />
+                        <TextField fx:id="tfCCorr" GridPane.columnIndex="1" GridPane.rowIndex="2" />
+                        <TextField fx:id="tfStLim" GridPane.columnIndex="1" GridPane.rowIndex="3" />
+                        <TextField fx:id="tfDtLen" GridPane.columnIndex="1" GridPane.rowIndex="4" />
+                        <TextField fx:id="tfDtAng" GridPane.columnIndex="1" GridPane.rowIndex="5" />
+                        <TextField fx:id="tfPtLen" GridPane.columnIndex="1" GridPane.rowIndex="6" />
+                        <TextField fx:id="tfPtAng" GridPane.columnIndex="1" GridPane.rowIndex="7" />
+                     </children>
+                  </GridPane>
+                  <Label fx:id="labelWarning" text="&lt;Warnings&gt;" textFill="#d00000" />
+               </children>
+               <padding>
+                  <Insets top="8.0" />
+               </padding>
+            </VBox>
+         </children>
+         <padding>
+            <Insets bottom="8.0" left="8.0" right="8.0" top="8.0" />
+         </padding>
+      </VBox>
+   </content>
+   <buttonTypes>
+      <ButtonType fx:constant="CANCEL" />
+      <ButtonType fx:constant="APPLY" />
+   </buttonTypes>
+   <padding>
+      <Insets bottom="8.0" left="8.0" right="8.0" top="8.0" />
+   </padding>
+</DialogPane>

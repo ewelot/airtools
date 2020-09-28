@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ButtonBar?>
+<?import javafx.scene.control.CheckBox?>
+<?import javafx.scene.control.ChoiceBox?>
+<?import javafx.scene.control.DatePicker?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.AnchorPane?>
+<?import javafx.scene.layout.ColumnConstraints?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.RowConstraints?>
+<?import javafx.scene.layout.VBox?>
+<?import javafx.scene.text.Font?>
+
+<AnchorPane fx:id="paneLightCurve" xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="tl.airtoolsgui.controller.LightCurveController">
+   <children>
+      <VBox spacing="16.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
+         <children>
+            <VBox spacing="12.0">
+               <children>
+                  <Label text="Data Source">
+                     <font>
+                        <Font name="System Bold" size="13.0" />
+                     </font>
+                  </Label>
+                  <GridPane hgap="4.0" vgap="8.0">
+                    <columnConstraints>
+                      <ColumnConstraints hgrow="SOMETIMES" minWidth="10.0" prefWidth="100.0" />
+                      <ColumnConstraints hgrow="SOMETIMES" minWidth="10.0" prefWidth="100.0" />
+                        <ColumnConstraints hgrow="SOMETIMES" minWidth="10.0" prefWidth="100.0" />
+                    </columnConstraints>
+                    <rowConstraints>
+                        <RowConstraints vgrow="SOMETIMES" />
+                      <RowConstraints vgrow="SOMETIMES" />
+                      <RowConstraints vgrow="SOMETIMES" />
+                    </rowConstraints>
+                     <children>
+                        <Label text="Comet Name:" />
+                        <TextField fx:id="tfCometName" promptText="short comet designation" GridPane.columnIndex="1" GridPane.columnSpan="2147483647" />
+                        <Label text="ICQ Data File:" GridPane.rowIndex="1" />
+                        <HBox prefWidth="200.0" GridPane.columnIndex="1" GridPane.columnSpan="2147483647" GridPane.rowIndex="1">
+                           <children>
+                              <TextField fx:id="tfICQFile" HBox.hgrow="ALWAYS" />
+                              <Button fx:id="buttonBrowseICQFile" mnemonicParsing="false" onAction="#onButtonBrowseICQFile" text="Browse" />
+                           </children>
+                        </HBox>
+                        <CheckBox fx:id="cbUseCOBS" mnemonicParsing="false" selected="true" text="Use COBS Database" GridPane.rowIndex="2">
+                           <padding>
+                              <Insets top="4.0" />
+                           </padding>
+                        </CheckBox>
+                        <CheckBox fx:id="cbScanLocalProjects" mnemonicParsing="false" text="Scan Local Projects" GridPane.columnIndex="1" GridPane.rowIndex="2">
+                           <padding>
+                              <Insets top="4.0" />
+                           </padding>
+                        </CheckBox>
+                        <CheckBox fx:id="cbForceUpdate" mnemonicParsing="false" text="Force Data Update" GridPane.columnIndex="2" GridPane.rowIndex="2">
+                           <padding>
+                              <Insets top="4.0" />
+                           </padding>
+                        </CheckBox>
+                     </children>
+                  </GridPane>
+                  <Label text="Plot Settings">
+                     <font>
+                        <Font name="System Bold" size="13.0" />
+                     </font>
+                     <padding>
+                        <Insets top="16.0" />
+                     </padding>
+                  </Label>
+                  <GridPane hgap="4.0" vgap="8.0">
+                     <columnConstraints>
+                        <ColumnConstraints hgrow="NEVER" maxWidth="194.0" minWidth="146.0" prefWidth="146.0" />
+                        <ColumnConstraints hgrow="ALWAYS" maxWidth="334.0" minWidth="150.0" prefWidth="334.0" />
+                     </columnConstraints>
+                     <rowConstraints>
+                        <RowConstraints vgrow="SOMETIMES" />
+                        <RowConstraints vgrow="SOMETIMES" />
+                        <RowConstraints vgrow="SOMETIMES" />
+                        <RowConstraints vgrow="SOMETIMES" />
+                        <RowConstraints vgrow="SOMETIMES" />
+                        <RowConstraints vgrow="SOMETIMES" />
+                     </rowConstraints>
+                     <children>
+                        <Label text="Plot Type:" />
+                        <ChoiceBox fx:id="cbPlotType" maxWidth="1.7976931348623157E308" GridPane.columnIndex="1" />
+                        <Label text="Key Label Position:" GridPane.rowIndex="1" />
+                        <ChoiceBox fx:id="cbKeyPosition" maxWidth="1.7976931348623157E308" GridPane.columnIndex="1" GridPane.rowIndex="1" />
+                        <Label text="Date Range:" GridPane.rowIndex="2" />
+                        <HBox alignment="CENTER_LEFT" fillHeight="false" spacing="2.0" GridPane.columnIndex="1" GridPane.rowIndex="2">
+                           <children>
+                              <DatePicker fx:id="dpStart" onAction="#onDpStart" prefWidth="160.0" promptText="dd.mm.yyyy" />
+                              <Label text=" - " />
+                              <DatePicker fx:id="dpEnd" onAction="#onDpEnd" prefWidth="160.0" promptText="dd.mm.yyyy" />
+                           </children>
+                        </HBox>
+                        <Label text="Identify Observers:" GridPane.rowIndex="3" />
+                        <TextField fx:id="tfObsList" promptText="OBSxx, OBSyy, ..." GridPane.columnIndex="1" GridPane.rowIndex="3" />
+                        <Label text="Additional Options:" GridPane.rowIndex="4" />
+                        <TextField fx:id="tfAddOptions" promptText="-t title  -y bottom:top  -p points  ..." GridPane.columnIndex="1" GridPane.rowIndex="4" />
+                     </children>
+                  </GridPane>
+                  <Label text="Magnitude Models">
+                     <font>
+                        <Font name="System Bold" size="13.0" />
+                     </font>
+                     <padding>
+                        <Insets top="16.0" />
+                     </padding>
+                  </Label>
+                  <GridPane hgap="4.0" vgap="8.0">
+                    <columnConstraints>
+                      <ColumnConstraints hgrow="SOMETIMES" maxWidth="236.0" minWidth="10.0" prefWidth="147.0" />
+                      <ColumnConstraints hgrow="SOMETIMES" maxWidth="333.0" minWidth="10.0" prefWidth="333.0" />
+                    </columnConstraints>
+                    <rowConstraints>
+                      <RowConstraints vgrow="SOMETIMES" />
+                      <RowConstraints vgrow="SOMETIMES" />
+                        <RowConstraints vgrow="SOMETIMES" />
+                    </rowConstraints>
+                     <children>
+                        <Label text="Fit Model to Data:" />
+                        <ChoiceBox fx:id="cbFitType" maxWidth="1.7976931348623157E308" GridPane.columnIndex="1" />
+                        <Label text="MPC Model:" GridPane.rowIndex="1">
+                           <padding>
+                              <Insets top="2.0" />
+                           </padding>
+                           <GridPane.margin>
+                              <Insets />
+                           </GridPane.margin>
+                        </Label>
+                        <HBox alignment="CENTER_LEFT" spacing="24.0" GridPane.columnIndex="1" GridPane.rowIndex="1">
+                           <children>
+                              <CheckBox fx:id="cbMPCModel" mnemonicParsing="false" text="Plot Mag Model">
+                                 <padding>
+                                    <Insets top="4.0" />
+                                 </padding>
+                              </CheckBox>
+                              <CheckBox fx:id="cbDistance" mnemonicParsing="false" text="Plot Distance from Sun">
+                                 <padding>
+                                    <Insets top="4.0" />
+                                 </padding>
+                              </CheckBox>
+                           </children>
+                        </HBox>
+                        <Label alignment="BASELINE_LEFT" text="User Defined Model:" GridPane.rowIndex="2">
+                           <padding>
+                              <Insets top="4.0" />
+                           </padding></Label>
+                        <HBox alignment="BASELINE_LEFT" GridPane.columnIndex="1" GridPane.rowIndex="2">
+                           <children>
+                              <Label text="mag = ">
+                                 <font>
+                                    <Font name="Monospaced Regular" size="11.0" />
+                                 </font>
+                              </Label>
+                              <TextField fx:id="tfModelM" prefColumnCount="3" promptText="M" />
+                              <Label text=" + 5*log(D) + 2.5*">
+                                 <font>
+                                    <Font name="Monospaced Regular" size="11.0" />
+                                 </font>
+                              </Label>
+                              <TextField fx:id="tfModelN" prefColumnCount="3" promptText="n" />
+                              <Label text=" *log(r)">
+                                 <font>
+                                    <Font name="Monospaced Regular" size="11.0" />
+                                 </font>
+                              </Label>
+                           </children>
+                           <padding>
+                              <Insets top="4.0" />
+                           </padding>
+                        </HBox>
+                     </children>
+                     <padding>
+                        <Insets top="2.0" />
+                     </padding>
+                  </GridPane>
+                  <Label fx:id="labelWarning" text="&lt;Warnings&gt;" textFill="#d00000">
+                     <padding>
+                        <Insets top="4.0" />
+                     </padding>
+                  </Label>
+               </children>
+               <padding>
+                  <Insets bottom="8.0" top="8.0" />
+               </padding>
+            </VBox>
+            <ButtonBar>
+               <buttons>
+                <Button fx:id="buttonStart" mnemonicParsing="false" onAction="#onButtonStart" text="Start" />
+                  <Button fx:id="buttonCancel" mnemonicParsing="false" onAction="#onButtonCancel" text="Cancel" />
+               </buttons>
+               <opaqueInsets>
+                  <Insets />
+               </opaqueInsets>
+            </ButtonBar>
+         </children>
+         <padding>
+            <Insets bottom="8.0" left="8.0" right="8.0" top="8.0" />
+         </padding>
+      </VBox>
+   </children>
+</AnchorPane>

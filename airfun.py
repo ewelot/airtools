@@ -47,13 +47,13 @@ def lcoma(coma, d_earth):
 
 def addephem (param):
     # param
-    #   csvfile   reqired fields: utime, date, source, obsid, mag, coma, method, filter
+    #   csvfile   reqired fields: utime, date, source, obsid, mag, coma, method, filter, soft
     #               where utime is unix time in seconds and date is yyyymmdd.dd
     #   cephem    comet ephemeris record from xephem edb file
     #
     # output: text file with following fields:
-    #   position 1     2    3      4     5   6    7    8     9      10     11         12    13
-    #   fields:  utime date source obsid mag hmag coma lcoma method filter log(r_sun) r_sun d_earth
+    #   position 1     2    3      4     5   6    7    8     9      10     11   12         13    14
+    #   fields:  utime date source obsid mag hmag coma lcoma method filter soft log(r_sun) r_sun d_earth
     if (len(param) != 2):
         print("usage: addephem csvfile cephem")
         exit(-1)
@@ -87,9 +87,10 @@ def addephem (param):
             lcoma(data['coma'][i], k2.earth_distance)
             ),
             end='')
-        print(' {} {} {:.4f} {:.4f} {:.4f}'.format(
+        print(' {} {} {} {:.4f} {:.4f} {:.4f}'.format(
             data['method'][i],
             data['filter'][i],
+            data['soft'][i],
             math.log10(k2.sun_distance),
             k2.sun_distance,
             k2.earth_distance

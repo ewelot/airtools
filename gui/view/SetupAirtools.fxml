@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ButtonType?>
+<?import javafx.scene.control.DialogPane?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.ColumnConstraints?>
+<?import javafx.scene.layout.GridPane?>
+<?import javafx.scene.layout.RowConstraints?>
+<?import javafx.scene.layout.VBox?>
+
+
+<DialogPane fx:id="setupAirtoolsDialogPane" xmlns="http://javafx.com/javafx/8.0.171" xmlns:fx="http://javafx.com/fxml/1" fx:controller="tl.airtoolsgui.controller.SetupAirtoolsController">
+   <content>
+      <VBox spacing="16.0">
+         <children>
+            <VBox spacing="48.0">
+               <children>
+                  <GridPane maxWidth="1.7976931348623157E308" vgap="8.0">
+                    <columnConstraints>
+                      <ColumnConstraints fillWidth="false" />
+                      <ColumnConstraints hgrow="ALWAYS" minWidth="250.0" />
+                        <ColumnConstraints fillWidth="false" />
+                    </columnConstraints>
+                    <rowConstraints>
+                      <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
+                      <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
+                        <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
+                    </rowConstraints>
+                     <children>
+                        <Label text="Base Directory of Projects:  " />
+                        <TextField fx:id="tfProjectDir" GridPane.columnIndex="1" />
+                        <Button fx:id="buttonBrowseProjectDir" mnemonicParsing="false" onAction="#handleButtonBrowseProjectDirAction" text="Browse" GridPane.columnIndex="2" />
+                        <Label text="Base Dir. of Raw Images:  " GridPane.rowIndex="1" />
+                        <TextField fx:id="tfRawDir" GridPane.columnIndex="1" GridPane.rowIndex="1" />
+                        <Button fx:id="buttonBrowseRawDir" mnemonicParsing="false" onAction="#handleButtonBrowseRawDirAction" text="Browse" GridPane.columnIndex="2" GridPane.rowIndex="1" />
+                        <Label text="Base Dir. of Temp. Files:  " GridPane.rowIndex="2" />
+                        <TextField fx:id="tfTempDir" GridPane.columnIndex="1" GridPane.rowIndex="2" />
+                        <Button fx:id="buttonBrowseTempDir" mnemonicParsing="false" onAction="#handleButtonBrowseTempDirAction" text="Browse" GridPane.columnIndex="2" GridPane.rowIndex="2" />
+                     </children>
+                     <padding>
+                        <Insets top="16.0" />
+                     </padding>
+                  </GridPane>
+                  <Label lineSpacing="4.0" minWidth="500.0" prefWidth="500.0" text="Note: Projects are created for each observing night later on. Data for each project is stored in sub-directories of the given base directories. The date of observation is used as initial part of those directory names." wrapText="true" />
+               </children>
+               <padding>
+                  <Insets bottom="8.0" left="8.0" right="8.0" top="8.0" />
+               </padding>
+            </VBox>
+         </children>
+         <padding>
+            <Insets bottom="16.0" left="8.0" right="8.0" top="8.0" />
+         </padding>
+      </VBox>
+   </content>
+   <padding>
+      <Insets bottom="8.0" left="8.0" right="8.0" top="8.0" />
+   </padding>
+   <buttonTypes>
+      <ButtonType fx:constant="CANCEL" />
+      <ButtonType fx:constant="APPLY" />
+   </buttonTypes>
+</DialogPane>

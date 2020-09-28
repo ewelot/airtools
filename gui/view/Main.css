@@ -1,0 +1,32 @@
+/*
+To change this license header, choose License Headers in Project Properties.
+To change this template file, choose Tools | Templates
+and open the template in the editor.
+*/
+/* 
+    Created on : 24.10.2018, 11:18:08
+    Author     : lehmann
+*/
+
+.tab-pane .tab-header-area .tab-header-background {
+    -fx-background-color: lightgrey;
+    -fx-background-color: derive(-fx-color, +30%);
+    -fx-border-color: green red lightgrey yellow;
+    -fx-border-width: 0 0 1 0;
+    /* -fx-effect: null; */
+    /* -fx-opacity: 0; */
+}
+
+.tab-pane .tab-content-area {
+    -fx-border-base: lightgray;
+    -fx-border-shadow: white;
+    -fx-border-color: derive(-fx-border-base, -10%);
+    -fx-border-insets: 0 1 1 0;
+    -fx-background-color: -fx-border-shadow, -fx-background;
+    -fx-background-insets: 1 0 0 1, 0 2 2 2;
+    -fx-padding: 2;
+    /* -fx-border-color:  lightgrey; */
+    -fx-border-width: 0 1 1 1;
+    /* -fx-effect: null; */
+    /* -fx-opacity: 0; */
+}

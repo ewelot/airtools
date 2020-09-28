@@ -5,6 +5,6 @@
 # LT
 # h:m set  target type texp n1 n2   nref dark flat  tel  # notes
 20:21 dk01 bias     d   0 0001 0004 -    -    -     T14
-20:25 co01 2013US10 o  60 0005 0015 0010 do01 mg14  T14  # green filter
+20:25 co01 2013US10 o  60 0005 0015 0010 dk01 sk01  T14  # green filter
 20:46 dk01 bias     a   0 0016 0020 -    -    -     T14
-
+05:40 sk01 skyflat  f   1 0021 0026 -    dk01 -     T14

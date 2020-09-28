@@ -1,3 +1,11 @@
+airtools (3.3-1) experimental; urgency=medium
+
+  * Update to airfun.sh version 4.4 and airtools-cli version 1.2
+  * Added analysis menu to airtools-gui
+  * Put java sources under version control
+
+ -- Thomas Lehmann <t_lehmann@freenet.de>  Mon, 28 Sep 2020 19:22:41 +0200
+
 airtools (3.2.5-1) experimental; urgency=medium
 
   * Update to airfun.sh version 4.3.3 and airtools-cli version 1.1.6
