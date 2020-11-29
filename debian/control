@@ -25,8 +25,8 @@ Architecture: any
 Depends: imagemagick, graphicsmagick, netpbm, gnuplot-x11, librsvg2-bin, exiv2,
  potrace, plplot12-driver-cairo | plplot-driver-cairo, exiftool, bc, curl, wget,
  gawk, yad, parallel, pigz, dstat, python3-ephem, cfitsio-examples (>=0.3),
- libcfitsio-bin, xpa-tools, wcstools, fitsverify, mousepad, default-jre-headless,
- openjfx, ${shlibs:Depends}, ${misc:Depends}
+ libcfitsio-bin, xpa-tools, wcstools, fitsverify, mousepad,
+ default-jre-headless, openjfx, ${shlibs:Depends}, ${misc:Depends}
 Suggests: airtools
 Description: Astronomical Image Reduction TOOLSet - Core components
  AIRTOOLS is a collection of programs to aim at astronomical image reduction

@@ -12,6 +12,7 @@ PINFO="\
     options:
       h         show this help text
       l         prefer airtools-gui from users bin directory
+      x         use experimental airtools-gui program version
       args      program arguments passed over to java program
 "
 CHANGELOG="
@@ -48,6 +49,7 @@ for i in $(seq 1 3)
 do
     (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
     test "$1" == "-l" && prefer_local_bin=1 && shift 1
+    test "$1" == "-x" && experimental=1 && shift 1
     test "$1" == "-t" && testonly=1 && shift 1
 done
 
@@ -62,6 +64,10 @@ test "$showhelp" &&
 
 # find program jar file
 prog=""
+if [ "$experimental" ]
+then
+    prog=$HOME/prog/java/netbeans/airtools-gui/dist/$jar
+fi
 if [ -z "$prog" ] && [ "$prefer_local_bin" ]
 then
     test -e $HOME/bin/$jar      && prog=$HOME/bin/$jar

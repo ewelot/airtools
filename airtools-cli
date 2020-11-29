@@ -18,7 +18,7 @@
 ########################################################################
 AOVARS="AO_FLATS AO_LIGHT AO_BGVAR AO_REGIS AO_STACK AO_AMASK AO_ACOOR AO_ABINN"
 
-VERSION="1.2"
+VERSION="1.2.1"
 VINFO="T. Lehmann, Sep. 2020"
 PINFO="\
     options:
@@ -33,6 +33,10 @@ PINFO="\
       task          run given task    
 "
 CHANGELOG="
+    1.2.1 - 19 Nov 2020
+        * allow for process monitoring by setting AI_PROCMON
+        * new function procmon
+
     1.2 - 14 Sep 2020
         * replace option -m <mode> by -x <parts> which simplifies program logic
         * astrometry:
@@ -2000,6 +2004,16 @@ _check () {
     AIcheck
 }
 
+_procmon () {
+    delay=2
+    while true
+    do
+        tstamp=$(date +'%Y%m%d-%H%M%S')
+        ps ux | grep -vE "^USER| Sl | /usr/| /bin/| /lib/" | sed -e 's|^|'$tstamp' |'
+        sleep 2
+    done
+}
+
 _kill () {
     # kill process including descendants
     pid=$1
@@ -2251,14 +2265,26 @@ test "$task" != "imageinfo" && test "$task" != "imexa_raw" && test "$task" != "u
     test ! -e "set.dat" &&
     error "Missing file set.dat."
 
+# optional monitoring
 DSTAT_PID=""
 test "$AI_DSTAT" && DSTAT_PID=$(
     dstat --nocolor --noupdate --output dstat.log -tcdnmsp 5 >/dev/null &
     echo $!)
+PROCMON_PID=""
+test "$AI_PROCMON" && PROCMON_PID=$(
+    _procmon >> procmon.log &
+    echo $!)
+
+_cleanup () {
+    test "$DSTAT_PID" && kill $DSTAT_PID
+    test "$PROCMON_PID" && kill $PROCMON_PID
+}
+trap _cleanup EXIT
+
+
 echo "# Running task $task ($(date +'%H:%M')) ..."
 _$task "$@"
 errcode=$?
 test -z "$errcode" && error "Missing return code from task."
 test "$errcode" == "0" && echo "# task finished at $(date +'%H:%M')"
-test "$DSTAT_PID" && kill $DSTAT_PID
 exit $errcode

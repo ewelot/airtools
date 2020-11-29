@@ -11,7 +11,7 @@
 <?import javafx.scene.layout.RowConstraints?>
 <?import javafx.scene.layout.VBox?>
 
-<DialogPane fx:id="paramDialogPane" xmlns="http://javafx.com/javafx/8.0.171" xmlns:fx="http://javafx.com/fxml/1" fx:controller="tl.airtoolsgui.controller.CometExtractController">
+<DialogPane fx:id="paramDialogPane" xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="tl.airtoolsgui.controller.CometExtractController">
    <content>
       <VBox prefWidth="500.0">
          <children>
@@ -26,6 +26,7 @@
                         <RowConstraints vgrow="SOMETIMES" />
                         <RowConstraints vgrow="SOMETIMES" />
                         <RowConstraints vgrow="SOMETIMES" />
+                        <RowConstraints vgrow="SOMETIMES" />
                      </rowConstraints>
                      <children>
                         <Label text="Image Set:" />
@@ -34,6 +35,8 @@
                         <TextField fx:id="tfImageSet" editable="false" focusTraversable="false" style="-fx-background-color: #bbb, #f0f0f0;" text="co01 (1P)" GridPane.columnIndex="1" />
                         <TextField fx:id="tfBgImage" GridPane.columnIndex="1" GridPane.rowIndex="1" />
                         <ComboBox fx:id="cbCoMult" editable="true" prefWidth="150.0" GridPane.columnIndex="1" GridPane.rowIndex="2" />
+                        <Label text="Max. Distance of Stars (in %):" GridPane.rowIndex="3" />
+                        <ComboBox fx:id="cbMaxRadius" editable="true" prefWidth="150.0" GridPane.columnIndex="1" GridPane.rowIndex="3" />
                      </children>
                   </GridPane>
                   <Label fx:id="labelWarning" text="&lt;Warnings&gt;" textFill="#d00000" />

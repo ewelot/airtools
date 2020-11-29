@@ -9,8 +9,6 @@ import java.net.URL;
 import java.util.ResourceBundle;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
-import javafx.scene.control.Button;
-import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.DialogPane;
 import javafx.scene.control.Label;
@@ -34,6 +32,8 @@ public class CometExtractController implements Initializable {
     private TextField tfBgImage;
     @FXML
     private ComboBox<String> cbCoMult;
+    @FXML
+    private ComboBox<String> cbMaxRadius;
 
     /**
      * Initializes the controller class.
@@ -42,6 +42,7 @@ public class CometExtractController implements Initializable {
     public void initialize(URL url, ResourceBundle rb) {
         labelWarning.setText("");
         cbCoMult.getItems().addAll("1", "10");
+        cbMaxRadius.getItems().addAll("10", "100");
     }    
     
     public void setImageSet(ImageSet imgSet) {
@@ -56,6 +57,7 @@ public class CometExtractController implements Initializable {
         String[] sarray;
         sarray = new String[] {tfBgImage.getText()
                 ,cbCoMult.getValue()
+                ,cbMaxRadius.getValue()
         };
         return sarray;
     }
@@ -64,5 +66,6 @@ public class CometExtractController implements Initializable {
         int size=sarray.length;
         if (size > 0) tfBgImage.setText(sarray[0]);
         if (size > 1) cbCoMult.setValue(sarray[1]);
+        if (size > 2) cbMaxRadius.setValue(sarray[2]);
     }
 }

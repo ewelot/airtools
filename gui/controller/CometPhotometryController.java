@@ -340,7 +340,7 @@ public class CometPhotometryController implements Initializable {
                     bgImage = "bgcorr/" + mostRecentBgImage.getName();
             }
         }
-        String[] defaultParams = {bgImage, "10"};
+        String[] defaultParams = {bgImage, "10", "100"};
 
         if (cometextractDialog == null) {
             cometextractDialog = new CometExtractDialog("CometExtract.fxml", "Comet Extraction");
