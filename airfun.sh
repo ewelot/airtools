@@ -17,27 +17,6 @@
 AI_VERSION="4.5"
 : << '----'
 CHANGELOG
-    TODO
-        performance
-            AIbgmap: improve performance
-            AIsource: on RGB images use parallel processing
-            meftopnm: improve performance
-        phot2icq: put P designation in 3rd column
-        icqplot:
-            bug when analyzing periodic comet and end date is given (84P)
-            elliptical elements: plot all perihelion times?
-            allow saving of plot to png image
-            apply xrange to observer stats
-            buggy mktics for coma plot
-            hmag, lcoma: separate pre- and postperihelion plots
-            increase npoints if plotting several periods (ellip. only)
-        AIstack: skip 2 cols/rows at edges
-        AIcomet: smoothing of small comets is too strong
-        AIphotcal: change rlim unit from pixels to fraction of image size, use
-            same region as in psfextract, allow for mag range of calib stars,
-            prefer last used aprad over (empty) default
-        bayer2rgb: check if AHD interpolation works
-
     4.5 - 28 Nov 2020
         * AIpsfextract:
             - use somewhat larger mask radius
@@ -4549,6 +4528,7 @@ get_wcsrot () {
             pi=3.141592653
             a1=90+atan2($1, $2)*180/pi
             a2=atan2($3, $4)*180/pi
+            if (a1>180) a1=a1-360
             d=a2-a1; if (d<0) d=-1*d
             if (d>3) printf("# ")
             printf("%.3f %.3f %.3f\n", (a1+a2)/2, a1, a2)
@@ -16280,8 +16260,8 @@ starcombine () {
             "<imgdir> <outpsf> [psfsize|$psfsize] [scale|$scale]" >&2 &&
         return 1
 
-    # TODO: determine colors
-    is_pgm $img && clist="gray"
+    # determine colors
+    ls $imgdir/*.gray.fits 2>/dev/null > /dev/null && clist="gray"
     
     # average sub-images using different pscale
     pscale=$(echo 1 $scale | awk '{printf("%f", $1/$2)}')
