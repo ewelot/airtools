@@ -14,14 +14,28 @@
 # - in order to use SAOImage DS9 analysis tasks (via AIexamine) you must
 #   have installed files airds9.ana and aircmd.sh
 ########################################################################
-AI_VERSION="4.5"
+AI_VERSION="4.5.1"
 : << '----'
 CHANGELOG
+    4.5.1 - 11 Dec 2020
+        * starcombine: bugfix: avoid call of imarith when adding 0
+        * AIcomet:
+            - bugfix: computation of comet area in case of an existing bad
+              mask was incorrect (and therefore the mean count as well)
+            - added header keywords AC_COMUL, AC_BGSUB, a change of any
+              parameter will now trigger re-processing of star subtraction
+            and extract a new comet image
+        * sex2rgbdat: increase precision for output mag value to 0.001 mag
+        * reg2xy: added support for conversion of box region
+        * ppm2gray: use AI_TMPDIR for temp files, strip off COMMENT keyword
+        * ppm2mef: use AI_TMPDIR for temp files
+        * _regstat: replace identify by imsize
+
     4.5 - 28 Nov 2020
         * AIpsfextract:
             - use somewhat larger mask radius
             - save measured background value of star stack to header keyword
-                AI_PSFBG for later use by AIcomet
+              AI_PSFBG for later use by AIcomet
         * AIcomet: rework background handling
         * imblur: changed default parameters to lower degree of bluring 
         * get_wcsrot: simplify algorithm if requesting rotation at image center
@@ -9566,6 +9580,10 @@ reg2xy () {
             if (n>0) {x=" "substr($0,n)} else {x=""}
             printf("%s %.3f %.3f%s\n", id, $2-0.5, h-$3+0.5, x)
         }
+        if($1=="box") {
+            if($8=="text") {id=$9} else {id=sprintf("N%04d",newid); newid++}
+            printf("%s %.0fx%.0f+%.0f+%.0f\n", id, $4, $5, $2-0.5-$4/2, h-$3+0.5-$5/2)
+        }
     }'
 }
 
@@ -11315,7 +11333,7 @@ sex2rgbdat () {
         ofmt=ascii | awk -v h=$h -v fmax=$fwhmmax '{
             if ($1~/^#/) next
             if ($5 > fmax) next
-            printf("%-10s  %7.2f %7.2f  %5.2f %5.2f %5.2f  %3d %3d  %4d %3d %.3f",
+            printf("%-10s  %7.2f %7.2f  %6.3f %6.3f %6.3f  %3d %3d  %4d %3d %.3f",
                 $1, $2-0.5, h-$3+0.5, $9, $6, $11, 0, 0, 0, 0, $7)
             if($8>=4) printf(" sat")
             printf("\n")
@@ -11920,12 +11938,13 @@ ppm2gray () {
     local ppm=${1:-"-"}
     local head=${2:-""}     # ascii header file containing FITS keywords
     local line
-    local tmpim=$(mktemp "/tmp/tmp_im_XXXXXX.img")
-    local tmp1=$(mktemp "/tmp/tmp1_XXXXXX.img")
-    local tmpmask=$(mktemp "/tmp/tmp_mask_XXXXXX.pgm")
-    local tmpppm=$(mktemp "/tmp/tmp_in_XXXXXX.pnm")
-    local tmpkeys=$(mktemp "/tmp/tmp_keys_XXXXXX.head")
-    local wdir=$(mktemp -d "/tmp/tmp_ppm2gray_XXXXXX")
+    local tdir=${AI_TMPDIR:-"/tmp"}
+    local tmpim=$(mktemp "$tdir/tmp_im_XXXXXX.img")
+    local tmp1=$(mktemp "$tdir/tmp1_XXXXXX.img")
+    local tmpmask=$(mktemp "$tdir/tmp_mask_XXXXXX.pgm")
+    local tmpppm=$(mktemp "$tdir/tmp_in_XXXXXX.pnm")
+    local tmpkeys=$(mktemp "$tdir/tmp_keys_XXXXXX.head")
+    local wdir=$(mktemp -d "$tdir/tmp_ppm2gray_XXXXXX")
     local str1
     local str2
     local w
@@ -11999,6 +12018,9 @@ ppm2gray () {
         else
             pnmtomef $ppm > $tmp1
         fi
+        # strip off COMMENT keywords
+        listhead $tmp1 | grep -w "^COMMENT" | cut -c 1-8 | \
+            while read key; do delhead $tmp1 $key; done
         
         if [ -f "$head" ]
         then
@@ -12111,9 +12133,10 @@ ppm2mef () {
     local ppm=${1:-"-"}
     local head=${2:-""}     # ascii header file containing FITS keywords
     local line
-    local tmpim=$(mktemp "/tmp/tmp_im_XXXXXX.img")
-    local tmpfits=$(mktemp "/tmp/tmp_fits_XXXXXX.fits")
-    local tmphead=$(mktemp "/tmp/tmp_ahead_XXXXXX.head")
+    local tdir=${AI_TMPDIR:-"/tmp"}
+    local tmpim=$(mktemp "$tdir/tmp_im_XXXXXX.img")
+    local tmpfits=$(mktemp "$tdir/tmp_fits_XXXXXX.fits")
+    local tmphead=$(mktemp "$tdir/tmp_ahead_XXXXXX.head")
 
     (test "$showhelp" || test $# -lt 1) &&
         echo "usage: ppm2mef [-q] [-w wcshead] <ppm> [asciihdr]" >&2 &&
@@ -12585,18 +12608,27 @@ imcrop () {
     fi
     if [ -z "$w" ] && is_fitzip "$fname"
     then
-        line=$(unzip -p "$fname" | identify - | cut -d " " -f3)
+        line=$(unzip -p "$fname" | gm identify - | cut -d " " -f3)
         w=$(echo $line | cut -d "x" -f1)
         h=$(echo $line | cut -d "x" -f2)
     fi
     if [ -z "$w" ]
     then
-        line=$(identify $fname | head -1 | cut -d " " -f3)
-        w=$(echo $line | cut -d "x" -f1)
-        h=$(echo $line | cut -d "x" -f2)
-        is_ppm $fname && outfmt="ppm"
-        is_pgm $fname && outfmt="pgm"
-        is_pbm $fname && outfmt="pbm"
+        set - $(imsize $fname)
+        w=$1
+        h=$2
+        if is_ppm $fname
+        then
+            outfmt="ppm"
+        else if is_pgm $fname
+            then
+                outfmt="pgm"
+            else if is_pbm $fname
+                then
+                    outfmt="pbm"
+                fi
+            fi
+        fi
     fi
     
     # determine crop area
@@ -12780,7 +12812,8 @@ imsize () {
     local str
     local type
     local retval
-    local tmpfits=$(mktemp /tmp/tmp_im_XXXXXX.fits)
+    local tdir=${AI_TMPDIR:-"/tmp"}
+    local tmpfits=$(mktemp $tdir/tmp_im_XXXXXX.fits)
 
     (test "$showhelp" || test $# -lt 1) &&
         echo "usage: imsize [-d] <img|setname>" >&2 &&
@@ -12791,6 +12824,7 @@ imsize () {
         test -z "$type" && is_raw "$img" && type=RAW
         test -z "$type" && is_pnm "$img" && type=PNM
         test -z "$type" && is_fits "$img" && type=FITS
+        test -z "$type" && is_fitsgz "$img" && type=FITSGZ
         test -z "$type" && is_fitzip "$img" && type=FITZIP
     else
         test -z "$type" && is_setname "$img" && sname=$img && img=""
@@ -12811,11 +12845,13 @@ imsize () {
                 test $# -ge 3 && retval=0
                 str="$1 $3"
                 ;;
-        FITS)   str=$(get_header -q -s "$img" NAXIS1,NAXIS2,NAXIS3)
+        FITS|FITSGZ)   #str=$(get_header -q -s "$img" NAXIS1,NAXIS2,NAXIS3)
+                str=$(listhead "$img" | grep NAXIS[123] | awk '{print $3}')
                 retval=$?
                 ;;
         FITZIP) unzip -p "$img" > $tmpfits
-                str=$(get_header -q -s $tmpfits NAXIS1,NAXIS2,NAXIS3)
+                #str=$(get_header -q -s $tmpfits NAXIS1,NAXIS2,NAXIS3)
+                str=$(listhead "$tmpfits" | grep NAXIS[123] | awk '{print $3}')
                 retval=$?
                 ;;
         *)      str=$(gm identify "$img")
@@ -14876,7 +14912,7 @@ AIexamine () {
         is_fitzip $infile && ftype="FITZIP"
         is_fitscube $infile && ftype="FITSCUBE"
         is_raw $infile && ftype="RAW"
-        test -z "$ftype" && ftype=$(identify $infile | cut -d " " -f2)
+        test -z "$ftype" && ftype=$(gm identify $infile | cut -d " " -f2)
         test -z "$ftype" &&
             echo "ERROR: $infile is neither region file nor image." >&2 && return 255
 
@@ -16325,7 +16361,12 @@ starcombine () {
         add=$(echo $bg $psfmult $outbg | awk '{printf("%.1f", $3-$1*$2)}')
         test "$psfadd" && psfadd=$psfadd","
         psfadd="$psfadd$add"
-        imarith coadd.fits $add add - > $wdir/$c.fits
+        if [ "$add" == "0.0" ] || [ "$add" == "-0.0" ]
+        then
+            mv coadd.fits $wdir/$c.fits
+        else
+            imarith coadd.fits $add add - > $wdir/$c.fits
+        fi
         mv $wdir/$c.fits coadd.fits
         
         #cp coadd.fits x.psf.$c.fits
@@ -23090,7 +23131,6 @@ physical" > $tmpreg
         echo "# $(date +'%H:%M:%S') subtract stars for second iteration"
         pnmccdred -d $tmpim1 $img $tmpim2
         cp $hdr ${tmpim2%.*}.head
-         #vips subtract $img $tmpim1 $tmpim2
 
         if [ -z "$trail" ]
         then
@@ -23183,7 +23223,6 @@ physical" > $tmpreg
     echo "# $(date +'%H:%M:%S') creating residual image $(basename $outresid)" >&2
     #pnmccdred -a $((bgres-psfoff)) -d $tmpim1 $img $outresid
     pnmccdred -d $tmpim1 $img $outresid
-    #vips subtract $img $tmpim1 $outresid
     echo "# $(date +'%H:%M:%S') done" >&2
     
     # reject most deviating psf stars
@@ -23380,12 +23419,29 @@ AIcomet () {
 
     # check if it is required to create new cosubimage
     #       if cosubimage -nt $newphot then do not create stsub and cosub
-    # TODO: if any parameter changed (rlim, comult, bgfit10) then unset skip_cosub
     cosubimage=$codir/$sname.cosub$comult.$ext
     test "$comult" == "1" && cosubimage=$codir/$sname.cosub.$ext
     test -s $cosubimage && test -s $newphot && test -s $coreg && test -s $bgreg &&
         test $cosubimage -nt $newphot &&
         skip_cosub=1
+
+    # check for change of parameters (rlim/AC_RLIM, comult/AC_COMUL, bgfit10/AC_BGSUB) then unset skip_cosub
+    if [ "$skip_cosub" ]
+    then
+        x=$(get_header -q $hdr AC_RLIM || echo 100)
+        y=${rlim:-"100"}
+        ! is_equal $x $rlim && skip_cosub=""
+    fi
+    if [ "$skip_cosub" ]
+    then
+        x=$(get_header -q $hdr AC_COMUL)
+        test "$x" && ! is_equal $x $comult && skip_cosub=""
+    fi
+    if [ "$skip_cosub" ]
+    then
+        x=$(get_header -q $hdr AC_BGSUB)
+        test "$x" && ! test $x == "$(basename $bgfit10)" && skip_cosub=""
+    fi
 
     # check content of already present region files
     if [ "$skip_cosub" ]
@@ -23451,7 +23507,7 @@ AIcomet () {
             'BEGIN{split(mcorr,mc,","); rmax=rlim/100*sqrt(w*w+h*h)}{
             dx=$2-xc; dy=$3-yc; dr=sqrt(dx*dx+dy*dy)
             if (dr > rmax) next
-            printf("%-10s  %7.2f %7.2f  %5.2f %5.2f %5.2f  %3d %3d  %4d %3d %.3f\n",
+            printf("%-10s  %7.2f %7.2f  %6.3f %6.3f %6.3f  %3d %3d  %4d %3d %.3f\n",
             $1, $2, $3, $4+mc[1], $5+mc[2], $6+mc[3], $7, $8, $9, $10, $11)}' > $tmpphot
         y=$(cat $starphot | grep -v "^#" | wc -l)
 
@@ -23498,7 +23554,6 @@ AIcomet () {
         add=$(echo $outbg ${inbg//,/ } | awk '{printf("%.0f,%.0f,%.0f", $1-$2, $1-$3, $1-$4)}')
         #echo "pnmccdred -a $add -d $tmpim2 $ststack $stsub" >&2
         pnmccdred -a "$add" -d $tmpim2 $ststack $stsub
-        #vips subtract $ststack $tmpim2 $stsub
         test $? -ne 0 &&
             echo "ERROR: failed command: pnmccdred -a $add -d $tmpim2 $ststack $stsub" >&2 &&
             return 255
@@ -23517,7 +23572,6 @@ AIcomet () {
         #pnmccdred -a $((bgres-psfoff)) -d $tmpim2 $costack $cosub
         add=$(echo $outbg ${inbg//,/ } | awk '{printf("%.0f,%.0f,%.0f", $1-$2, $1-$3, $1-$4)}')
         pnmccdred -a $add -d $tmpim2 $costack $cosub
-        #vips subtract $costack $tmpim2 $cosub
         test $? -ne 0 &&
             echo "ERROR: failed command: pnmccdred -a $add -d $tmpim2 $costack $cosub" >&2 &&
             return 255
@@ -23804,7 +23858,6 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
         # create residual image
         test "$no_trail" && cp $stsub $residimg
         test ! "$no_trail" && pnmccdred -d $cotrail $stsub $residimg
-        #test ! "$no_trail" && vips subtract $stsub $cotrail $residimg
         cp -p $hdr $residhdr
         set_header $residhdr AI_SNAME=$sname
     fi
@@ -23933,7 +23986,6 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
             #pnmccdred -a $((bgres-psfoff)) -d $tmpim2 $ststack $stsub
             add=$(echo $outbg ${inbg//,/ } | awk '{printf("%.0f,%.0f,%.0f", $1-$2, $1-$3, $1-$4)}')
             pnmccdred -a $add -d $tmpim2 $ststack $stsub
-            #vips subtract $ststack $tmpim2 $stsub
             # subtract trails from comet stack -> new cosub
             # AIpsfmask -q -m $trailmask $trailpsf $tmpim1 $psfoff
             reg2pbm $trailpsf $trailmask > $tmpmask
@@ -23943,7 +23995,6 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
             #pnmccdred -a $((bgres-psfoff)) -d $tmpim2 $costack $cosub
             add=$(echo $outbg ${inbg//,/ } | awk '{printf("%.0f,%.0f,%.0f", $1-$2, $1-$3, $1-$4)}')
             pnmccdred -a $add -d $tmpim2 $costack $cosub
-            #vips subtract $costack $tmpim2 $cosub
             
             echo "$(date +'%H:%M:%S') extracting improved comet image ..." >&2
             if [ "$no_trail" ]
@@ -23984,7 +24035,6 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
 
                 # create improved residuals image
                 pnmccdred -d $cotrail $stsub $residimg
-                #vips subtract $stsub $cotrail $residimg
             fi
             
             # create improved contrast enhanced and blured cosub image
@@ -24074,15 +24124,15 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
     echo "# comet sum=$sum (max=$x)" >&2
     test "$(echo $x $(get_header $hdr SATURATE) | awk '{if($1>=$2){printf("saturated")}}')" &&
         echo "WARNING: saturated pixels found!" >&2
-    # area, corrected by bad regions
+    # total area of comet region
     if [ "$badreg" ]
     then
-        set - $(regstat -q -a $cosubimage $badreg)
-        area=$(echo "$area + $3" | bc)
+        set - $(regstat -q -a $cosubimage $coreg)
+        area=$3
     fi
     # circle of the same area size
     diam=$(echo $area | awk '{x=sqrt($1/3.1415927); printf("%.0f", 2*x)}')
-    # mean counts
+    # mean counts for total comet area
     val=$(echo ${sum//,/ } | awk -v a=$area '{
         if (NF==1) printf("%.2f", $1/a)
         if (NF==3) printf("%.2f,%.2f,%.2f", $1/a, $2/a, $3/a)
@@ -24121,6 +24171,10 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
     else
         set_header $hdr \
             AC_VERS="${AI_VERSION} / airfun version (AIcomet)"
+        set_header $hdr \
+            AC_COMUL="$comult / Intensity multiplier"
+        set_header $hdr \
+            AC_BGSUB="$(basename $bgfit10) / Background image"
         test "$rlim" && set_header $hdr \
             AC_RLIM="$rlim / Max. distance of stars (in percent of FOV)"
         for aidx in $(seq 1 ${#sum[@]})
@@ -26761,6 +26815,7 @@ AIsetinfo () {
     local ex=${AI_EXCLUDE:-""}  # space separated list of image numbers
     local tdir=${AI_TMPDIR:-"/tmp"}
     local tmp1=$(mktemp "$tdir/tmp_dat1.XXXXXX.dat")
+    local tmphead=$(mktemp "$tdir/tmp_hdr.XXXXXX.head")
     local ltime
     local sname
     local target
@@ -26886,7 +26941,8 @@ AIsetinfo () {
             rhdr=$(get_rawfile -q $nref)
             if [ "$rhdr" ] && (is_fits $rhdr || is_fitsgz $rhdr)
             then
-                x=$(get_jd -q $rhdr)
+                listhead $rhdr | grep -vE "^Header listing|^$" > $tmphead
+                x=$(get_jd -q $tmphead)
                 test "$x" && jdref=$x
             else
                 # try to examine <nref>.hdr as created by gacam
@@ -26960,9 +27016,9 @@ AIsetinfo () {
 				rhdr=$(get_rawfile -q $nref)
 				if [ "$rhdr" ] && (is_fits "$rhdr" || is_fitsgz "$rhdr")
 				then
-					x=$(get_header -q $rhdr RA)
+					x=$(get_header -q $tmphead RA)
 					test "$x" && ra=$(dec2sexa -m $x 15 0)
-					x=$(get_header -q $rhdr DEC)
+					x=$(get_header -q $tmphead DEC)
 					test "$x" && de=$(dec2sexa -h $x 1 1)
 				fi
 			fi
@@ -27046,7 +27102,7 @@ AIsetinfo () {
                 $sname $target $type $nref "$flength" "$fratio" $iso $texp $nexp $tsens $black $telid
         fi
     done < $sdat
-    rm -f $tmp1
+    rm -f $tmp1 $tmphead
     return 0
 }
 

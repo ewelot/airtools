@@ -187,6 +187,13 @@ public class LightCurveController implements Initializable {
             logger.log(msg);
             return false;
         }
+        if (dpStart.getValue() != null && dpEnd.getValue() != null &&
+                dpStart.getValue().isAfter(dpEnd.getValue())) {
+            msg="ERROR: start date is after end date.";
+            labelWarning.setText(msg);
+            logger.log(msg);
+            return false;
+        }
         return true;
     }
     

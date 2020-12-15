@@ -19,7 +19,7 @@
 AOVARS="AO_FLATS AO_LIGHT AO_BGVAR AO_REGIS AO_STACK AO_AMASK AO_ACOOR AO_ABINN"
 
 VERSION="1.2.1"
-VINFO="T. Lehmann, Sep. 2020"
+VINFO="T. Lehmann, Nov. 2020"
 PINFO="\
     options:
       -h            show this help text
