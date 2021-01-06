@@ -18,8 +18,8 @@
 ########################################################################
 AOVARS="AO_FLATS AO_LIGHT AO_BGVAR AO_REGIS AO_STACK AO_AMASK AO_ACOOR AO_ABINN"
 
-VERSION="1.2.1"
-VINFO="T. Lehmann, Nov. 2020"
+VERSION="1.2.2"
+VINFO="T. Lehmann, Dec. 2020"
 PINFO="\
     options:
       -h            show this help text
@@ -33,6 +33,12 @@ PINFO="\
       task          run given task    
 "
 CHANGELOG="
+    1.2.2 - 18 Dez 2020
+        * imageinfo: adapted to new log files from iTelescope.net, recognize
+            more FITS file name extensions
+        * lights: if data are not dslr raw images then assume hotpixel file
+            is an image in PNG format (instead of .dat)
+
     1.2.1 - 19 Nov 2020
         * allow for process monitoring by setting AI_PROCMON
         * new function procmon
@@ -404,7 +410,7 @@ _imageinfo () {
         # scanning FITS images ...
         infofile=rawfiles.dat
         # FITS images from itelescope.net
-        if grep -iq iTelescope.Net $AI_RAWDIR/2*{txt,log} 2>/dev/null
+        if grep -iq iTelescope.Net $AI_RAWDIR/[2T]*{txt,log} 2>/dev/null
         then
             if [ -e $AI_RAWDIR/obs.txt ]
             then
@@ -412,7 +418,7 @@ _imageinfo () {
             else
                 itel2obs | tee -a $AI_RAWDIR/obs.txt
             fi
-            tellist=$(get_itel_telid $AI_RAWDIR/2*)
+            tellist=$(get_itel_telid $AI_RAWDIR/[2T]*{txt,log} 2>/dev/null)
             test "$tellist" && for tel in $tellist
             do
                 # bugfix for wrong identifiers on T16, T68, T20
@@ -421,14 +427,17 @@ _imageinfo () {
                 test $tel == "T2" && tel=T20
                 echo "# scanning fits files for $tel ..."
                 flist=$(find $AI_RAWDIR/ \( -name "*fit.zip" -or -name "*fits" \) -not -name "calib*" | grep -iw $tel)
+                # TODO: check JD in first file, if it is not plausible then use time
+                # info from log file by providing -l option
                 map_rawfiles -x $flist >> $infofile
                 test $? -ne 0 && return 255
             done
         else
             # scanning other FITS images
             flist=$(find $AI_RAWDIR/ -type f \
-                   -name "*.fit"  -o -name "*.FIT" \
+                   -name "*.fit"  -o -name "*.FIT"  \
                 -o -name "*.fits" -o -name "*.FITS" \
+                -o -name "*.fts"  -o -name "*.FTS"  \
                 -o -name "*.fit.zip" -o -name "*.fits.zip" \
                 -o -name "*.fit.gz"  -o -name "*.fits.gz")
             if [ "$flist" ]
@@ -765,6 +774,7 @@ _lights () {
     local ccdopts
     local is_calibrated # check only for ctype=CCD
     local badpix
+    local badext
     
     slist=$(AIsetinfo -b | awk '{if($4=="o"){print $2}}')
     test "$setname" && slist=$setname
@@ -793,9 +803,10 @@ _lights () {
             else
                 ccdopts="-q 1"
             fi
+            badext="dat"; test $ctype != "DSLR" && badext="png"
             type=long; test $texp -lt 32 && type=short
-            badpix=hotpix.${cam}_$type.dat
-            test ! -e $badpix && badpix=hotpix.${cam}.dat
+            badpix=hotpix.${cam}_$type.$badext
+            test ! -e $badpix && badpix=hotpix.${cam}.$badext
             test ! -e $badpix && badpix=""
             test "$badpix" && echo "# using hotpixel file $badpix"
         fi
