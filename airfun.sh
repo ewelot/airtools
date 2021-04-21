@@ -14,9 +14,103 @@
 # - in order to use SAOImage DS9 analysis tasks (via AIexamine) you must
 #   have installed files airds9.ana and aircmd.sh
 ########################################################################
-AI_VERSION="4.5.2"
+AI_VERSION="5.0"
 : << '----'
 CHANGELOG
+    5.0 - 21 Apr 2021
+        * camera.dat: new ctype CMOS used for monochrome CMOS sensor
+        * AIraw2rgb: bugfix to take image flip into account when debayering
+        * imsize: bugfix to use image size instead of output size as reported
+            by dcraw in case of DSLR raw images
+        * jd2ut: bugfix to take rounding into account when computing date
+            close to beginning of next day
+        * dec2sexa: bugfix to take rounding into account when time is very
+            close to next minute
+        * AIstack: skip 2 cols/rows at edge of images to avoid artefacts
+        * AIcomet: make bluring of contrast enhanced image depend on fwhm
+        * AIphotcal
+            - added mandatory parameter plane
+            - use catalog specific color band names
+            - maxdist for matching catalog stars is now based on fwhm and
+              pixscale (was fixed to 2 pixels until now)
+            - for gaia catalog limit stars to 0.4 < GB-GR < 1.4
+        * AIbgdiff: improve error handling
+        * AIflat: if number of images less then 6 use single group (like -s)
+        * AIccd, AIfindbad: recognize monochrome CMOS sensor
+        * AIlist: enhanced to support more user supplied field names
+        * ds9cmd photcal: abort if catalog is missing in refcat.dat
+        * ds9cmd bggradient: resort parameters, default bg mesh size is now
+            reduced for small images
+
+    5.0a5 - 02 Apr 2021
+        * templates of parameter files used for new projects are now placed
+            in config directory
+        * AIphotcal:
+            - bugfix when checking for param change: comparison of aprad
+              is now based on numeric value (not string)
+        * AIregister: use larger fraction of stars to calculate mag difference
+            if number of sources in the image is small
+        * AInoise: use pnmcombine2 when computing stddev
+        * kappasigma: allow for small data samples (n=4, n=5) but without
+            rejection of outliers
+        * ds9cmd bggradient: overwrite action implemented
+
+    5.0a4 - 08 Mar 2021
+        * AIsetinfo: bugfix for longinfo to correctly read coordinates
+            containing spaces instead of colons from raw FITS file
+        * new function skygradient
+
+    5.0a3 - 15 Feb 2021
+        * wait_for_frame: bugfix to correctly deal with FITS images
+        * AIlist: choose catalog priority according to order in refcat.dat
+
+    5.0a2 - 05 Feb 2021
+        * AIlist, get_cobs: bugfix for comets with fragments
+        * AIcomet, imbgsub: fixed regression introduced in v5.0a1: both
+            functions must use same algorithm to determine tmpbgcorr (the
+            correction to intensity scaled background), be aware of slight
+            differences in results from pnmccdred and pnmccdred2 (due to
+            rounding to integers)
+        * AImapphot: bugfix to handle newer dates of observations
+        * AIphotcal: for gaia catalogs skip calibration stars of extreme colors
+        * AIlist: limit to last 180 days by default
+        * AIraw2gray: syntax change, do not write to stdout by default anymore
+            but to the file name given as second parameter
+        * AIdark, AIflat, AIraw2gray, AIbgdiff, AIbgmap, ppm2gray, imbgsub:
+            use faster pnmccdred2/pnmcombine2
+        * AIraw2gray, AIflat, AIccd: apply AI_CCDREGION on FITS images as well
+
+    5.0a1 - 21 Jan 2020
+        * new dependency on libvips and pyvips
+        * newmag: bugfix to correct output (wrong start of string msg)
+        * refcat.dat, mkrefcat: support of gaia2 and gaia3e
+        * mkrefcat: contact multiple vizier servers in case of connection
+            failure or empty result set
+        * AIphotcal: detect and eliminate faint close companion stars
+        * AIphotmatch: limit catalog mag precision to 3 digits after colon
+        * AIpsfextract: on monochrome images use single value of psfbg, mcorr
+        * AIval: correctly deal with PBM images (which have white=0)
+        * AIfindbad:
+            - adjust call of AIval for PBM images
+            - use pnmcombine2 instead of pnmcombine
+        * AIfpreview: enhanced to support zipped images
+        * mkkernel: invert colors (stroke is now white=0 on black=1 background)
+        * kmedian: use pnmcombine2
+        * meftopnm: rework
+        * imsize: speed improvement by using dedicated and faster programs for
+            certain file types
+        * AIsfit: create raw PNM instead of plain (ascii) PNM in case of PGM
+            input files (to avoid problems with airfun.py functions)
+        * AIstat: use airfun.py function imstat
+        * ppm2gray: use airfun.py function ppmtogray
+        * imcrop: use airfun.py function imcrop (for PPM)
+        * reg2pbm: split out some code into new function reg2svg
+        * starcombine, AIskygen: replace rgb3toppm by fits3toppm
+        * itel2obs: adapted to new log file format at iTelescope.net
+        * map_rawfiles: added option -l to read image time stamp from log file
+            instead of using FITS header information
+        * new functions: fits3toppm fits3tocube pnmccdred2 pnmcombine2
+
     4.5.2 - 29 Dec 2020
         * AIccd: bugfix when checking if all images have been processed already
         * xyinreg: bugfix to deal correctly with input from stdin
@@ -2057,7 +2151,7 @@ AIcheck_ok () {
     test "$AI_RAWDIR" && test ! -d "$AI_RAWDIR" &&
 		test "$do_check_rawdir" &&
         echo "WARNING: raw file directory $AI_RAWDIR does not exist." >&2
-    test "$AI_SETS" && echo "WARNING: AI_SETS=$AI_SETS" >&2
+    test "$verbose" && test "$AI_SETS" && echo "WARNING: AI_SETS=$AI_SETS" >&2
     
     # check for camera and sites data files
     test ! -f camera.dat &&
@@ -2070,6 +2164,32 @@ AIcheck_ok () {
 }
 
 
+showprof () {
+    # show profiling results as written by airtools-cli when AI_PROFILE=1
+    # ref: https://stackoverflow.com/questions/5014823/how-to-profile-a-bash-shell-script-slow-startup
+    local pid=$1
+    local prefix=/tmp/profile
+    local last
+    local first
+    local crt
+    local ctot
+    test -z "$pid" &&
+        pid=$(ls -dtr $prefix.[0-9]*.tim 2>/dev/null | tail -1 | cut -d '.' -f2)
+    test -z "$pid" && echo "ERROR: missing pid" >&2 && return 255
+    test ! -s $prefix.$pid.tim &&
+        echo "ERROR: missing profiler data for pid=$pid" >&2 && return 255
+    paste <(
+    while read tim
+    do
+        [ -z "$last" ] && last=${tim//.} && first=${tim//.}
+        crt=000000000$((${tim//.}-10#0$last))
+        ctot=000000000$((${tim//.}-10#0$first))
+        printf "%12.9f %12.9f\n" ${crt:0:${#crt}-9}.${crt:${#crt}-9} \
+                                 ${ctot:0:${#ctot}-9}.${ctot:${#ctot}-9}
+        last=${tim//.}
+    done < $prefix.$pid.tim
+    ) $prefix.$pid.log
+}
 
 
 #------------------------
@@ -2497,7 +2617,7 @@ newmag () {
     test ! "$do_quiet" && echo "# texp=$texp mzero=$mzero"
     x=$(echo $line | cut -d " " -f2)
     y=$(echo $line | cut -d " " -f3)
-    msg=$(echo "$line" | cut -c 49-)
+    msg=$(echo "$line" | cut -c 52-)
     for c in $(seq 1 $(echo $mrgb | awk -F ',' '{print NF}'))
     do
         oldmag=$(echo $line | cut -d " " -f$((3+c)))
@@ -2839,8 +2959,8 @@ jd2st () {
 }
 
 # convert from julian day to ut date
-# ref: http://quasar.as.utexas.edu/BillInfo/JulianDatesG.html
 jd2ut () {
+    # ref: http://quasar.as.utexas.edu/BillInfo/JulianDatesG.html
     local showhelp
     local timeformat=1  # 1-fraction of day, 2-HH:MM:SS
     local prec=3
@@ -2858,15 +2978,21 @@ jd2ut () {
         return 1
     
     echo $jd | awk -v p=$prec -v tf=$timeformat '{
-        q=$1+0.5; z=int(q)
+        if (tf==1) {
+            fmt="%."p"f"
+            q=sprintf(fmt, $1+0.5)
+        } else {
+            q=$1+0.5
+        }
+        z=int(q)
         w=int((z - 1867216.25)/36524.25)
         x=int(w/4)
         a = z+1+w-x
         b = a+1524
         c = int((b-122.1)/365.25)
         d = int(365.25*c)
-        e = int((b-d)/30.6001)
-        f = int(30.6001*e)
+        e = int((b-d)/30.600001)
+        f = int(30.600001*e)
         dd=b-d-f+(q-z)
         mm=e-1; if (mm>12) mm=e-13
         yy=c-4715; if (mm>2) yy=c-4716
@@ -3085,7 +3211,7 @@ get_header () {
             echo "ERROR: missing ascii header file $hdr." >&2 && return 255
         is_fits "$img"   && listhead "${img}$extension" | grep "=" > $tmp1 && hdr=$tmp1
         is_fitzip "$img" && unzip -p "$img" | listhead -  | grep "=" > $tmp1 && hdr=$tmp1
-        is_fitsgz "$img" && gunzip -c "$img" | listhead -  | grep "=" > $tmp1 && hdr=$tmp1
+        is_fitsgz "$img" && listhead "$img" | grep "=" > $tmp1 && hdr=$tmp1
     fi
     
     test "$keylist" == "all" && cat $hdr && rm $tmp1 && return
@@ -4164,13 +4290,13 @@ rgbsmooth () {
     add=$(echo ${bg//,/ } ${wbmul//,/ } | awk -v bgnew=$bgnew '{
         printf("%.1f,%.1f,%.1f", bgnew-$1*$4, bgnew-$2*$5, bgnew-$3*$6)}')
     echo "# bgnew=$bgnew  add=$add  mul=$wbmul" >&2
-    pnmccdred -a $add -m $wbmul $rgb x.lum.$ext
+    pnmccdred2 -a $add -m $wbmul $rgb x.lum.$ext
     # color image: apply white balance, scale and shift bg to 6*stddev and blur
     bgnew=$(echo $rmsg | awk -v m=$outmult '{printf("%.0f", 6*m*$1+1)}')
     add=$(echo ${bg//,/ } ${wbmul//,/ } | awk -v bgnew=$bgnew '{
         printf("%.1f,%.1f,%.1f", bgnew-$1*$4, bgnew-$2*$5, bgnew-$3*$6)}')
     echo "# bgnew=$bgnew  add=$add  mul=$wbmul" >&2
-    pnmccdred -a $add -m $wbmul $rgb - | convert - -median $boxsize x.col.$ext
+    pnmccdred2 -a $add -m $wbmul $rgb - | convert - -median $boxsize x.col.$ext
     # combine luminance and color images, apply gamma curve
     convert x.col.ppm x.lum.ppm \
         -colorspace HSL     \
@@ -5097,7 +5223,8 @@ dec2sexa () {
         return 1
 
     echo $h | awk -v d=$div -v p=$prec -v l=$num_units '{
-        x=$1*3600./d
+        fmt="%."p"f"
+        x=sprintf(fmt, $1*3600./d)
         if (x<0) {x=-1*x; sign="-"} else {sign="+"}
         h=int(x/3600.); m=int((x-h*3600)/60.); s=x-h*3600-m*60
         ns=2+p+1; if (p==0) ns=2
@@ -5312,8 +5439,9 @@ kappasigma () {
         x=1*$c; if ((x>0) || (z==0)) print x}' | \
         sort -n > $tmp1
     n=$(cat $tmp1 | wc -l)
-    test $n -lt 5 &&
-        echo "ERROR: too few data samples (n<5)." >&2 && return 255
+    test $n -lt 5 && iter=1
+    test $n -lt 3 &&
+        echo "ERROR: too few data samples (n<3)." >&2 && return 255
     cp $tmp1 $tmp2
     for i in $(seq 1 $iter)
     do
@@ -5438,7 +5566,7 @@ roi2xy () {
     #   xf ncoo float32, xf ncoo float 32
 }
 
-# get telescope identifyers from iTelescope log files
+# get telescope identifiers from iTelescope log files
 get_itel_telid () {
     local showhelp
     local i
@@ -5454,13 +5582,14 @@ get_itel_telid () {
 
     false && cat $logfiles | grep "Telescope .* ACP" | tr '\->' ' ' | \
         awk '{print $6}' | tr -d ',' | sort -u
-    cat $logfiles | grep -E "Telescope is ACP|Image File Saved to" | tr '\->' ' ' | \
+    cat $logfiles | grep -E "Telescope is ACP|Image File Saved to|Imaging to" | tr '\->' ' ' | \
         awk '{
             if ($3=="Telescope") {
                 if ($7~/^T[0-9][0-9]/) {id=$7} else if ($6~/^T[0-9][0-9]/) {id=$6}
             }
             if ($3=="Image" && $7!="p") id=$7
             sub(",","",id)
+            if ($3=="Imaging" && $5~/^T/) id=$5
             if (id != lastid) print id
             lastid=id
         }' | sort -u
@@ -5477,6 +5606,7 @@ itel2obs () {
     local use_filenames # if set the get file names from directory 'zip' instead
                         # of evaluating the log files
     local n=1           # start file numbering at n
+    local pdir="$HOME/obsplan/itel" # directory with observations plan text files
     local i
     for i in 1 2 3 4 5 6
     do
@@ -5517,11 +5647,13 @@ itel2obs () {
 
     filter="starting run|Telescope|script|autofocus|focus position|defocus|express"
     filter="$filter|temperature|hfd =|saved to"
+    # workaround for T10/T68 which has no "saved to" log message
+    filter="$filter|imaging to t10|imaging to t68"
 
     for tel in $tellist
     do
         #for logfile in $(grep -il "saved to $tel-" $logdir/2*)
-        for logfile in $logdir/[2T]*{txt,log}
+        for logfile in $(ls $logdir/[2T]*{txt,log} 2>/dev/null)
         do
             test "$(get_itel_telid $logfile | lines 1)" != "$tel" && continue
             test $linkmode -ne 0 && echo "# $tel $logfile" >&2
@@ -5548,6 +5680,7 @@ itel2obs () {
     'BEGIN{num=n-1; nplan=-1; focusinfo=""}{
         if ($0~/Starting run for plan/) {nplan++}
         if (($0~/Image File Saved to [Tt]/) ||
+            ($0~/Imaging to [Tt]/) ||
             ($0~/Dark\/Bias File Saved to [Tt]/)) {
             if (focusinfo != "") {printf("# %s\n", focusinfo); focusinfo=""}
             split($NF,a,/-/)
@@ -5671,8 +5804,8 @@ itel2obs () {
     then
         printf "\n(" >&2
         grep "Starting run for plan" $tmp1 | tr -d '\r' | \
-            sed -e 's|\.*$||' | awk '{
-            printf("echo; echo; echo \"#### %s\"; cat ~/itel/%s\n", $NF, $NF)}' >&2
+            sed -e 's|\.*$||' | awk -v pdir=$pdir '{
+            printf("echo; echo; echo \"#### %s\"; cat %s/%s\n", $NF, pdir, $NF)}' >&2
         printf ") >> %s/obs.txt\n" $logdir >&2
         echo "vi $logdir/obs.txt" >&2
     fi
@@ -5821,20 +5954,20 @@ EOF
             jd=$(ut2jd $tstart $x)
             #echo "$x $tstart" >&2
         else
-        jd=$(get_jd -q "$f")
+            jd=$(get_jd -q "$f")
             test "$jd" && test ${jd%.*} -eq 2440587 &&
                 echo "WARNING: implausible JD in $(basename "$f")" >&2 && jd=""
-        if [ -z "$jd" ]
-        then
-            echo "WARNING: missing JD in $(basename "$f")" >&2
-            # using file timestamp as fallback
-            x=$(stat --format="%Y" "$f")
-            jd=$(ut2jd $(date --date="@$x" -u +"%H:%M:%S %Y%m%d"))
-        fi
-        # determine tstart
+            if [ -z "$jd" ]
+            then
+                echo "WARNING: missing JD in $(basename "$f")" >&2
+                # using file timestamp as fallback
+                x=$(stat --format="%Y" "$f")
+                jd=$(ut2jd $(date --date="@$x" -u +"%H:%M:%S %Y%m%d"))
+            fi
+            # determine tstart
             x=$(grep    "^DATE-OBS=" $tmphdr | lines 1 | cut -d "=" -f2 | cut -d "'" -f2)
-        test "$x" && tstart=$(echo $x | cut -d "T" -f2 | sed -e 's,\..*,,')
-        test -z "$x" && tstart="-"
+            test "$x" && tstart=$(echo $x | cut -d "T" -f2 | sed -e 's,\..*,,')
+            test -z "$x" && tstart="-"
         fi
         # get texp
         texp=$(grep "^EXPTIME =" $tmphdr | lines 1 | cut -d "=" -f2 | awk '{printf("%.1f", 1*$1)}')
@@ -6315,6 +6448,7 @@ check_url () {
         test $retval -eq 0 && break
         i=$((i+1))
     done
+    test $retval -ne 0 && echo "ERROR: failed to connect to $url" >&2
     return $retval
 }
 
@@ -6367,6 +6501,8 @@ mpchecker () {
 
     local cameradat="camera.dat"
     local reg
+    local ext
+    local is_radec
     local jd
     local date
     local name
@@ -6405,6 +6541,16 @@ mpchecker () {
         de=$(dec2sexa $(sexa2dec $de 1 7) 1 1)
         echo "circle($ra,$de,10) # text={X}" > $tmpreg
         reg=$tmpreg
+        is_radec=1
+    fi
+    if [ -z "$is_radec" ]
+    then
+        ext=ppm
+        test -s $sname.pgm && ext=pgm
+        for x in $sname.$ext $sname.wcs.head
+        do
+            test ! -s $x && echo "ERROR: missing file $x." >&2 && return 255
+        done
     fi
     
     # determine maglim and search radius
@@ -6442,11 +6588,25 @@ mpchecker () {
     do
         #echo "# $REPLY"
         test "${REPLY:0:6}" != "circle" && continue
-        set - $(echo $REPLY | tr '(,){}' ' ')
-        ra="$2"; de="$3"; name="$7"
-        ra=$(dec2sexa $(sexa2dec $ra 1 7) 1 2 | tr -d "+-")
-        de=$(dec2sexa $(sexa2dec $de 1 7) 1 1)
+        if [ "$is_radec" ]
+        then
+            # sexadecimal coords
+            set - $(echo $REPLY | tr '(,){}' ' ')
+            ra="$2"; de="$3"; name="$7"
+            ra=$(dec2sexa $(sexa2dec $ra 1 7) 1 2 | tr -d "+-")
+            de=$(dec2sexa $(sexa2dec $de 1 7) 1 1)
+        else
+            # convert from FITS coord to RA/DEC
+            set - $(echo $REPLY | reg2xy $sname.$ext -)
+            name="$1"
+            set - $(echo $1 $2 $3 | xy2rade - $sname.wcs.head)
+            echo "$@" >&2
+            ra="$1"; de="$2"
+            ra=$(dec2sexa $ra 15 2 | tr -d "+-")
+            de=$(dec2sexa $de 1 1)
+        fi
         coord="ra=${ra//:/+}&decl=${de//:/+}"
+        #coord="ra=${ra}&decl=${de}"
         test "$AI_DEBUG" &&
             echo "date=$date   coord=$coord" >&2
         
@@ -6596,14 +6756,14 @@ get_cobs () {
         }' | tr '<>' '\n' | grep "[a-zA-Z0-9]" | grep -v "option" > $tmpcdb
     x=$(cometname $comet)
     # search in $tmpcdb and convert to fullname
-    n=$(grep -w "$x" $tmpcdb | wc -l)
+    n=$(grep "^$x[/ ]" $tmpcdb | wc -l)
     test $n -eq 0 &&
         echo "ERROR: comet $x unknown to database $tmpcdb" >&2 &&
         return 255
     test $n -gt 1 &&
         echo "ERROR: comet $x has multiple matches in database $tmpcdb" >&2 &&
         return 255
-    fullname=$(grep -w "$x" $tmpcdb)
+    fullname=$(grep "^$x[/ ]" $tmpcdb)
     echo "fullname=$fullname" >&2
     
     # example
@@ -6903,15 +7063,16 @@ mkrefcat () {
     # astrometric or photometric reference catalog
     # ref.: http://vizier.u-strasbg.fr/doc/asu-summary.htx
     local showhelp
-    local server=cds
+    local server
     local wcshdr
     local nmax=1000
-    local rdat=refcat.dat   # catalog column description
+    local catdef=refcat.dat   # catalog column description
     local outfmt="tsv"      # output table format, tsv - tab separated ASCII,
                             # fits - FITS LDAC table
     local all_columns       # if set then all columns are queried
+    local add_r             # if set then add _r column
     local i
-    for i in 1 2 3 4 5 6
+    for i in 1 2 3 4 5 6 7
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-s" && server="$2" && shift 2
@@ -6919,12 +7080,14 @@ mkrefcat () {
         test "$1" == "-n" && nmax="$2" && shift 2
         test "$1" == "-f" && outfmt="fits" && shift 1
         test "$1" == "-a" && all_columns=1 && shift 1
+        test "$1" == "-r" && add_r=1 && shift 1
     done
     local catalog=$1
     local ra=$2     # center coordinates
     local de=$3
     local radius=$4 # search radius in degrees
-    local vizprog
+    local serverlist
+    local url
     local vid
     local sortcol
     local addcol
@@ -6942,25 +7105,29 @@ mkrefcat () {
     local tmpldac=$(mktemp "/tmp/tmp_ldac_$$.XXXXXX.dat")
     
     (test "$showhelp" || test $# -lt 4) &&
-        echo -e "usage: mkrefcat [-h] [-f] [-a] [-s server|$cds] [-w wcshdr] [-n nmax|$nmax]" \
+        echo -e "usage: mkrefcat [-h] [-f] [-a] [-s server] [-w wcshdr] [-n nmax|$nmax]" \
             "<catalog> <ra> <de> <radius>" >&2 &&
         return 1
 
-    case "$server" in
-        cds)    vizprog="http://vizier.u-strasbg.fr/viz-bin/asu-$outfmt";;
-        us)     vizprog="http://vizier.cfa.harvard.edu/viz-bin/asu-$outfmt";;
-        uk)     vizprog="http://archive.ast.cam.ac.uk/viz-bin/asu-$outfmt";;
-        jp)     vizprog="http://vizier.nao.ac.jp/viz-bin/asu-$outfmt";;
-        *)      echo "ERROR: unknown database server $server. Try one of cds, us, uk, jp." >&2 &&
-                return 255;;
-    esac
+    # list of vizier servers to check
+    serverlist="
+        vizier.u-strasbg.fr \
+        vizier.hia.nrc.ca \
+        vizier.china-vo.org \
+        vizier.ast.cam.ac.uk \
+        vizier.nao.ac.jp \
+        vizier.cfa.harvard.edu \
+        www.ukirt.jach.hawaii.edu \
+        vizier.iucaa.ernet.in \
+        "
+    test "$server" && serverlist="$server"
 
     # get vizier catalog identifier
-    vid=$(get_param $rdat vid $catalog)
+    vid=$(get_param $catdef vid $catalog)
     test -z "$vid" && echo "ERROR: unknown catalog." >&2 && return 255
     
     # get sort column (brightest sources)
-    sortcol=$(get_param $rdat msort $catalog)
+    sortcol=$(get_param $catdef msort $catalog)
     test "$outfmt" != "tsv" && test -z "$sortcol" &&
         echo "ERROR: mag sort column (msort) undefined." >&2 && return 255
 
@@ -6968,7 +7135,11 @@ mkrefcat () {
     case "$catalog" in
         gaia2)  addcol="DR2Name,RAJ2000,DEJ2000";;
         gaia3e) addcol="EDR3Name";;
+        *)      addcol="";;
     esac
+    test "$add_r" && test "$addcol"    && addcol="_r,$addcol"
+    test "$add_r" && test -z "$addcol" && addcol="_r"
+    
     # TODO: evaluate wcs header to determine center coordinates and search radius
     # convert center coordinates to degrees unit
     test "${ra/:/}" != "$ra" && rad=$(sexa2dec $ra 15)
@@ -6990,10 +7161,27 @@ mkrefcat () {
         test ! "$all_columns" && args="$args&-out.add=$sortcol"
     fi
     
-    # run database query
-    test "$AI_DEBUG" &&
-        echo "wget -O $tmp1 \"${vizprog}?${args}${opts}&-c=${center}\"" >&2
-    wget -O $tmp1 "${vizprog}?${args}${opts}&-c=${center}"
+    # check connection
+    for server in $serverlist
+    do
+        echo "# connecting to $server ..." >&2
+        check_url http://$server 2 || continue
+        url=http://$server/viz-bin/asu-$outfmt
+        # run database query
+        test "$AI_DEBUG" &&
+            echo "wget -O $tmp1 \"${url}?${args}${opts}&-c=${center}\"" >&2
+        wget -O $tmp1 "${url}?${args}${opts}&-c=${center}"
+        test $? -ne 0 && echo "ERROR: wget failed" >&2 && continue
+        
+        # check for valid object entries
+        x=$(grep -v "^#" $tmp1 | grep "[0-9]" | wc -l)
+        test $x -eq 0 && echo "ERROR: empty catalog" >&2 && continue
+
+        test "$url" && break
+    done
+    test -z "$url" && echo "ERROR: no suitable vizier server found." >&2 && return 255
+    x=$(grep -v "^#" $tmp1 | grep "[0-9]" | wc -l)
+    test $x -eq 0 && return 255
     
     if [ "$outfmt" == "tsv" ]
     then
@@ -7391,6 +7579,7 @@ phot2icq () {
                 case "$pcat" in
                     tycho2) refcat="TK";;
                     apass)  refcat="AQ";;
+                    gaia*)  refcat="GG";;
                     *)      refcat="--";;
                 esac
                 mag=$(get_header  $hdr AP_CMAG$x | awk '{printf("%4.1f", $1+$2)}')
@@ -7447,10 +7636,39 @@ phot2icq () {
                 moon="$(echo $(get_header -q -s $hdr AI_MOP,AI_MOD,AI_MOALT) | \
                     awk '{if($3>0) {printf("moon %d%% dist %d deg", 100*$1, 1*$2)}}')"
                 
+                # filter
+                filt=$(get_header -q $hdr FILTER)
+                test "$filt" && case $filt in
+                    Red)    filt="R";;
+                    Green)  filt="G";;
+                    Blue)   filt="B";;
+                    Luminance)  filt="L";;
+                    R|G|V|L|B) ;;
+                    *)      filt="";;
+                esac
+                test -z "$filt" && filt=$(get_header $hdr AC_ICOL$aidx)
+
+                # camera info
+                cam=$(AI_TELESCOPE=$tel    get_param camera.dat ctype   xxx)
+                if [ "$cam" == "DSLR" ]
+                then
+                    test "$filt" == "R" && cam="$cam red"
+                    test "$filt" == "G" && cam="$cam green"
+                    test "$filt" == "B" && cam="$cam blue"
+                else
+                    cam="$cam/"$filt
+                fi
+                
+                # site info
+                site=$(get_header $hdr AI_SITE)
+                test "$site" &&
+                    test "$(get_param -k location sites.dat comments $site 2>/dev/null)" == "iTelescope" &&
+                    site="$site (remote)"
+
                 
                 if [ "$verbose" ]
                 then
-                    str="$pcat/"$(get_header -q $hdr AP_PCOL$x)":"
+                    str="$pcat/$filt"
                     val=$(get_header -q $hdr AP_MZER$x)
                     test "$val" && str=$str" mzero=$val"
                     val=$(get_header -q $hdr AP_NFIT$x)
@@ -7467,32 +7685,6 @@ phot2icq () {
                     test "$val" && str=$str" m1=$val"
                     echo "# $str d=${coma// /}'"
                 fi
-
-                # camera info
-                cam=$(AI_TELESCOPE=$tel    get_param camera.dat ctype   xxx)
-                filt=$(get_header -q $hdr FILTER)
-                test "$filt" && case $filt in
-                    Red)    filt="R";;
-                    Green)  filt="G";;
-                    Blue)   filt="B";;
-                    Luminance)  filt="L";;
-                    R|G|V|L|B) ;;
-                    *)      filt="";;
-                esac
-                test -z "$filt" && filt=$(get_header $hdr AC_ICOL$aidx)
-                if [ "$cam" == "DSLR" ]
-                then
-                    test "$filt" == "R" && cam="$cam red"
-                    test "$filt" == "G" && cam="$cam green"
-                    test "$filt" == "B" && cam="$cam blue"
-                else
-                    cam="$cam/"$filt
-                fi
-                
-                site=$(get_header $hdr AI_SITE)
-                test "$site" &&
-                    test "$(get_param -k location sites.dat comments $site 2>/dev/null)" == "iTelescope" &&
-                    site="$site (remote)"
 
                 # create additional ccd information
                 # ref.: https://cobs.si/help?page=icq_format
@@ -8946,7 +9138,7 @@ icqplot () {
             # reuse tmpedb if not older than 7 days
             echo "# reusing $tmpedb" >&2
         else
-            wget -N -nH -O $tmpedb $edburl
+            wget -nH -O $tmpedb $edburl
             test $? -ne 0 &&
                 echo "ERROR: download of ephemdb failed." >&2 && return 255
         fi
@@ -9639,44 +9831,38 @@ reg2xy () {
     }'
 }
 
-reg2pbm () {
-    # convert ds9 region file (circle/polygon/box) to pbm
-    # regions are interpreted as good pixel regions (white, value=0)
+reg2svg () {
+    # convert ds9 region file (circle/polygon/box) to svg
     # output is directed to stdout
-    # notes for applying mask:
-    #    pnmarith -mul image.ppm mask.pbm > objects_in_reg.ppm
-    #    pnminvert mask.pbm | pnmarith -mul image.ppm - > objects_outside_reg.ppm
     # TODO: deal with object rotation (e.g. for a box, rotation is 5th parameter)
     local showhelp
-    local do_keep_svg   # keep svg file
     local i
     for i in $(seq 1 2)
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
-        test "$1" == "-s" && do_keep_svg=1 && shift 1
     done
     local img=$1
     local reg=$2
     local id=${3:-""}
     local w
     local h
-    local tmpsvg=$(mktemp "/tmp/tmp1_$$_XXXXXX.svg")
 
     (test "$showhelp" || test $# -lt 2) &&
-        echo "usage: reg2pbm [-s] <img> <reg> <text_id>" >&2 &&
+        echo "usage: reg2svg <img> <reg> <text_id>" >&2 &&
         return 1
 
     test "$reg" == "-" && reg="/dev/stdin"
     test ! -f "$img" &&
         echo "ERROR: image $img not found." >&2 && return 255
     
-    w=$(identify $img | cut -d " " -f3 | cut -d "x" -f1)
-    h=$(identify $img | cut -d " " -f3 | cut -d "x" -f2)
+    set - $(imsize $img)
+    w=$1
+    h=$2
     
     echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
 <svg xmlns=\"http://www.w3.org/2000/svg\"
         version=\"1.1\" baseProfile=\"full\"
-        width=\"${w}px\" height=\"${h}px\" viewBox=\"0 0 $w $h\">" > $tmpsvg
+        width=\"${w}px\" height=\"${h}px\" fill=\"white\" viewBox=\"0 0 $w $h\">"
 
     # create svg (shift to left and up to get final mask image to match ds9 region)
     cat $reg | tr '()' ' ' | awk -v w=$w -v h=$h -v id="$id" 'BEGIN{t="text={"id"}"}{
@@ -9697,16 +9883,48 @@ reg2pbm () {
             for(i=1;i<=na/2;i++) {printf("%.3f %.3f ", a[2*i-1]-0.5, h-a[2*i]+0.5)}
             printf("\" />\n")
         }
-    }' >> $tmpsvg
+    }'
 
-    echo "</svg>" >> $tmpsvg
+    echo "</svg>"
+    return
+}
+
+reg2pbm () {
+    # convert ds9 region file (circle/polygon/box) to pbm
+    # regions are interpreted as good pixel regions (white, value=0)
+    # output is directed to stdout
+    # notes for applying mask:
+    #    pnmarith -mul image.ppm mask.pbm > objects_in_reg.ppm
+    #    pnminvert mask.pbm | pnmarith -mul image.ppm - > objects_outside_reg.ppm
+    # TODO: deal with object rotation (e.g. for a box, rotation is 5th parameter)
+    local showhelp
+    local i
+    for i in $(seq 1 2)
+    do
+        (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
+    done
+    local img=$1
+    local reg=$2
+    local id=${3:-""}
+    local w
+    local h
+    local tmpsvg=$(mktemp "/tmp/tmp1_$$_XXXXXX.svg")
+
+    (test "$showhelp" || test $# -lt 2) &&
+        echo "usage: reg2pbm [-s] <img> <reg> <text_id>" >&2 &&
+        return 1
+
+    test ! -f "$img" &&
+        echo "ERROR: image $img not found." >&2 && return 255
+    
+    reg2svg $img $reg $id > $tmpsvg
+
     # note: canvas size is not kept if libmagick++-6.q16-5 is installed
     #   convert $tmpsvg -negate pbm:
     rsvg-convert $tmpsvg | pngtopnm -alpha - | convert - -threshold 45% pbm:-
     test $? -ne 0 &&
 		echo "ERROR: rsvg-convert $tmpsvg failed" >&2 &&
 		return 255
-    test "$do_keep_svg" && mv $tmpsvg $(basename $reg).svg
     test "$AI_DEBUG" && echo $tmpsvg >&2
     test -z "$AI_DEBUG" && rm -f $tmpsvg
     return 0
@@ -10119,7 +10337,8 @@ xy2fits () {
     then
         test ! -e $img &&
             echo "ERROR: image file $img not found." >&2 && return 255
-        h=$(identify $img | cut -d " " -f3 | cut -d "x" -f2)
+        set - $(imsize $img)
+        h=$2
     fi
     echo $x $y | awk -v h=$h -v o=$offset '{print $1+0.5+o" "h-$2+0.5-o}'
 }
@@ -10158,7 +10377,8 @@ xy2reg () {
     test ! -f $img &&
         echo "ERROR: image $img does not exist." >&2 && return 255
 
-    h=$(identify $img | cut -d " " -f3 | cut -d "x" -f2)
+    set - $(imsize $img)
+    h=$2
     test "$has_fitscoord" && h=0
     
     echo -e "# Region file format: DS9 version 4.1
@@ -10356,6 +10576,56 @@ regfilter () {
 
 
 # image statistics within region
+regstat2 () {
+    local showhelp
+    local kappa=3.5
+    local do_green_only
+    local do_merge_all_regions  # if set then stats is for the combined region
+    local do_quick              # skip kappa-sigma clipping
+    local do_minmax             # if set then show min/max/mean instead of noise stats
+    local verbose               # currently not used
+    local i
+    for i in 1 2 3 4 5 6 7
+    do
+        (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
+        test "$1" == "-a" && do_merge_all_regions=1 && shift 1
+        test "$1" == "-k" && kappa="$2" && shift 2
+        test "$1" == "-g" && do_green_only=1 && shift 1
+        test "$1" == "-q" && do_quick=1 && shift 1
+        test "$1" == "-m" && do_minmax=1 && shift 1
+        test "$1" == "-v" && verbose=1 && shift 1
+    done
+    local img=$1
+    local reg=$2
+    local badreg=${3:-""}
+    local tmpreg1=$(mktemp /tmp/tmp_reg1_XXXXXX.reg)
+    local tmpreg2=$(mktemp /tmp/tmp_reg2_XXXXXX.reg)
+    local opts=""
+
+    (test "$showhelp" || test $# -lt 2 || test $# -gt 3) &&
+        echo "usage: regstat [-q] [-g] [-m] [-a] [-k kappa|$kappa] <image> <reg> [badreg]" >&2 &&
+        return 1
+    test "$reg" == "-" && cat /dev/stdin > $tmpreg1 && reg=$tmpreg1
+    test ! -f "$img" &&
+        echo "ERROR: image file $img not found." >&2 && return 255
+    #! is_reg "$reg" &&
+    #    echo "ERROR: $reg is not a valid region file." >&2 && return 255
+    
+    test "$do_quick" && opts="-q"
+    test "$do_minmax" && opts="-m"
+    if [ "$do_merge_all_regions" ]
+    then
+        _regstat2 $opts $img $reg $badreg
+    else
+        grep -iwE "^circle|^polygon|^box" $reg | while read
+        do
+            echo "$REPLY" > $tmpreg2
+            _regstat2 $opts $img $tmpreg2 $badreg
+        done
+    fi
+    rm $tmpreg1 $tmpreg2
+}
+
 regstat () {
     local showhelp
     local kappa=3.5
@@ -10404,6 +10674,56 @@ regstat () {
         done
     fi
     rm $tmpreg1 $tmpreg2
+}
+
+_regstat2 () {
+    # note: show only limited stats, this is NOT a replacement for _regstat
+    local do_minmax
+    test "$1" == "-q" && shift 1    # ignored
+    test "$1" == "-m" && do_minmax=1 && shift 1
+    local img=$1
+    local reg=$2
+    local badreg=${3:-""}
+    local area
+    local mean
+    local sd
+    local min
+    local max
+    local tmpregmask=$(mktemp /tmp/tmp_regmask_XXXXXX.svg)
+    local tmpbadmask=$(mktemp /tmp/tmp_badmask_XXXXXX.svg)
+    local pyprog
+    
+    # check for required python scripts
+    pyprog=$(which airfun.py)
+    test $? -ne 0 &&
+        echo "ERROR: missing python module airfun.py." >&2 && return 255
+
+    # convert mask regions to svg
+    reg2svg $img $reg > $tmpregmask
+    if [ "$badreg" ]
+    then
+        reg2svg $img $badreg > $tmpbadmask
+    else
+        rm $tmpbadmask
+        tmpbadmask=""
+    fi
+    
+    # do limited stats
+    if [ ! "$do_minmax" ]
+    then
+        stats=$(python3 $pyprog regstat $img $tmpregmask $tmpbadmask)
+    else
+        stats=$(python3 $pyprog regstat -m $img $tmpregmask $tmpbadmask)
+    fi
+    
+    # get region text
+    id=$(grep "^[a-z]*(.*).* # text={" $reg | cut -d '{' -f2 | tr -d '}')
+    n=$(echo "$id" | wc -l)
+    test $n -gt 1 && id="${n}_regions"
+    echo $stats $id
+    
+    test "$AI_DEBUG" || rm $tmpregmask $tmpbadmask
+    return
 }
 
 _regstat () {
@@ -10688,7 +11008,11 @@ rade2xy () {
     # supports input coordinates in either decimal degrees or sexagesimal format
     # using colon separator (like h:m:s deg:amin:asec)
     local showhelp
-    (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
+    local i
+    for i in 1
+    do
+        (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
+    done
     local radedat=$1    # datafile
     local wcshdr=$2
     local catorcolnums=${3:-"1,2,3"}   # either star catalog name or idcol,racol,decol
@@ -10781,7 +11105,7 @@ rade2xy () {
             } else {ded=$cy}
             printf("%.5f %.5f _%s_\n", rad+dx, ded+dy, id)
         }' > $tmp1
-
+    
     # coordinates only
     cat $tmp1 | awk '{printf("%s %s\n", $1, $2)}' > $tmp2
 
@@ -11971,6 +12295,111 @@ mkppm () {
         pnmccdred -a $val - $oname
 }
 
+pnmccdred2 () {
+    # out = mult * (in-dark)/flat + add
+    # TODO: allow piping output to next command
+    local showhelp
+    local premult
+    local preadd
+    local dark
+    local flat
+    local mult
+    local add
+    local do_fits   # if set write FITS (plane or cube) instead of PNM file
+    local do_gray   # convert rgb to gray image
+    local do_flip   # if set flip image top-bottom
+    local do_rot    # if set rotate image by 180 degrees
+    local i
+    for i in $(seq 1 9)
+    do
+        (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
+        test "$1" == "-d" && dark=$2 && shift 2
+        test "$1" == "-s" && flat=$2 && shift 2
+        test "$1" == "-m" && mult=$2 && shift 2
+        test "$1" == "-a" && add=$2  && shift 2
+        test "$1" == "-premult" && premult=$2   && shift 2
+        test "$1" == "-preadd"  && preadd=$2    && shift 2
+        test "$1" == "-f"       && do_fits=1    && shift 1
+        test "$1" == "-g"       && do_gray=1    && shift 1
+        test "$1" == "-tb"      && do_flip=1    && shift 1
+        test "$1" == "-r180"    && do_rot=1     && shift 1
+    done
+    local img=$1
+    local out=${2:-"-"}
+    local f
+    local pyopts
+    local pyprog
+    local retval
+
+    (test "$showhelp" || test $# -lt 1) &&
+        echo "usage: pnmccdred2 [-f] [-g] [-tb] [-d dark] [-s flat] [-m mult] [-a add] <img> [out|$out]" >&2 &&
+        return 1
+
+    # check for valid images
+    # TODO: handle fitsgz, fitszip
+    test "$img" != "-" && ! is_pnm $img && ! is_fits $img && ! is_fitsgz $img &&
+        echo "ERROR: $img is not a valid PNM/FITS file." >&2 &&
+            return 255
+
+    test "$dark$flat" && for f in $dark $flat
+    do
+        test "$f" && test "$f" != "-" && ! is_pnm $f &&
+            echo "ERROR: $f is not a valid PPM/PGM/PBM file." >&2 &&
+            return 255
+    done
+
+    # check for required python scripts
+    pyprog=$(which airfun.py)
+    test $? -ne 0 &&
+        echo "ERROR: missing python module airfun.py." >&2 && return 255
+
+    test "$do_fits" && pyopts="$pyopts -f"
+    test "$do_gray" && pyopts="$pyopts -g"
+    test "$preadd"  && pyopts="$pyopts -preadd $preadd"
+    test "$premult" && pyopts="$pyopts -premult $premult"
+    test "$do_flip" && pyopts="$pyopts -tb"
+    test "$do_rot"  && pyopts="$pyopts -r180"
+    test "$AI_DEBUG" &&
+        echo python3 $pyprog pnmccdred $pyopts "$img $out \"$dark\" \"$flat\" \"$mult\" \"$add\"" >&2
+    python3 $pyprog pnmccdred $pyopts $img $out "$dark" "$flat" "$mult" "$add"
+    retval=$?
+    
+    test $retval -ne 0 &&
+        echo "ERROR: pnmccdred2 failed" >&2 && sleep 20
+
+    return $retval
+}
+
+pnmcombine2 () {
+    local showhelp
+    local mode="mean"
+    local i
+    for i in $(seq 1 5)
+    do
+        (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
+        test "$1" == "-d" && mode="median" && shift 1
+        test "$1" == "-s" && mode="stddev" && shift 1
+    done
+    local img=$1
+    local out=${@: -1}  # last argument
+    local pyprog
+
+    (test "$showhelp" || test $# -lt 2) &&
+        echo "usage: pnmcombine2 [-d|-s] <img1> [img2 ...] <out>" >&2 &&
+        return 1
+
+    # check for required python scripts
+    pyprog=$(which airfun.py)
+    test $? -ne 0 &&
+        echo "ERROR: missing python module airfun.py." >&2 && return 255
+
+    test "$AI_DEBUG" &&
+        echo "python3 $pyprog pnmcombine -m $mode $@" >&2
+    python3 $pyprog pnmcombine -m $mode $@
+    return $?
+}
+
+
 ppm2gray () {
     # convert from ppm to gray image, result goes to stdout
     # using a specific set of color ratios (other than ppmtopgm!)
@@ -12005,6 +12434,7 @@ ppm2gray () {
     local w
     local h
     local key
+    local pyprog
 
     (test "$showhelp" || test $# -lt 1) &&
         echo "usage: ppm2gray [-f] [-w wcshead] [-r rgbratio|$rgb_ratios] <ppm> [fitshdr]" >&2 &&
@@ -12018,6 +12448,11 @@ ppm2gray () {
     test "$outfits" && test "$wcshead" && test ! -f "$wcshead" &&
         echo "ERROR: ascii FITS header file $wcshead not found." >&2 &&
         return 255
+
+    # check for required python scripts
+    pyprog=$(which airfun.py)
+    test $? -ne 0 &&
+        echo "ERROR: missing python module airfun.py." >&2 && return 255
 
     # handle input from stdin
     test "$ppm" == "-" &&
@@ -12065,14 +12500,18 @@ ppm2gray () {
                 pnmarith -add noname.red noname.grn | pnmarith -add - noname.blu | \
                 pnmtomef - > $tmp1)
             # newer:
-            gm convert $ppm -operator Red multiply $1 \
+            false && gm convert $ppm -operator Red multiply $1 \
                 -operator Green multiply $2 \
                 -operator Blue  multiply $3 - | \
                 convert - -separate -background black -compose plus -flatten pgm:- | \
                 pnmtomef - > $tmp1
+            python3 $pyprog ppmtogray -f $ppm $tmp1 $1,$2,$3
         else
-            pnmtomef $ppm > $tmp1
+            pnmccdred2 -f $ppm $tmp1
         fi
+        # note: workaround for libvips/fitssave which always creates cube
+        set_header $tmp1 NAXIS=2
+        delhead $tmp1 NAXIS3
         
         # strip off COMMENT keywords
         listhead $tmp1 | grep -w "^COMMENT" | cut -c 1-8 | \
@@ -12158,10 +12597,12 @@ ppm2gray () {
             (cd $wdir; ppmtorgb3 &&
                 pnmarith -add noname.red noname.grn | pnmarith -add - noname.blu)
             # newer:
-            gm convert $ppm -operator Red multiply $1 \
+            false && gm convert $ppm -operator Red multiply $1 \
                 -operator Green multiply $2 \
                 -operator Blue  multiply $3 - | \
                 convert - -separate -background black -compose plus -flatten pgm:-
+            #pnmccdred2 -g -m $1,$2,$3 $ppm -
+            python3 $pyprog ppmtogray $ppm - $1,$2,$3
         else
             cat $ppm
         fi
@@ -12169,6 +12610,27 @@ ppm2gray () {
     test ! "$AI_DEBUG" && rm $tmpkeys
     rm -f $tmp1 $tmpim $tmpmask $tmpppm
     rm -rf $wdir
+    return
+}
+
+
+pnmtomef2 () {
+    local pnm=$1
+    local tdir=${AI_TMPDIR:-"/tmp"}
+    local tmpcube=$(mktemp "$tdir/tmp_cube_XXXXXX.fits")
+
+    # check for required python scripts
+    pyprog=$(which airfun.py)
+    test $? -ne 0 &&
+        echo "ERROR: missing python module airfun.py." >&2 && return 255
+    
+    python3 $pyprog pnmtofits $pnm $tmpcube
+    test $? -ne 1 &&
+        echo "ERROR: failed command was: python3 $pyprog pnmtofits $pnm $tfits" >&2 &&
+        return 255
+    
+    # convert cube to MEF fits
+    # TODO: process $tmpcube by missfits
     return
 }
 
@@ -12383,6 +12845,80 @@ meftopnm () {
         test "$1" == "-a" && do_ascii_header=1 && shift 1
     done
     local fits="$1"
+    #local pnm=$2
+    local bitpix
+    local imgtype
+    local pyprog
+    local nx
+    local retval
+    local tdir=${AI_TMPDIR:-"/tmp"}
+    local tmpfits=$(mktemp "$tdir/tmp_img_XXXXXX.fits")
+    local tmpppm=$(mktemp "$tdir/tmp_img_XXXXXX.ppm")
+
+    (test "$showhelp" || test $# -ne 1) &&
+        echo "usage: meftopnm [-a] <fits>" >&2 &&
+        return 1
+    test ! -e "$fits" &&
+        echo "ERROR: fits file $fits not found." >&2 &&
+        return 255
+    ! is_fits "$fits" &&
+        echo "ERROR: $fits is not a supported FITS file." >&2 &&
+        return 255
+    bitpix=$(listhead "$fits" | grep BITPIX | lines 1 | awk '{print $3}')
+    test -z "$imgtype" && is_fitsrgb "$fits"  && imgtype="rgbmef"  && nx=3
+    test -z "$imgtype" && is_fitscube "$fits" && imgtype="rgbcube" && nx=3
+    test -z "$imgtype" && imgtype="plane" && nx=1
+    test "$AI_DEBUG" &&
+        echo "# imgtype=$imgtype  bitpix=$bitpix" >&2
+
+    if [ "$do_ascii_header" ]
+    then
+        # replace non-ASCII characters
+        listhead "$fits" | tr 'öäüßÄÖÜ' '?' | grep -aE "^........=" | \
+            grep -vwE "^SIMPLE|^BITPIX|^NAXIS[0-9 ]|^EXTEND|^XTENSION"
+        echo "END"
+        # cleanup
+        test "$AI_DEBUG" && echo $wdir >&2
+        test -z "$AI_DEBUG" && rm -rf $wdir
+        return
+    fi
+    
+    # check for required python scripts
+    pyprog=$(which airfun.py)
+    test $? -ne 0 &&
+        echo "ERROR: missing python module airfun.py." >&2 && return 255
+
+
+    case $imgtype in
+        rgbmef) meftocube "$fits" > $tmpfits
+                python3 $pyprog fitscubetoppm $tmpfits $tmpppm
+                retval=$?
+                ;;
+        plane|rgbcube)
+                python3 $pyprog fitscubetoppm "$fits" $tmpppm
+                retval=$?
+                ;;
+    esac
+    cat $tmpppm
+    test "$AI_DEBUG" && echo $tmpfits $tmpppm >&2
+    test -z "$AI_DEBUG" && rm -f $tmpfits $tmpppm
+    return $retval
+}
+
+meftopnm_old () {
+    # convert from FITS to 16bit PNM image, result goes to stdout
+    # note: automatic scaling of data values is applied according to
+    #   physical value = BSCALE * (storage value) + BZERO
+    local showhelp
+    local do_ascii_header   # if set, also create ASCII header
+                            # requires command line parameter outimage
+    local i
+    for i in 1 2
+    do
+        (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
+        test "$1" == "-a" && do_ascii_header=1 && shift 1
+    done
+    local fits="$1"
     local bitpix
     local imgtype
     local nx
@@ -12491,6 +13027,53 @@ meftopnm () {
 }
 
 
+fits3toppm () {
+    # combine 3 monochrome FITS images to RGB PPM
+    local red=$1
+    local green=$2
+    local blue=$3
+    local outfile=${4:-"-"}
+    local pyprog
+    
+    (test "$1" == "-h" || test "$1" == "--help" || test $# -lt 3) &&
+        echo "usage: fits3toppm <red> <green> <blue> [outppm]" >&2 &&
+        return 1
+
+    # check for required python scripts
+    pyprog=$(which airfun.py)
+    test $? -ne 0 &&
+        echo "ERROR: missing python module airfun.py." >&2 && return 255
+
+    python3 $pyprog fits3toppm $red $green $blue $outfile
+    return $?
+}
+
+
+fits3tocube () {
+    # combine 3 monochrome FITS images to FITS cube
+    local red=$1
+    local green=$2
+    local blue=$3
+    local outfile=${4:-"-"}
+    local tdir=${AI_TMPDIR:-"/tmp"}
+    local tmpvips=$(mktemp "$tdir/tmp_vips_XXXXXX.v")
+    local tmpvips16=$(mktemp "$tdir/tmp_vips16_XXXXXX.v")
+    
+    (test "$1" == "-h" || test "$1" == "--help" || test $# -lt 3) &&
+        echo "usage: fits3tocube <red> <green> <blue> [outfits]" >&2 &&
+        return 1
+
+    test "$outfile" == "-" && outfile=/dev/stdout
+    vips bandjoin "$red $green $blue" $tmpvips
+    vips cast $tmpvips $tmpvips16 ushort
+    # TODO: check interpretation
+    vips fitssave $tmpvips16 $outfile
+    retval=$?
+    
+    rm -f $tmpvips $tmpvips16
+    return $retval
+}
+
 meftocube () {
     # convert MEF to FITS image cube (output to stdout)
     # note: FILTER is set to RGB
@@ -12556,7 +13139,9 @@ imslice () {
         echo "ERROR: image file $img not found." >&2 &&
         return 255
 
-    ! is_fitscube $img && ! is_fitsrgb $img &&
+    # note: checking disabled to work around libvips error (fitssave writes
+    #   cube in case of single image plane)
+    false && ! is_fitscube $img && ! is_fitsrgb $img &&
         echo "ERROR: unsupported image type (not FITS cube or MEF)." >&2 &&
         return 255
 
@@ -12604,7 +13189,7 @@ mkkernel () {
     
     x=$((len*10+1))
     w=$(echo $width | awk '{printf("%.0f", 10*$1)}')
-    gm convert -size ${x}x${x} xc:white -stroke black -strokewidth $w \
+    gm convert -size ${x}x${x} xc:black -stroke white -strokewidth $w \
         -draw "line 0,$((x/2)) $((x-1)),$((x/2))" -rotate $((-1*angle)) \
         +repage -gravity center -crop ${x}x${x}+0+0 \
         -filter box -resize ${len}x${len}! pbm:-
@@ -12635,11 +13220,17 @@ imcrop () {
     local w
     local h
     local ret
+    local pyprog
 
     test "$showhelp" &&
         echo "usage: imcrop [-1] <img> [w|$cw] [h] [xoff] [yoff]> " >&2 &&
         return 1
 
+    # check for required python scripts
+    pyprog=$(which airfun.py)
+    test $? -ne 0 &&
+        echo "ERROR: missing python module airfun.py." >&2 && return 255
+    
     if [ "$img" != "-" ]
     then
         fname=$(get_imfilename $img)
@@ -12729,21 +13320,20 @@ imcrop () {
     
     if is_raw "$fname"
     then
-        AIraw2gray "$fname" | \
+        AIraw2gray "$fname" - | \
             gm convert - -crop ${cw}x${ch}+${cx}+${cy} +repage pnm:-
     else
         if is_fits $fname
         then
-            meftopnm "$fname" | \
-                gm convert - -crop ${cw}x${ch}+${cx}+${cy} +repage pnm:-
+            python3 $pyprog imcrop "$fname" - $cw $ch $cx $cy
         else
             if is_fitzip $fname
             then
                 unzip -p "$fname" > $tmpfits
-                meftopnm $tmpfits | \
-                    gm convert - -crop ${cw}x${ch}+${cx}+${cy} +repage pnm:-
+                python3 $pyprog imcrop $tmpfits - $cw $ch $cx $cy
             else
-                gm convert "$fname" -crop ${cw}x${ch}+${cx}+${cy} +repage ${outfmt}:-
+                #gm convert "$fname" -crop ${cw}x${ch}+${cx}+${cy} +repage ${outfmt}:-
+                python3 $pyprog imcrop "$fname" - $cw $ch $cx $cy
             fi
         fi
     fi
@@ -12891,7 +13481,7 @@ imsize () {
         echo "ERROR: no image found." >&2 && return 255
 
     case "$type" in
-        RAW)    str=$(dcraw-tl -i -v "$img" | grep "^Output size:")
+        RAW)    str=$(dcraw-tl -i -v "$img" | grep "^Image size:")
                 retval=$?
                 set - $(echo $str)
                 str="$3 $5"
@@ -13050,6 +13640,50 @@ _imstat () {
     local img=${1:-"-"}
     local fname
     local stat
+    local tdir=${AI_TMPDIR:-"/tmp"}
+    local tmpin=$(mktemp "$tdir/tmp_stat_XXXXXX.img")
+    local tmpgray=$(mktemp "$tdir/tmp_stat_XXXXXX.pgm")
+    local tmpcsv=$(mktemp "$tdir/tmp_stat_XXXXXX.csv")
+
+    if [ "$img" != "-" ]
+    then
+        fname=$(get_imfilename $img)
+        test -z "$fname" && return 255
+    else
+        cat > $tmpin
+        fname=$tmpin
+    fi
+    if is_raw "$fname"
+    then
+        AIraw2gray "$fname" $tmpgray
+        vips stats $tmpgray $tmpcsv
+        stat=$(cat $tmpcsv | awk '{
+            if (NR>1) {
+                if (NR>2) printf(" ")
+                printf("%.0f %.0f %.1f (%.1f)", $1, $2, $5, $6)
+            }
+        } END {printf("\n")}')
+    else
+        vips stats "$fname" $tmpcsv
+        stat=$(cat $tmpcsv | awk '{
+            if (NR>1) {
+                if (NR>2) printf(" ")
+                printf("%.0f %.0f %.1f (%.1f)", $1, $2, $5, $6)
+            }
+        } END {printf("\n")}')
+        is_ppm "$fname" && test $(echo $stat | wc -w) -eq 4 &&
+            stat="$stat $stat $stat"
+    fi
+    echo $stat
+    rm -f $tmpcsv $tmpgray
+}
+
+
+_imstat_old () {
+    # get statistics for the given image (or stdin)
+    local img=${1:-"-"}
+    local fname
+    local stat
     if [ "$img" != "-" ]
     then
         fname=$(get_imfilename $img)
@@ -13059,7 +13693,7 @@ _imstat () {
     fi
     if is_raw "$fname"
     then
-        stat=$(AIraw2gray "$fname" | identify -verbose - | \
+        stat=$(AIraw2gray "$fname" - | identify -verbose - | \
             grep -iE "min:|max:|mean:|deviation:" | \
             awk '{if ($2~/deviation/) {printf("(%.1f)\n", $3)}
                 else {if ($1~/mean/) {printf("%.1f\n", $2)}
@@ -13107,7 +13741,7 @@ immedian () {
 
     if is_raw "$fname"
     then
-        stat=$(AIraw2gray "$fname" | \
+        stat=$(AIraw2gray "$fname" - | \
             pgmhist "$fname" | grep "^[0-9]" | tr -d '%' | awk '{
                 if ($3>=50) {print $1; nextfile}}')
     else
@@ -13257,15 +13891,21 @@ imbgsub () {
     then
         # TODO: distinguish between single plane and RGB
         # output is fits cube
+        false && (
         pnmtomef $tmpim1 > $tmpfits
         meftocube $tmpfits > $tmpim1
         imarith $tmpim1 $(echo $outmult/$bgmult | bc -l) mul - > $tmpim2
         pnmtomef $img $tmpfits
         meftocube $tmpfits > $tmpim1
         imarith $tmpim1 $outmult $mul - | imarith - $tmpim2 sub - | imarith - $bgval add -
+        )
+        pnmccdred2 -m $(echo $outmult/$bgmult | bc -l) $tmpim1 - | \
+            pnmccdred2 -f -premult $outmult -a $bgval -d - $tmpim1 -
     else
-        pnmccdred -m $(echo $outmult/$bgmult | bc -l) $tmpim1 $tmpim2
-        pnmccdred -m $outmult $img - | pnmccdred -a $bgval -d $tmpim2 - -
+        pnmccdred2 -m $(echo $outmult/$bgmult | bc -l) $tmpim1 - | \
+            pnmccdred2 -premult $outmult -a $bgval -d - $img -
+        #pnmccdred2 -m $(echo $outmult/$bgmult | bc -l) $tmpim1 $tmpim2
+        #pnmccdred2 -m $outmult $img - | pnmccdred2 -a $bgval -d $tmpim2 - -
     fi
     rm -f $tmpim1 $tmpim2
     return
@@ -13399,8 +14039,8 @@ kmedian () {
         #echo "$roll" >&2
         gm convert $img -roll $roll $wdir/roll.$roll.pnm
     done
-    pnmcombine -d $wdir/* - 2>/dev/null
-    
+    #pnmcombine -d $wdir/* - 2>/dev/null
+    pnmcombine2 -d $wdir/* -
     rm -rf $wdir
     return
 
@@ -13433,6 +14073,7 @@ AIraw2fullgray () {
 
 AIraw2gray () {
     # convert raw image to gray scale image, output to stdout
+    # - optionally crop to AI_CCDREGION (image pixel coordinates measured from raw image)
     # - scale up from 12bit to 16bit
     # - optionally subtract scaled dark frame
     # - correct for overscan offset if text file $AI_OVERSCAN exists
@@ -13444,20 +14085,23 @@ AIraw2gray () {
     local doff=0    # offset of dark counts (FITS only)
     local scale=1   # only applied on FITS images
     local do_flip
+    local do_ccdregion # if set then crop to AI_CCDREGION
     local i
-    for i in 1 2 3 4 5
+    for i in 1 2 3 4 5 6
     do
         test "$1" == "-a" && add=$2 && shift 2
         test "$1" == "-o" && doff=$2 && shift 2
         test "$1" == "-s" && scale=$2 && shift 2
+        test "$1" == "-c" && do_ccdregion=1 && shift 1
         test "$1" == "-f" && do_flip=1 && shift 1
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
     done
     
     local img=$1
-    local dark=${2:-""}
-    local bad=${3:-""}
-    local flat=${4:-""}     # must be at average level 10000
+    local outimg=$2
+    local dark=${3:-""}
+    local bad=${4:-""}
+    local flat=${5:-""}     # must be at average level 10000
     local sat
     local param="-4 -t 0 -k 0 -r 1 1 1 1 $AI_DCRAWPARAM"
     local i4
@@ -13467,11 +14111,13 @@ AIraw2gray () {
     local imgroll=""
     local cmd
     local origname
+    local fitsreg
     local tdir=${AI_TMPDIR:-"/tmp"}
     local tmpfits=$(mktemp "$tdir/tmp_im_XXXXXX.fits")
+    local tmpcrop=$(mktemp "$tdir/tmp_crop_XXXXXX.fits")
 
-    (test "$showhelp" || test $# -lt 1) &&
-        echo "usage: AIraw2gray [-f] [-s scale|$scale] [-a add|$add] <img> [dark] [bad] [flat]" >&2 &&
+    (test "$showhelp" || test $# -lt 2) &&
+        echo "usage: AIraw2gray [-f] [-c] [-s scale|$scale] [-a add|$add] <inimg> <outimg> [dark] [bad] [flat]" >&2 &&
         return 1
 
     test "$dark" && test ! -f $dark &&
@@ -13487,9 +14133,16 @@ AIraw2gray () {
     origname=$img
     is_fitzip $img && unzip -p $img > $tmpfits && img=$tmpfits
     is_fitsgz $img && gunzip -c $img > $tmpfits && img=$tmpfits
-
+    
     if is_fits $img
     then
+        if [ "$do_ccdregion" ] && [ "$AI_CCDREGION" ]
+        then
+            fitsreg=$(echo $(imsize $img) $AI_CCDREGION | awk '{
+                printf("[%d:%d,%d:%d]\n", $5+1, $3+$5, $2-($4+$6)+1, $2-$6)}')
+            test "$AI_DEBUG" && echo "# crop to fitsreg $fitsreg" >&2
+            fitscopy $img"$fitsreg" - > $tmpcrop && img=$tmpcrop
+        fi
         imhead $img | grep "^IMGROLL " | tr -d "'" | grep -q -w Y &&
             imgroll="yes"
         test "$AI_DEBUG" && echo "$img  imgroll=$imgroll" >&2
@@ -13502,13 +14155,17 @@ AIraw2gray () {
         test "$AI_DEBUG" && echo "param=$param" >&2 &&
             echo "add=$add  ped=$ped  imgroll=$imgroll" >&2
 
-        cmd="meftopnm $img | pnmccdred -a $ped - - | pnmccdred -m $scale - -"
-        test "$do_flip" && cmd="$cmd | pnmflip -tb"
-        test "$imgroll" && cmd="$cmd | pnmflip -r180"
-        cmd="$cmd | pnmccdred -a $add $param - -"
-        test "$AI_DEBUG" && echo $cmd >&2
-        eval "$cmd"
-        test -z "$AI_DEBUG" && rm $tmpfits
+        test $ped -ne 0     && param="$param -preadd $ped"
+        test "$scale" != "1" && param="$param -premult $scale"
+        test "$do_flip"     && param="$param -tb"
+        test "$imgroll"     && param="$param -r180"
+        test $add -ne 0     && param="$param -a $add"
+        cmd="pnmccdred2 $param $img $outimg"
+        
+
+        test "$AI_DEBUG" && echo pnmccdred2 $param $img $outimg >&2
+        pnmccdred2 $param $img $outimg
+        test -z "$AI_DEBUG" && rm $tmpfits $tmpcrop
         return
     fi
     
@@ -13525,16 +14182,17 @@ AIraw2gray () {
                     printf("%.1f", zero-$2)}')
             test -z "$oscorr" && echo "WARNING: no overscan value found for $i4" >&2
         fi
+        test "$outimg" == "-" && outimg=/dev/stdout
         test "$AI_DEBUG" && param="$param -v"
         test "$AI_DEBUG" && echo dcraw-tl -c $param -d -l $img >&2
-        test -z "$oscorr" && dcraw-tl -c $param -d -l $img
-        test    "$oscorr" && dcraw-tl -c $param -d -l $img | pnmccdred -a $oscorr - -
-        test -z "$AI_DEBUG" && rm $tmpfits
+        test -z "$oscorr" && dcraw-tl -c $param -d -l $img > $outimg
+        test    "$oscorr" && dcraw-tl -c $param -d -l $img | pnmccdred -a $oscorr - $outimg
+        test -z "$AI_DEBUG" && rm $tmpfits $tmpcrop
         return
     fi
     
     echo "ERROR: input image has unsupported format." >&2
-    test -z "$AI_DEBUG" && rm $tmpfits
+    test -z "$AI_DEBUG" && rm $tmpfits $tmpcrop
     return 255
 }
 
@@ -13557,13 +14215,15 @@ AIraw2rgb () {
     local scale=1           # intensity scaling, only applied on fitsbayer images
     local bayer_pattern     # Bayer matrix pattern (gray FITS)
     local doff=0            # offset of dark counts (FITS only)
+    local do_ccdregion      # if set then crop to AI_CCDREGION
     local do_flip
     local i
-    for i in $(seq 1 7)
+    for i in $(seq 1 8)
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-q" && quality=$2 && shift 2
         test "$1" == "-s" && scale=$2 && shift 2
+        test "$1" == "-c" && do_ccdregion=1 && shift 1
         test "$1" == "-f" && do_flip=1 && shift 1
         test "$1" == "-m" && apply_color_mult=1 && shift 1
         test "$1" == "-b" && bayer_pattern=$2 && shift 2
@@ -13583,12 +14243,13 @@ AIraw2rgb () {
     local scale
     local flippat
     local method
+    local opts
     local tdir=${AI_TMPDIR:-"/tmp"}
     local tmpraw=$(mktemp "$tdir/tmp_gray_XXXXXX.raw")
     local tmptif=$(mktemp "$tdir/tmp_rgb_XXXXXX.tif")
 
     (test "$showhelp" || test $# -lt 1) &&
-        echo "usage: AIraw2rgb [-m] [-q quality|$quality] [-f] [-s scale|$scale]" \
+        echo "usage: AIraw2rgb [-m] [-q quality|$quality] [-f] [-c] [-s scale|$scale]" \
             "[-b bayer_pattern] <img> [dark] [bad] [flat]" >&2 &&
         return 1
 
@@ -13630,12 +14291,10 @@ AIraw2rgb () {
         test    "$oscorr" && dcraw-tl -c $param -o 0 -l $img | pnmccdred -a $oscorr - -
     else
         # flip, scale, dark, flat, debayer
-        if [ "$do_flip" ]
-        then
-            AIraw2gray -f -o $doff -s $scale $img "$dark" "$bad" "$flat" | sed -e '1,3d' > $tmpraw
-        else
-            AIraw2gray -o $doff -s $scale $img "$dark" "$bad" "$flat" | sed -e '1,3d' > $tmpraw
-        fi
+        opts=""
+        test "$do_ccdregion" && opts=$(echo $opts "-c")
+        test "$do_flip" && opts=$(echo $opts "-f")
+        AIraw2gray $opts -o $doff -s $scale $img - "$dark" "$bad" "$flat" | sed -e '1,3d' > $tmpraw
         set - $(imsize $img)
         case $quality in
             0)  method="BILINEAR";;
@@ -13643,7 +14302,12 @@ AIraw2rgb () {
             3)  method="AHD";;
             *)  method="BILINEAR";;
         esac
-        flippat=${bayer_pattern:2:2}${bayer_pattern:0:2}
+        if [ "$do_flip" ]
+        then
+            flippat=${bayer_pattern}
+        else
+            flippat=${bayer_pattern:2:2}${bayer_pattern:0:2}
+        fi
         #echo "# flippat=$flippat method=$method" >&2
         bayer2rgb -f $flippat -m $method -b 16 -s -t -w $1 -v $2 -i $tmpraw -o $tmptif
         convert $tmptif ppm:-
@@ -13694,7 +14358,7 @@ AImedian () {
             if is_raw "$fname"
             then
                 b=$(basename $fname)
-                AIraw2gray "$fname" > $tdir/${b%.*}.pnm
+                AIraw2gray "$fname" $tdir/${b%.*}.pnm
                 dlist="$dlist $tdir/${b%.*}.pnm"
                 ilist="$ilist $tdir/${b%.*}.pnm"
             else
@@ -13705,7 +14369,7 @@ AImedian () {
     test $(echo $ilist | wc -w) -eq 0 &&
         echo "ERROR: no input images" >&2 && return 255
     test "$AI_DEBUG" && echo $ilist
-    pnmcombine $ilist $tmpmean
+    pnmcombine2 $ilist $tmpmean
     mean=$(AImstat -c $tmpmean | awk '{printf("%.1f", $5)
         if(NF>9) printf(",%.1f,%.1f", $9, $13)}')
     echo "# mean=$mean" >&2
@@ -13719,12 +14383,12 @@ AImedian () {
             printf("%f", m[1]/$5)
             if(n>1) printf(",%f,%f", m[2]/$9, m[3]/$13)
             }')
-        pnmccdred -m $mul $img $wdir/$i.norm.pnm
+        pnmccdred2 -m $mul $img $wdir/$i.norm.pnm
         i=$((i+1))
     done
     
     # median image
-    pnmcombine -d $wdir/[0-9]*.norm.pnm $outfile
+    pnmcombine2 -d $wdir/[0-9]*.norm.pnm $outfile
     test "$dlist" && rm $dlist
     
     rm $tmpmean
@@ -13793,9 +14457,9 @@ AIbsplit () {
     then
         if [ "$dark" ]
         then
-            AIraw2gray "$fname" $dark $bad > $tmpim
+            AIraw2gray "$fname" $tmpim $dark $bad
         else
-            AIraw2gray "$fname" ""    $bad > $tmpim
+            AIraw2gray "$fname" $tmpim ""    $bad
         fi
         fname=$tmpim
     fi
@@ -13909,7 +14573,7 @@ AIbnorm () {
         for c in b1 g1 g2 r1
         do
             AIbgmap -q $x.$c.pgm 32 3
-            pnmccdred -a $nval -d $x.$c.bg.pgm $x.$c.pgm $tdir/$x.$c.sub.pgm
+            pnmccdred2 -a $nval -d $x.$c.bg.pgm $x.$c.pgm $tdir/$x.$c.sub.pgm
             rm $x.$c.bg.pgm $x.$c.bgm1.pgm $x.$c.pgm
         done
         (cd $tdir
@@ -13932,6 +14596,164 @@ AIbnorm () {
 #----------------------
 
 AIstat () {
+    # statistics of an image
+    # gray image:  min max mean stddev
+    # rgb image:   Red-min max mean stddev Green-min ... Blue-min
+    local showhelp
+    local do_crop   # center only
+    local do_bayer  # stats in each bayer cell
+    local do_median # apply 3x3 median before statistics
+    local imgtype
+    local verbose
+    local i
+    for i in $(seq 1 9)
+    do
+        (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
+        test "$1" == "-b" && do_bayer=1 && shift 1
+        test "$1" == "-c" && do_crop=1 && shift 1
+        test "$1" == "-m" && do_median=1 && shift 1
+        test "$1" == "-d" && imgtype="d" && shift 1
+        test "$1" == "-f" && imgtype="f" && shift 1
+        test "$1" == "-o" && imgtype="o" && shift 1
+        test "$1" == "-v" && verbose=1 && shift 1
+    done
+    local img
+    local stat
+    local fname
+    local sname
+    local cmd
+    local opts
+    local sdat=${AI_SETS:-"set.dat"}
+    local tdir=${AI_TMPDIR:-"/tmp"}
+    local imlist=$(mktemp "$tdir/tmp_imlist.XXXXXX.dat")
+    local tmpdat=$(mktemp "$tdir/tmp_data.XXXXXX.dat")
+    local tmp1=$(mktemp "$tdir/tmp_img1.XXXXXX")
+    local tmp2=$(mktemp "$tdir/tmp_img2.XXXXXX")
+    local tmpstdin=$(mktemp "$tdir/tmp_stdin.XXXXXX")
+    local str
+    local num
+    local c00
+    local c01
+    local c10
+    local c11
+    local scale=1   # apply intensity scaling (FITS images only)
+    local pyprog
+    
+    (test "$showhelp" || (test -z "$imgtype" && test $# -lt 1) ||
+        (test "$imgtype" && test $# -ge 1)) &&
+        echo "usage: AIstat [-m] [-b] [-c] -d|-f|-o" >&2 &&
+        echo "   or: AIstat [-m] [-b] [-c] <image1|set1> [image2|set2 ...]" >&2 &&
+        return 1
+    
+    # check for required python scripts
+    pyprog=$(which airfun.py)
+    test $? -ne 0 &&
+        echo "ERROR: missing python module airfun.py." >&2 && return 255
+
+    # create image list (fields: sname num fname ...)
+    if [ "$imgtype" ]
+    then
+        AIimlist -q "" "" raw $imgtype > $imlist
+    else
+        for img in "$@"
+        do
+            if [ -e $sdat ] && is_setname $img
+            then
+                AIimlist -q $img 2>/dev/null > $tmpdat
+                if [ -s $tmpdat ]
+                then
+                    cat $tmpdat >> $imlist
+                else
+                    AIimlist -q $img "" raw >> $imlist
+                fi
+            else
+                if [ "$img" == "-" ]
+                then
+                    cat /dev/stdin > $tmpstdin
+                    fname=$tmpstdin
+                else
+                    fname=$(get_imfilename $img)
+                fi
+                test -z "$fname" && continue
+                num="-"
+                str=$(basename ${fname%.*})
+                #is_integer ${str:0:4} && num=${str:0:4}
+                echo "-" $num $fname "- - -" >> $imlist
+            fi
+        done
+    fi
+    
+    test "$do_median" && opts="-m"
+
+    # statistics
+    while read sname num fname x
+    do
+        test "$verbose" && echo "computing stats for $(basename $fname) ..." >&2
+
+        # determine intensity scaling factor to stretch to full 16bit range
+        # this is used in case of FITS images only
+        if [ "$sname" == "-" ]
+        then
+            scale=1
+        else
+            scale=$(get_param camera.dat rawbits $sname | awk '{print 2^(16-$1)}')
+        fi
+        
+        # apply raw conversion and cropping -> $tmp1
+        cmd=""
+        # TODO: apply scaling of FITS to final stats instead of scaling the image
+        test -z "$cmd" && is_pnm "$fname"    && cmd="cat $fname"
+        test -z "$cmd" && is_raw "$fname"    && cmd="AIraw2gray $fname -"
+        test -z "$cmd" && is_fits "$fname"   && cmd="meftopnm $fname | pnmccdred -m $scale - -"
+        test -z "$cmd" && is_fitzip "$fname" && cmd="unzip -p $fname > $tmp2 && meftopnm $tmp2 | pnmccdred -m $scale - -"
+        if [ "$cmd" ]
+        then
+            test "$do_crop" && cmd="$cmd | imcrop"
+            eval $cmd > $tmp1
+        else
+            if [ "$do_crop" ]
+            then
+                imcrop $fname > $tmp1
+            else
+                cp $fname > $tmp1
+            fi
+        fi
+        test $? -ne 0 && return 255
+        
+        # statistics
+        #cmd="cat"
+        if [ "$do_bayer" ]
+        then
+            # old:
+            #c00=$(convert $tmp1 -roll +1+1 -define sample:offset=75 -sample 50% - | \
+            #    convert - -median 3 pnm:- | _imstat)
+            #c01=$(convert $tmp1 -roll +0+1 -define sample:offset=75 -sample 50% - | \
+            #    convert - -median 3 pnm:- | _imstat)
+            #c10=$(convert $tmp1 -roll +1+0 -define sample:offset=75 -sample 50% - | \
+            #    convert - -median 3 pnm:- | _imstat)
+            #c11=$(convert $tmp1 -roll +0+0 -define sample:offset=75 -sample 50% - | \
+            #    convert - -median 3 pnm:- | _imstat)
+            gm convert $tmp1 -roll +0+0 -filter point -resize 50% $tmp2
+            c00=$(python3 $pyprog imstat $opts $tmp2)
+            gm convert $tmp1 -roll +0-1 -filter point -resize 50% $tmp2
+            c10=$(python3 $pyprog imstat $opts $tmp2)
+            gm convert $tmp1 -roll -1+0 -filter point -resize 50% $tmp2
+            c01=$(python3 $pyprog imstat $opts $tmp2)
+            gm convert $tmp1 -roll -1-1 -filter point -resize 50% $tmp2
+            c11=$(python3 $pyprog imstat $opts $tmp2)
+            stat="$c00 $c01 $c10 $c11"
+        else
+            # old:
+            #stat=$(convert $tmp1 -median 3 pnm:- | _imstat)
+            stat=$(python3 $pyprog imstat $opts $tmp1)
+        fi
+        echo "$(basename $fname) $num "$stat
+    done < $imlist
+    rm -f $tmp1 $tmp2 $tmpstdin $imlist $tmpdat
+    return
+}
+
+AIstat_old () {
     # statistics of an image
     # gray image:  min max mean stddev
     # rgb image:   Red-min max mean stddev Green-min ... Blue-min
@@ -14029,7 +14851,7 @@ AIstat () {
         # apply raw conversion and cropping -> $tmp1
         cmd=""
         test -z "$cmd" && is_pnm "$fname"    && cmd="cat $fname"
-        test -z "$cmd" && is_raw "$fname"    && cmd="AIraw2gray $fname"
+        test -z "$cmd" && is_raw "$fname"    && cmd="AIraw2gray $fname -"
         test -z "$cmd" && is_fits "$fname"   && cmd="meftopnm $fname | pnmccdred -m $scale - -"
         test -z "$cmd" && is_fitzip "$fname" && cmd="unzip -p $fname > $tmp2 && meftopnm $tmp2 | pnmccdred -m $scale - -"
         test -z "$cmd" && cmd="cat $fname"
@@ -14071,6 +14893,12 @@ AIstat () {
 AImstat () {
     # median statistics
     AIstat -m $@
+}
+
+
+AImstat_old () {
+    # median statistics
+    AIstat_old -m $@
 }
 
 
@@ -14199,7 +15027,7 @@ AIsfit () {
         retval=$?
         rm $fitdat.1.pgm $fitdat.2.pgm $fitdat.3.pgm
     else
-        cat $fitdat.1.pgm
+        pnmccdred -a 0 $fitdat.1.pgm -
         retval=$?
         rm $fitdat.1.pgm
     fi
@@ -14368,13 +15196,45 @@ bgresmodel () {
 }
 
 
+skygradient () {
+    # remove gradient from sky flat
+    local showhelp
+    local flat=${1/.pgm/}
+    local ref=${2/.pgm/}
+    local tdir=${AI_TMPDIR:-"/tmp"}
+    local fdiv=$(mktemp $tdir/tmp_fdiv_XXXXXX.pgm)
+    local tmpim=$(mktemp $tdir/tmp_im1_XXXXXX.pgm)
+    local outflat
+    
+    (test "$showhelp" || test $# -ne 2) &&
+        echo "usage: skygradient <flat> <ref>" >&2 &&
+        return 1
+    outflat=${flat/sk/sb}.pgm
+    test -f $outflat &&
+        echo "ERROR: overwriting $outflat is not allowed." >&2 && return 255
+    test -d bgcorr || mkdir bgcorr
+
+    AIbnorm $flat.pgm > $AI_TMPDIR/$flat.norm.pgm
+    AIbnorm $ref.pgm > $AI_TMPDIR/$ref.norm.pgm
+    pnmccdred2 -m 10000 -s $AI_TMPDIR/$ref.norm.pgm $AI_TMPDIR/$flat.norm.pgm $fdiv
+    (cd $tdir; AIbgmap -p -d -m -x 75 -q $fdiv 64 1 "" 1)
+    size=$(imsize $flat.pgm)
+    mv ${fdiv/.pgm/.bgm1n.pgm} bgcorr/$flat.bgm1n.pgm
+    gm convert bgcorr/$flat.bgm1n.pgm -resize ${size/ /x}\! $tmpim
+    pnmccdred2 -m 10000 -s $tmpim $flat.pgm ${flat/sk/sb}.pgm
+    rm -f ${fdiv/.pgm/}* $tmpim
+    echo "# $outflat created" >&2
+    return 0
+}
+
+
 AIval () {
     # get intensities for given pixels
     # old syntax: AIval [img] [refpix] [size] used by AIoverscan, AInoise
     local showcoords    # if set show image coordinates
     local showhelp
     local do_allpixels  # if set then all image pixel are printed
-    local matchval=-1
+    local matchval=-1   # if >=0 then print pixel matching matchval
     local minval        # if set then print pixel with value >= minval
     local maxval        # if set then print pixel with value <= maxval
     for i in $(seq 1 7)
@@ -14450,15 +15310,20 @@ AIval () {
     fi
     test "$AI_DEBUG" && echo "$cmd" >&2
 
+    # set minval, maxval if required
     test -z "$minval" && minval=0
     test -z "$maxval" && maxval=65536
+        
     eval "$cmd" | pnmnoraw - | \
     awk -v sc=$sc -v cw=$cw -v ch=$ch -v cx=$cx -v cy=$cy \
         -v m=$matchval -v min=$minval -v max=$maxval 'BEGIN{
         row=1; col=1; pnmmaxval=1
     }{
         if (NR==1) {
-            if ($0=="P1") {type=1; skip=2}
+            if ($0=="P1") {type=1; skip=2
+                    # note: 0/1 represent white/black
+                    if (m>=0) m=1-m
+                }
             if ($0=="P2") {type=2; skip=3}
             if ($0=="P3") {type=3; skip=3}
         }
@@ -14479,10 +15344,12 @@ AIval () {
             }
             for(i=1;i<=np;i++) {
                 if (sc==0) {
-                    if ((m<0 && 1*p[i]>=min && 1*p[i]<=max) || 1*p[i]==m*pnmmaxval)
+                    if ((m<0  && 1*p[i]>=min && 1*p[i]<=max) ||
+                        (m>=0 && 1*p[i]==m*pnmmaxval))
                         printf("%s\n", p[i])
                 } else {
-                    if ((m<0 && 1*p[i]>=min && 1*p[i]<=max) || 1*p[i]==m*pnmmaxval)
+                    if ((m<0  && 1*p[i]>=min && 1*p[i]<=max) ||
+                        (m>=0 && 1*p[i]==m*pnmmaxval))
                         printf("%d %d %s\n", cx+col-1, cy+row-1, p[i])
                     col++
                 }
@@ -14765,7 +15632,6 @@ AIimlist () {
                 continue
             if [ "$use_rdat" ]
             then
-                #f="$inpath/$(grep -w "^$num" $rdat | awk '{printf("%s", $2)}')"
                 f=$(get_rawfile $num 2>/dev/null | lines 1)
             else
                 f="$inpath/$num$insuffix.$ext"
@@ -15010,7 +15876,6 @@ AIexamine () {
                     xcmd="$xcmd; xpaset -p $ds9name fits $newframe $tfits"
                     test -z "$firstimage" && firstimage=$infile
                     lastimage=$infile
-
                     echo "$ftype $infile $tfits $hdr" >> $tmpconv
                     nimg=$((nimg + 1));;
             *)      echo "WARNING: ignoring $infile, unsupported filetype $ftype." >&2
@@ -15038,13 +15903,15 @@ EOF
         local hdr=$4
         local tmp1=$(mktemp "$tdir/tmp_wcs_XXXXXX.head")
         
+        #echo "# $1 $2 $3 $4" >&2
         case $ftype in
-            PPM|PGM) ppm2gray -q -f $infile $hdr > $tfits;;
-            RAW) AIraw2rgb -q 0 $infile | ppm2gray -q -f - $hdr > $tfits;;
-            *)	 gm convert $infile pgm:- | ppm2gray -q -f - $hdr > $tfits;;
+            PPM|PGM)    ppm2gray -q -f $infile $hdr > $tfits;;
+            RAW)        AIraw2rgb -q 0 $infile | ppm2gray -q -f - $hdr > $tfits;;
+            PNG|JPEG)	gm convert $infile pgm:- | ppm2gray -q -f - $hdr > $tfits;;
+            *)	        ppm2gray -q -f $infile $hdr > $tfits;;
         esac
         test "$hdr" && delwcs $tfits
-        sethead $tfits AI_IMAGE=$infile
+        sethead $tfits AI_IMAGE="$infile"
         if [ "$wcshead" ]
         then
             cat "$wcshead" | grep -Ev "^SIMPLE|^BITPIX|^NAXIS" > $tmp1
@@ -15877,8 +16744,9 @@ AIfpreview () {
         test "$1" == "-d" && dark=$2 && shift 2
         test "$1" == "-f" && flat=$2 && shift 2
     done
-    local slist=$@  # list of set names or image numbers (space sep.)
+    local slist=$@  # list of set names or image numbers (space sep.) or file names
     local nlist
+    local flist
     local s
     local n
     local f
@@ -15888,6 +16756,8 @@ AIfpreview () {
     local xlist
     local tdir=${AI_TMPDIR:-"/tmp"}
     local wdir=$(mktemp -d $tdir/tmp_fpreview_$$.XXXXXX)
+    local timlist=$(mktemp $tdir/tmp_imlist_XXXXXX.dat)
+    local tfits=$(mktemp $tdir/tmp_tfits_XXXXXX.fits)
 
     (test "$showhelp" || test $# -lt 1) &&
         echo "usage: AIfpreview [-c] [-d darkvalue] [-f flatimg] <set|numlist>" >&2 &&
@@ -15899,33 +16769,59 @@ AIfpreview () {
     test -f set.dat && for s in $slist
     do
         is_setname $s || continue
-        nlist="$nlist $(AIimlist -n $s "" raw)"
-    done
-    test -z "$nlist" &&
-        nlist=$(mknlist $slist | while read
+        AIimlist $s "" raw | awk '{printf("%s %s\n", $2, $3)}'
+    done > $timlist
+    if [ ! -s $timlist ]
+    then
+        f=$(echo $slist | cut -d ' ' -f1)
+        if [ -s  $(echo $slist | cut -d ' ' -f1) ]
+        then
+            n=0
+            for f in $slist
             do
-                get_rawfile $REPLY 2>/dev/null >&2 && echo $REPLY
-            done)
-    nimg=$(echo $nlist | wc -w)
+                test ! -s $f && continue
+                n=$((n+1))
+                printf "%04d $f\n" $n
+            done > $timlist
+        else
+            nlist=$(mknlist $slist)
+            for n in $nlist
+            do
+                f=$(get_rawfile $n 2>/dev/null)
+                test -z "$f" && continue
+                echo $n $f
+            done > $timlist
+        fi
+    fi
+    nimg=$(cat $timlist | wc -l)
     test $nimg -eq 0 && echo "ERROR: no raw images found." >&2 && return 255
     
     if [ "$mode" == "green" ]
     then
         echo "# extracting green channel from $nimg FITS images ..." >&2
-        for n in $nlist
+        while read n f
         do
-            f=$(get_rawfile $n)
+            is_fitzip $f && unzip -p $f > $tfits && f=$tfits
             set - $(imsize $f)
             w=$1
             h=$2
             # extract green channel
             fitscopy $f"[1:$w:2,2:$h:2]" $wdir/$n.fits  # upper left
             #fitscopy $f"[2:$w:2,1:$h:2]" $tdir/g21.fits    # lower right
-        done
+        done < $timlist
         echo "# loading $nimg images ..."
         AIexamine -n preview $wdir/[0-9]???.fits
     else
-        # simpleccd reduction
+        # simple ccd reduction
+        test -z "$nlist" &&
+            echo "ERROR: simple ccd reduction not supported if input is raw images." >&2 &&
+            return 255
+        test -z "$flat" &&
+            echo "ERROR: missing flat" >&2 &&
+            return 255
+        ! test -f "$flat" &&
+            echo "ERROR: flat $flat not found" >&2 &&
+            return 255
         echo "# simple ccd reduction of $nimg FITS images ..." >&2
         range=$(echo $nlist | tr ' ' '\n' | minmax -)
         xlist=$(for num in $(mknlist ${range/ /-}); do
@@ -15943,7 +16839,7 @@ AIfpreview () {
         echo "# loading $nimg images ..."
         AIexamine -n preview $wdir/[0-9]???.ppm
     fi
-    rm -rf $wdir
+    rm -rf $wdir $timlist $tfits
     return
 }
 
@@ -16337,6 +17233,7 @@ starcombine () {
     local tdir=${AI_TMPDIR:-"/tmp"}
     local conf=$(mktemp "$tdir/tmp_swarp.XXXXXX.conf")
     local wdir=$(mktemp -d "$tdir/tmp_combine_XXXXXX")
+    local ext="ppm"
     local clist="red grn blu"
     local psfrgb
     local psfadd
@@ -16347,6 +17244,7 @@ starcombine () {
     local param
     local xbgval
     local f
+    local retval
     
     (test "$showhelp" || test $# -lt 3) &&
         echo "usage: starcombine [-f fwhm|$fwhm] [-b imgbg|$inbg] [-o outbg|$outbg] [-m psfmult|$psfmult] [-r resamptype]" \
@@ -16354,7 +17252,7 @@ starcombine () {
         return 1
 
     # determine colors
-    ls $imgdir/*.gray.fits 2>/dev/null > /dev/null && clist="gray"
+    ls $imgdir/*.gray.fits 2>/dev/null > /dev/null && ext="pgm" && clist="gray"
     
     # average sub-images using different pscale
     pscale=$(echo 1 $scale | awk '{printf("%f", $1/$2)}')
@@ -16424,26 +17322,33 @@ starcombine () {
         else
             imarith coadd.fits $add add - > $wdir/$c.fits
         fi
-        mv $wdir/$c.fits coadd.fits
+        rm -f coadd.fits coadd.weight.fits swarp.xml
         
         #cp coadd.fits x.psf.$c.fits
-        meftopnm coadd.fits > $wdir/$c.pgm
+        #meftopnm coadd.fits > $wdir/$c.pgm
     done
+    
     test "$xbgval" && echo "# xbgval=$xbgval" >&2
     test "$AI_DEBUG" && echo "# psfadd=$psfadd" >&2
-    rm coadd.fits coadd.weight.fits swarp.xml
-    if is_pgm $img
+
+    if [ "$ext" == "pgm" ]
     then
-        mv $wdir/$clist.pgm $outpsf
+        meftopnm $wdir/gray.fits > $outpsf
+        retval=$?
     else
-        rgb3toppm $wdir/red.pgm $wdir/grn.pgm $wdir/blu.pgm > $outpsf
+        fits3toppm $wdir/red.fits $wdir/grn.fits $wdir/blu.fits $outpsf
+        retval=$?
     fi
     
     # clean-up
     rm -f $conf
-    #echo $wdir >&2
-    test "$AI_DEBUG" || rm -rf $tmpsh $wdir
-    return
+    if [ $retval -eq 0 ] && [ -z "$AI_DEBUG" ]
+    then
+        rm -rf $wdir
+    else
+        echo $wdir >&2
+    fi
+    return $retval
 }
 
 
@@ -16670,9 +17575,9 @@ AIskygen () {
     local tmppsf=$(mktemp "$tdir/tmp_psf_XXXXXX.fits")
     local tmpfits1=$(mktemp "$tdir/tmp_im1_XXXXXX.fits")
     local tmpfits2=$(mktemp "$tdir/tmp_im2_XXXXXX.fits")
-    local tmpr=$(mktemp "$tdir/tmp_r_XXXXXX.img")
-    local tmpg=$(mktemp "$tdir/tmp_g_XXXXXX.img")
-    local tmpb=$(mktemp "$tdir/tmp_b_XXXXXX.img")
+    local tmpr=$(mktemp "$tdir/tmp_r_XXXXXX.fits")
+    local tmpg=$(mktemp "$tdir/tmp_g_XXXXXX.fits")
+    local tmpb=$(mktemp "$tdir/tmp_b_XXXXXX.fits")
     local conf=$(mktemp "$tdir/tmp_sky_XXXXXX.conf")
     local ext
     local ncol
@@ -16701,6 +17606,7 @@ AIskygen () {
         outfile=$(basename ${photcat%.dat}.$ext)
         test "$do_fits" && outfile=$(basename ${photcat%.dat}.fits)
     fi
+    test "$do_fits" && echo "ERROR: not implemented yet." >&2
 
     pw=$(identify $psf | cut -d " " -f3 | cut -d "x" -f1)
     ph=$(identify $psf | cut -d " " -f3 | cut -d "x" -f2)
@@ -16740,25 +17646,22 @@ AIskygen () {
             echo "ERROR: command sky ... has failed." >&2 && return 255
         rm ${tmpfits2%.fits}.list
         
-        if [ "$do_fits" ]
-        then
-            test $c -eq 1 && mv $tmpfits2 $tmpr
-            test $c -eq 2 && mv $tmpfits2 $tmpg
-            test $c -eq 3 && mv $tmpfits2 $tmpb
-        else
-            sethead $tmpfits2 datamin=0 datamax=65535
-            test $c -eq 1 && meftopnm $tmpfits2 > $tmpr
-            test $c -eq 2 && meftopnm $tmpfits2 > $tmpg
-            test $c -eq 3 && meftopnm $tmpfits2 > $tmpb
-        fi
+        sethead $tmpfits2 datamin=0 datamax=65535
+        test $c -eq 1 && mv $tmpfits2 $tmpr
+        test $c -eq 2 && mv $tmpfits2 $tmpg
+        test $c -eq 3 && mv $tmpfits2 $tmpb
     done
     
-    # combine color channels
-    test $ncol -eq 1 && mv $tmpr $outfile
-    test $ncol -eq 3 && test "$do_fits" && echo "ERROR: not implemented yet." >&2
-    test $ncol -eq 3 && test ! "$do_fits" &&
-        rgb3toppm $tmpr $tmpg $tmpb > $outfile
-
+    # combine color channels    
+    if [ $ncol -eq 1 ]
+    then
+        meftopnm $tmpr > $outfile
+    else
+        fits3toppm $tmpr $tmpg $tmpb $outfile
+    fi
+    #echo $tmpr $tmpg $tmpb >&2
+    #return
+    
     rm -f $conf $tmppsf $tmpdat $tmppsf $tmpfits1 $tmpfits2 $tmpr $tmpg $tmpb
     return
 }
@@ -16850,8 +17753,8 @@ AIdark () {
         flip=$(get_param camera.dat flip $sname | awk '{if ($1=="1") print 1}')
         
         # options for raw image conversion
-        opts=""
-        test "$scale" && opts="-s $scale"
+        opts="-c"   # apply AI_CCDREGION
+        test "$scale" && opts=$(echo $opts "-s $scale")
         test "$flip"  && opts=$(echo $opts "-f")
 
         test "$mode" == "avmedian" && test $n -lt 6 && mode="median" &&
@@ -16865,10 +17768,10 @@ AIdark () {
                     i=$(($i+1)); ilist="$ilist $tdir/$num.pgm"
                     (test ! -f $tdir/$num.pgm || test -s $tdir/$num.pgm) &&
                         AI_DCRAWPARAM="$dcrawopts $AI_DCRAWPARAM" \
-                        AIraw2gray $opts $fname > $tdir/$num.pgm
+                        AIraw2gray $opts $fname $tdir/$num.pgm
                     test "$rowsub" && impatsub $tdir/$num.pgm
                 done < $imlist
-                pnmcombine $ilist $sname.pgm
+                pnmcombine2 $ilist $sname.pgm
                 ;;
             median)
                 while read x num fname x
@@ -16877,10 +17780,10 @@ AIdark () {
                     i=$(($i+1)); ilist="$ilist $tdir/$num.pgm"
                     (test ! -f $tdir/$num.pgm || test -s $tdir/$num.pgm) &&
                         AI_DCRAWPARAM="$dcrawopts $AI_DCRAWPARAM" \
-                        AIraw2gray $opts $fname > $tdir/$num.pgm
+                        AIraw2gray $opts $fname $tdir/$num.pgm
                     test "$rowsub" && impatsub $tdir/$num.pgm
                 done < $imlist
-                pnmcombine -d $ilist $sname.pgm
+                pnmcombine2 -d $ilist $sname.pgm
                 ;;
             avmedian)
                 # median in groups of 3+ images
@@ -16894,23 +17797,23 @@ AIdark () {
                     i=$(($i+1)); ilist="$ilist $tdir/$num.pgm"
                     (test ! -f $tdir/$num.pgm || test ! -s $tdir/$num.pgm) &&
                         AI_DCRAWPARAM="$dcrawopts $AI_DCRAWPARAM" \
-                        AIraw2gray $opts $fname > $tdir/$num.pgm
+                        AIraw2gray $opts $fname $tdir/$num.pgm
                     test "$rowsub" && impatsub $tdir/$num.pgm
                     test $ig -lt $ng && test $(($i %3)) -eq 0 &&
                         ig2=$(printf "%02d" $ig) &&
                         echo "median in group $ig -> $tdir/$sname.m$ig2.pgm" &&
-                        pnmcombine -d $ilist $tdir/$sname.m$ig2.pgm &&
+                        pnmcombine2 -d $ilist $tdir/$sname.m$ig2.pgm &&
                         ig=$(($ig+1)) && ilist=""
                     test $ig -eq $ng && test $i -eq $n &&
                         ig2=$(printf "%02d" $ig) &&
                         echo "median in group $ig -> $tdir/$sname.m$ig2.pgm" &&
-                        pnmcombine -d $ilist $tdir/$sname.m$ig2.pgm &&
+                        pnmcombine2 -d $ilist $tdir/$sname.m$ig2.pgm &&
                         ilist=""
                 done < $imlist
         
                 # average over medians
                 echo "average median images ..."
-                pnmcombine $tdir/$sname.m[0-9][0-9].pgm $sname.pgm
+                pnmcombine2 $tdir/$sname.m[0-9][0-9].pgm $sname.pgm
                 ;;
         esac
         
@@ -16953,6 +17856,8 @@ AIflat () {
     local imlist=$(mktemp "$tdir/tmp_imlist_XXXXXX.dat")
     local statfile=$(mktemp "$tdir/tmp_imstat_XXXXXX.dat")
     local tmpim=$(mktemp "$tdir/tmp_im1_XXXXXX.pnm")
+    #### TL: next line workaround libvips error reading stdin only
+    local tmpim2=$(mktemp "$tdir/tmp_im1_XXXXXX.pnm")
     local tmpdark=$(mktemp "$tdir/tmp_dark_XXXXXX.pgm")
     local tmpmean=$(mktemp "$tdir/tmp_mean_XXXXXX.pnm")
     local mask=$(mktemp "$tdir/tmp_mask_XXXXXX.pbm")
@@ -17024,9 +17929,12 @@ AIflat () {
 
         AIimlist $sname "" raw > $imlist
         n=$(cat $imlist | wc -l)
-        test ! "$do_simple" && test $n -lt 6 &&
-            echo "ERROR: set $sname has too few images ($n < 6)." &&
+        test $n -lt 3 &&
+            echo "ERROR: set $sname has too few images ($n < 3)." &&
             rm $imlist && skipset=1 && continue
+        test ! "$do_simple" && test $n -lt 6 &&
+            echo "WARNING: set $sname has few images ($n < 6), using single group only." &&
+            do_simple=1
         
         ext="ppm"
         fname=$(head -1 $imlist | awk '{print $3}')
@@ -17037,11 +17945,11 @@ AIflat () {
             echo "WARNING: $sname.$ext exists, skipping set $sname." >&2 && continue
         
 
-        # check if images of this set are captured by gacam
+        # if necessary apply ccdregion
         dcrawopts=""
-        if is_gacam_raw "$fname" && test "$ccdregion"
+        if [ "$ccdregion" ]
         then
-            dcrawopts="-R $ccdregion"
+            is_gacam_raw "$fname" && dcrawopts="-R $ccdregion"
             w=$(echo $ccdregion | cut -d ' ' -f1)
             h=$(echo $ccdregion | cut -d ' ' -f2)
         else
@@ -17051,10 +17959,17 @@ AIflat () {
         fi
         
         # crop dark image if necessary
-        if [ $(imsize $dark.pgm | cut -d ' ' -f2) -gt $h ]
+        if [ "$(imsize $dark.pgm)" != "$w $h" ]
         then
-            echo "# croping $dark.pgm to $w $h"
-            imcrop -1 $dark.pgm $w $h 0 0 > $tmpdark
+            if [ "$ccdregion" ]
+            then
+                echo "# croping $dark.pgm to ccdregion"
+                # TODO: if flip then we need to flip ccdregion as well
+                imcrop -1 $dark.pgm $ccdregion > $tmpdark
+            else
+                echo "# croping $dark.pgm to $w $h"
+                imcrop -1 $dark.pgm $w $h 0 0 > $tmpdark
+            fi
         else
             cp $dark.pgm $tmpdark
         fi
@@ -17073,8 +17988,8 @@ AIflat () {
         flip=$(get_param camera.dat flip $sname | awk '{if ($1=="1") print 1}')
         
         # options for raw image conversion
-        opts=""
-        test "$scale" && opts="-s $scale"
+        opts="-c"   # apply AI_CCDREGION
+        test "$scale" && opts=$(echo $opts "-s $scale")
         test "$flip"  && opts=$(echo $opts "-f")
 
         echo "processing $n flats in set $sname ..."
@@ -17102,7 +18017,7 @@ EOF
             if [ "$ext" == "pgm" ]
             then
                 AI_DCRAWPARAM="$AI_DCRAWPARAM $dcrawopts" \
-                AIraw2gray $opts $fname $tmpdark $bad > $tdir/$num.$ext
+                AIraw2gray $opts $fname $tdir/$num.$ext $tmpdark $bad
             else
                 AI_DCRAWPARAM="$AI_DCRAWPARAM $dcrawopts" \
                 AIraw2rgb  $opts $fname $tmpdark $bad > $tdir/$num.$ext
@@ -17176,8 +18091,9 @@ EOF
                             printf("%.0f %.0f %.0f %.0f\n",
                                 l*$5/$1, l*$6/$2, l*$7/$3, l*$8/$4)}')
                         echo $f $xx
-                        echo -e "P2\n2 2\n65535\n$xx" | pnmtile $w $h - | \
-                            pnmccdred -m 20000 -s - $tdir/$f $tmpim &&
+                        #### TODO: next line is using tmpim2 as a workaround for libvips error
+                        echo -e "P2\n2 2\n65535\n$xx" | pnmtile $w $h > $tmpim2
+                            pnmccdred2 -m 20000 -s $tmpim2 $tdir/$f $tmpim &&
                             mv $tmpim $tdir/$f
                     done < $statfile
                 else
@@ -17186,7 +18102,7 @@ EOF
                         while read f x   x x a x
                         do
                             xx=$(echo "scale=4; $mxx/$a" | bc)
-                            pnmccdred -m $xx $tdir/$f $tmpim &&
+                            pnmccdred2 -m $xx $tdir/$f $tmpim &&
                                 mv $tmpim $tdir/$f
                         done < $statfile
                     else
@@ -17196,7 +18112,7 @@ EOF
                             mulG=$(echo "scale=4; $mg/$g" | bc)
                             mulB=$(echo "scale=4; $mb/$b" | bc)
                             echo "  normalize $f: $mulR,$mulG,$mulB"
-                            pnmccdred -m $mulR,$mulG,$mulB $tdir/$f $tmpim &&
+                            pnmccdred2 -m $mulR,$mulG,$mulB $tdir/$f $tmpim &&
                                 mv $tmpim $tdir/$f
                         done < $statfile
                     fi
@@ -17207,12 +18123,12 @@ EOF
                 if [ $n -gt 2 ]
                 then
 	                echo "median odd images in group $ig -> $tdir/$sname.m$im2.$ext"
-                	pnmcombine -d $iolist $tdir/$sname.m$im2.$ext
+                	pnmcombine2 -d $iolist $tdir/$sname.m$im2.$ext
                 else
                 	if [ $n -eq 2 ]
                 	then
 		                echo "mean from odd images in group $ig -> $tdir/$sname.m$im2.$ext"
-                		pnmcombine $iolist $tdir/$sname.m$im2.$ext
+                		pnmcombine2 $iolist $tdir/$sname.m$im2.$ext
                 	else
                 		cp $iolist $tdir/$sname.m$im2.$ext
                 	fi
@@ -17223,7 +18139,7 @@ EOF
                 then
                     im2=$(printf "%02d" $im)
                     echo "median even images in group $ig -> $tdir/$sname.m$im2.$ext"
-                    pnmcombine -d $ielist $tdir/$sname.m$im2.$ext
+                    pnmcombine2 -d $ielist $tdir/$sname.m$im2.$ext
                     im=$(($im + 1))
                 fi
                 ig=$(($ig+1))
@@ -17237,7 +18153,7 @@ EOF
             mv $tdir/$sname.m01.$ext $sname.$ext
         else
             echo "average median images ..."
-            pnmcombine $tdir/$sname.m[0-9][0-9].$ext $sname.$ext
+            pnmcombine2 $tdir/$sname.m[0-9][0-9].$ext $sname.$ext
         fi
         
         # interpolation of bad pixels
@@ -17268,6 +18184,7 @@ EOF
         done < $imlist
     done < $sdat
     rm -f $imlist $statfile $tmpim $tmpdark $tmpmean $mask $tmpsh
+    rm -f $tmpim2
     test "$skipset" && return 255
     return 0
 }
@@ -17333,6 +18250,7 @@ AIccd () {
     local mdk
     local dcrawopts
     local bytesperpix
+    local opts
     local mxx
     local mrgb
     local size
@@ -17342,6 +18260,8 @@ AIccd () {
     local lastdark
     local lastflat
     local ccdopts
+    local str
+    local npp
     local popts
     local retval=0
     local tmpsh=$(mktemp "/tmp/tmp_script_XXXXXX.sh")
@@ -17372,7 +18292,7 @@ AIccd () {
         flip=$(get_param camera.dat flip $sname | awk '{if ($1=="1") print 1}')
         
         # get bayer matrix pattern from column ctype in camera.dat
-        bayerpattern=$(get_param camera.dat ctype $sname | grep -vwE "CCD|DSLR")
+        bayerpattern=$(get_param camera.dat ctype $sname | grep -vwE "CCD|CMOS|DSLR")
         
         # determine extension of output images
         ext=ppm
@@ -17409,9 +18329,9 @@ AIccd () {
         
         # determine size of output images of this set
         ccdopts=""
-        if is_gacam_raw "$fname" && test "$ccdregion"
+        if [ "$ccdregion" ]
         then
-            ccdopts="-R $ccdregion" # passed over to dcraw
+            is_gacam_raw "$fname" && ccdopts="-R $ccdregion" # passed over to dcraw
             w=$(echo $ccdregion | cut -d ' ' -f1)
             h=$(echo $ccdregion | cut -d ' ' -f2)
         else
@@ -17459,10 +18379,17 @@ AIccd () {
             darkcrop=$tdir/$dark.crop.pgm
             if [ ! -s  "$darkcrop" ] || [ "$(imsize $darkcrop)" != "$w $h" ]
             then
-                if [ $(imsize $dark.pgm | cut -d ' ' -f2) -gt $h ]
+                if [ "$(imsize $dark.pgm)" != "$w $h" ]
                 then
-                    echo "# croping $dark.pgm to $w $h" >&2
-                    imcrop -1 $dark.pgm $w $h 0 0 > $darkcrop
+                    if [ "$ccdregion" ]
+                    then
+                        echo "# croping $dark.pgm to ccdregion" >&2
+                        # TODO: if flip then we need to flip ccdregion as well
+                        imcrop -1 $dark.pgm $ccdregion > $darkcrop
+                    else
+                        echo "# croping $dark.pgm to $w $h" >&2
+                        imcrop -1 $dark.pgm $w $h 0 0 > $darkcrop
+                    fi
                 else
                     cp $dark.pgm $darkcrop
                 fi
@@ -17480,10 +18407,17 @@ AIccd () {
             test -f $flat.ppm && fext=ppm && flatcrop=$tdir/$flat.crop.ppm
             if [ ! -e  "$flatcrop" ]
             then
-                if [ $(imsize $flat.$fext | cut -d ' ' -f2) -gt $h ]
+                if [ "$(imsize $flat.$fext)" != "$w $h" ]
                 then
-                    echo "# croping $flat.$fext to $w $h" >&2
-                    imcrop -1 $flat.$fext $w $h 0 0 > $tmpim
+                    if [ "$ccdregion" ]
+                    then
+                        echo "# croping $flat.$fext to ccdregion" >&2
+                        # TODO: if flip then we need to flip ccdregion as well
+                        imcrop -1 $flat.$fext $ccdregion > $tmpim
+                    else
+                        echo "# croping $flat.$fext to $w $h" >&2
+                        imcrop -1 $flat.$fext $w $h 0 0 > $tmpim
+                    fi
                 else
                     cp $flat.$fext $tmpim
                 fi
@@ -17524,10 +18458,10 @@ AIccd () {
         echo "processing $(cat $imlist2 | wc -l) images in set $sname ..."
         
         # ccd reduction
-        opts=""
-        test "$scale" && opts="-s $scale"
-        test "$doff"  && opts=$(echo $opts "-o $doff")
+        opts="-c"   # apply AI_CCDREGION
+        test "$scale" && opts=$(echo $opts "-s $scale")
         test "$flip"  && opts=$(echo $opts "-f")
+        test "$doff"  && opts=$(echo $opts "-o $doff")
         test -z "$do_bayer" && test "$bayerpattern" &&
             opts=$(echo $opts "-b $bayerpattern")
 
@@ -17565,9 +18499,9 @@ EOF
             if [ "$do_bayer" ] || [ "$ext" == "pgm" ] || (is_fits $fname && test -z "$bayerpattern")
             then
                 test "$AI_DEBUG" && echo "AI_DCRAWPARAM=\"$AI_DCRAWPARAM $dcrawopts\" \
-                    AIraw2gray $opts -a $add $fname \"$dark\" \"$bad\" \"$flat\" > $tdir/$num.$ext"
+                    AIraw2gray $opts -a $add $fname $tdir/$num.$ext \"$dark\" \"$bad\" \"$flat\""
                 AI_DCRAWPARAM="$AI_DCRAWPARAM $dcrawopts" \
-                AIraw2gray $opts -a $add $fname "$dark" "$bad" "$flat" > $tdir/$num.$ext
+                AIraw2gray $opts -a $add $fname $tdir/$num.$ext "$dark" "$bad" "$flat"
                 retval=$?
             fi
             (test "$do_bayer" || test "$ext" == "pgm" || (is_fits $fname && test -z "$bayerpattern")) &&
@@ -17593,11 +18527,34 @@ EOF
             return $retval
 		}
 
-        export -f _aiccd_parallel
-        popts=""; test "$AI_MAXPROCS" && popts="-P $AI_MAXPROCS"
-        cat $imlist2 | parallel $popts -k $tmpsh
-        unset -f _aiccd_parallel
-		# TODO: error handling
+        if [ "$AI_NOPARALLEL" ]
+        then
+            echo "# WARNING: GNU parallel is disabled" >&2
+            i=0;
+            npp=${AI_MAXPROCS}
+            test -z "$npp" && npp=$(grep "^processor" /proc/cpuinfo | wc -l)
+            while read
+            do
+                i=$((i+1))
+                _aiccd_parallel $REPLY &
+                eval BGPID$i=$!
+                if [ $i -eq $npp ] || [ "$REPLY" == "$(tail -1 $imlist2)" ]
+                then
+                    npp=$i
+                    str=$(for i in $(seq 1 $npp); do echo $[BGPID$i]; done)
+                    echo "waiting for bg jobs" $str "..." >&2
+                    i=0
+                    wait $str
+                fi
+            done < $imlist2
+        else
+            export -f _aiccd_parallel
+            popts=""; test "$AI_MAXPROCS" && popts="-P $AI_MAXPROCS"
+            #cat $imlist2 | parallel $popts -k $tmpsh
+            cat $imlist2 | parallel $popts $tmpsh
+    		# TODO: error handling
+            unset -f _aiccd_parallel
+        fi
 
     done < $sdat
     test "$AI_DEBUG"    && echo $imlist $imlist2 $tmpim $tmpsh >&2
@@ -18587,7 +19544,8 @@ EOF
             echo "" > $tmp1
             xymatch $xydat $xyref 2 $sx $sy $da $w $h | grep -v "^#" | \
                 (head -250; dd of=/dev/null status=none) > $tmp1
-            nmag=$(cat $tmp1 | wc -l | awk '{printf("%d", $1*0.6)}')
+            nmag=$(cat $tmp1 | wc -l | awk '{x=$1; if($1>12) x=0.9*$1; if($1>25) x=0.8*$1+6;
+                if($1>40) x=0.7*$1; if($1>70) x=0.6*$1; printf("%.0f", x)}')
             cat $tmp1 | while read id x x x x x x x idref
             do
                 mref=$(grep "^[ ]*$idref " $xyref | awk '{print $7}')
@@ -18595,7 +19553,7 @@ EOF
                 dm=$(grep "^[ ]*$id " $xydat | awk -v mref=$mref '{printf("%.2f", mref-$7)}')
                 printf "%6s %6s  %5.2f  %5.2f\n" $idref $id $mm $dm
             done | sort -n -k3,3 | (head -$nmag; dd of=/dev/null status=none) > $tmp2
-            if [ $nmag -lt 5 ]
+            if [ $nmag -lt 3 ]
             then
                 dm=-2
                 dmsd=99
@@ -18640,13 +19598,15 @@ AIfwhm () {
     local outfile=x.fwhm.png    # output PNG file
     local range     # plot range of fwhm, either low:high or dfwhm or "full"
     local nodisplay # do not display result
+    local boxsize   # limit to center box of given size width:high
     local i
-    for i in 1 2 3 4
+    for i in 1 2 3 4 5
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-r" && range="$2" && shift 2
         test "$1" == "-o" && outfile="$2" && shift 2
         test "$1" == "-n" && nodisplay=1 && shift 1
+        test "$1" == "-b" && boxsize="$2" && shift 2
     done
     local set=$1    # image set or sextractor catalog or image
     local src
@@ -18654,6 +19614,8 @@ AIfwhm () {
     local w
     local h
     local x
+    local xrange
+    local yrange
     local opts
     local retval
     local tdir=${AI_TMPDIR:-"/tmp"}
@@ -18663,7 +19625,7 @@ AIfwhm () {
     local tmpfit=$(mktemp "$tdir/tmp_fit_$$.XXXXXX.dat")
 
     (test "$showhelp" || test $# -ne 1) &&
-        echo "usage: AIfwhm [-o outfile|$outfile] [-r low:high | -r dfwhm] <set|srcdat>" >&2 && return 1
+        echo "usage: AIfwhm [-o outfile|$outfile] [-b w:h] [-r low:high | -r dfwhm] <set|srcdat>" >&2 && return 1
 
     if [ -s $set ]
     then
@@ -18703,6 +19665,16 @@ AIfwhm () {
         grep -A 100000 "EXTNAME .*LDAC_IMHEAD" | \
         grep NAXIS2 | (lines 1; dd of=/dev/null status=none) | awk '{print $3}')
 
+    # x,y data range
+    xrange="0:$w"
+    yrange="0:$h"
+    if [ "$boxsize" ]
+    then
+        xrange=$(echo $w $h ${boxsize/:/ } | awk '{l=int(($1-$3)/2); h=l+$3; print l":"h}')
+        yrange=$(echo $w $h ${boxsize/:/ } | awk '{l=int(($2-$4)/2); h=l+$4; print l":"h}')
+        echo "# $xrange,$yrange" >&2
+    fi
+    
     # identify bright sources (FITS coordinates)
     sexselect $src "" "" "" "" "NUMBER,X*,Y*,A*,FWHM_IMAGE,MAG_AUTO,MAGERR_AUTO,FLAGS" 0 | \
         sort -n -k6,6 | grep -v "^#" | lines 500 > $tmp1
@@ -18721,7 +19693,7 @@ AIfwhm () {
     retval=$?
     if [ $retval -eq 0 ]
     then
-        opts="-b 0:$w,0:$h"
+        opts="-b $xrange,$yrange"
         if [ -z "$range" ]
         then
             # clip fit data to levels 2%, 85% and add some margins
@@ -18971,6 +19943,7 @@ AIbgdiff () {
     local imlist2=$(mktemp "$tdir/tmp_imlist2_XXXXXX.dat")
     local tmpref=$(mktemp "$tdir/tmp_ref_$$.XXXXXX.pnm")
     local tmpim=$(mktemp "$tdir/tmp_im2_$$.XXXXXX.pnm")
+    local bgrgb
     local sname
     local type
     local nref
@@ -18985,6 +19958,7 @@ AIbgdiff () {
     local nbad
     local filter
     local popts
+    local retval=0
     local tmpsh=$(mktemp "/tmp/tmp_script_XXXXXX.sh")
     chmod u+x $tmpsh
 
@@ -19010,7 +19984,8 @@ AIbgdiff () {
         test -f $tdir/$nref.pgm && inext="pgm"
         test -f $tdir/$nref.ppm && inext="ppm"
         test -z "$inext" &&
-            echo "ERROR: set $sname has no ref image $nref.{pgm,ppm}." >&2 && continue
+            echo "ERROR: set $sname has no ref image $nref.{pgm,ppm}." >&2 &&
+            retval=255 && continue
 
         if [ "$do_bayer" ]
         then
@@ -19026,7 +20001,7 @@ AIbgdiff () {
         done < $imlist
         test "$has_bgdiff" && echo "WARNING: some bgdiff images do already exist." >&2
         test $n -eq 0 && echo "WARNING: skipping set $sname" >&2 && continue
-        echo "processing $n images in set $sname ..." >&2
+        echo "processing $n $inext images in set $sname ..." >&2
 
         # determine background of reference image
         if [ "$do_bayer" ]
@@ -19043,7 +20018,7 @@ AIbgdiff () {
                 n=$(cat $imlist2 | wc -l)
                 test $n -le 9 && echo "create mean of $n images ..." >&2
                 test $n -gt 9 && echo "create mean using 9 out of $n images ..." >&2
-                pnmcombine $(cut -d " " -f3 $imlist2 | head -$((n-(n-9)/2)) | tail -9) $tmpim
+                pnmcombine2 $(cut -d " " -f3 $imlist2 | head -$((n-(n-9)/2)) | tail -9) $tmpim
                 AIbsplit $tmpim
                 b=$(basename ${tmpim%.*})
                 rgb3toppm $b.r1.pgm $b.g1.pgm $b.b1.pgm > $tmpref
@@ -19066,9 +20041,9 @@ AIbgdiff () {
                 n=$(cat $imlist2 | wc -l)
                 test $n -le 9 && echo "create mean of $n images ..." >&2
                 test $n -gt 9 && echo "create mean using 9 out of $n images ..." >&2
-                pnmcombine $(cut -d " " -f3 $imlist2 | head -$((n-(n-9)/2)) | tail -9) $tmpref
+                pnmcombine2 $(cut -d " " -f3 $imlist2 | head -$((n-(n-9)/2)) | tail -9) $tmpref
                 test $? -ne 0 &&
-                    echo "ERROR: pnmcombine failed." >&2 && continue
+                    echo "ERROR: pnmcombine failed." >&2 && retval=255 && continue
             fi
         fi
         AIbgmap -q -m $tmpref $bsize 1
@@ -19081,6 +20056,8 @@ AIbgdiff () {
             pgm)    bgrgb=$(imcrop -1 $b.bgm1.$inext 80 | AImstat - | awk '{
                     printf("%.1f", $5)}');;
         esac
+        test -z "$bgrgb" &&
+            echo "ERROR: imcrop -1 $b.bgm1.$inext 80 failed" >&2 && return 255
         rm $b.bgm1.$inext
         echo "bgref = $bgrgb" >&2
         test $n -eq 1 &&
@@ -19117,20 +20094,20 @@ EOF
 			local tmpdiff=$(mktemp "$tdir/tmp_diff_$$.XXXXXX.pnm")
 			local tmpim2=$(mktemp "$tdir/tmp_im2_$$.XXXXXX.pnm")
 			local tmpdat=$(mktemp "$tdir/tmp_txt1_$$.XXXXXX.dat")
-            test "$do_use_nref" && test $num -eq $nref && continue
+            test "$do_use_nref" && test $num -eq $nref && return
             test -f $diffdir/$num.bgdiff.$inext &&
                 echo "$num (reusing $num.bgdiff.$inext)" >&2 &&
-                continue
+                return
 
             echo -n "$num " >&2
             if [ "$do_bayer" ]
             then
                 AIbsplit $fname
                 rgb3toppm $num.r1.pgm $num.g1.pgm $num.b1.pgm | \
-                    pnmccdred -a $bgzero -d $tmpref - $tmpdiff
+                    pnmccdred2 -a $bgzero -d $tmpref - $tmpdiff
                 rm $num.[rgb][12].pgm
             else
-                pnmccdred -a $bgzero -d $tmpref $fname $tmpdiff
+                pnmccdred2 -a $bgzero -d $tmpref $fname $tmpdiff
             fi
             AIbgmap -q -m $tmpdiff $bsize 1
             test $? -ne 0 &&
@@ -19223,6 +20200,7 @@ EOF
         rm -f $tmpref $tmpim
     done < $sdat
     rm -f $imlist $imlist2 $tmpsh
+    return $retval
 }
 
 
@@ -19286,6 +20264,7 @@ AIbgmap () {
     local size
     local xm
     local ym
+    local ci
 
     (test "$showhelp" || test $# -lt 1) &&
         echo "usage: AIbgmap [-q] [-p|s|c] [-m] [-d] [-sd] [-x maxbad|$maxbad]" \
@@ -19346,13 +20325,14 @@ AIbgmap () {
         # TODO: begin run parallel (takes 45% of time)
         case $inext in
             ppm)    clist="red grn blu"
-                    pnmccdred -m $mult $img - | pnmtomef - > $tmpfits
-                    imslice $tmpfits 0 > $tdir/$b.red.fits
-                    imslice $tmpfits 1 > $tdir/$b.grn.fits
-                    imslice $tmpfits 2 > $tdir/$b.blu.fits
+                    pnmccdred2 -f -m $mult $img $tmpfits
+                    imslice $tmpfits 1 > $tdir/$b.red.fits
+                    imslice $tmpfits 2 > $tdir/$b.grn.fits
+                    imslice $tmpfits 3 > $tdir/$b.blu.fits
                     ;;
             pgm)    clist="gray"
-                    pnmccdred -m $mult $img - | pnmtomef - > $tdir/$b.$clist.fits
+                    pnmccdred2 -f -m $mult $img $tmpfits
+                    imslice $tmpfits 1 > $tdir/$b.$clist.fits
                     ;;
         esac
         
@@ -19490,8 +20470,13 @@ AIbgmap () {
         }END{
             printf("%.1f\n", 1.2*100*(gmax-gmin)/gsum*gnum)
         }')
-        echo "$outsmall:  ampl=$ampl%  rgb*$mult=$rgb"
-
+        if [ "${rgb//,/ }" != "$rgb" ]
+        then
+            ci=$(echo $rgb | awk -F ',' '{printf("%.1f", $1/$3)}')
+            echo "$outsmall:  ampl=$ampl%  rgb*$mult=$rgb  r/b=$ci"
+        else
+            echo "$outsmall:  ampl=$ampl%  rgb*$mult=$rgb"
+        fi
     fi
     if [ "$do_diag" ] && [ ! "$do_stats_only" ]
     then
@@ -19545,6 +20530,7 @@ AIbgmodel () {
     local tdir=${AI_TMPDIR:-"/tmp"}
     local wdir=$(mktemp -d "$tdir/tmp_bgmodel_XXXXXX")
     local cdir=bgcorr   # base name of bgcorr directories to search for res image
+    local flist
     local ext
     local bgres=1000    # shift model to this bg value
     local ncol
@@ -19554,6 +20540,7 @@ AIbgmodel () {
     local sname
     local suffix    # optional suffix extending name of cdir
     local x
+    local s
     local mult
     local add
     local size
@@ -19578,8 +20565,19 @@ AIbgmodel () {
     if [ "$allsets" ]
     then
         bgval=1000
-        target=$(AIsetinfo -b -o | grep -v "^#" | awk '{if(NR==1) print $2}')
-        reforreg=$(AIsetinfo -b -o | grep -v "^#" | awk '{if(NR>1) print $2}')
+        flist=$(AIsetinfo -b -o | grep -v "^#" | while read x s x
+            do
+                ls $cdir/$s.{bgm1,bgm10}res.{pgm,ppm} 2>/dev/null
+            done)
+        x=$(basename $(echo "$flist" | head -1))
+        target=$(echo $x | cut -d "." -f1)
+        bgmult=$(echo $x | cut -d "." -f2 | tr -d '[a-z]')
+        ext=$(echo $x | cut -d "." -f3)
+        reforreg=$(AIsetinfo -b -o | grep -v "^#" | while read x s x
+            do
+                test $s != $target && test -f $cdir/$s.bgm${bgmult}res.$ext && echo $s
+            done)
+        test "$AI_DEBUG" && echo "# target=$target reforreg=$reforreg" >&2
     fi
 
     # determine bg multiplier and image extension
@@ -19609,7 +20607,7 @@ AIbgmodel () {
         test "$ext" == "ppm" && test $ncol -eq 1 && bgval=$bgval" "$bgval" "$bgval
 
         # normalize bgres images to bgval (in each color)
-        for refentry in ${reforreg//,/ }
+        for refentry in $target ${reforreg//,/ }
         do
             if [ "${refentry/:/}" != "$refentry" ]
             then
@@ -19650,12 +20648,25 @@ AIbgmodel () {
             test "$x" && x=${x}"_"
             pnmccdred -m $(echo ${mult[@]} | tr ' ' ',') $resimg - | \
                 pnmccdred -a $(echo ${add[@]} | tr ' ' ',') - $wdir/$x$sname.norm.$ext
+            # imlist: all images to be displayed
             imlist="$imlist $wdir/$x$sname.norm.$ext"
-            echo "$xlist" | grep -q $sname || mlist="$mlist $wdir/$x$sname.norm.$ext"
+            # mlist: all images used to build model
+            if [ "$allsets" ]
+            then
+                echo "$xlist" | grep -vq $sname && mlist="$mlist $x$sname.norm.$ext"
+            else
+                echo "$xlist $target" | grep -vq $sname && mlist="$mlist $x$sname.norm.$ext"
+            fi
         done
         
         # create model
-        convert $mlist -evaluate-sequence min $wdir/$target.bgmin.$ext
+        test "$verbose" && echo "# mlist = $mlist" >&2
+        # rank index: darkest pixel = 0
+        x=$(echo $mlist | wc -w | awk '{x=0;
+            if($1>3) x=1; if($1>5) x=2; if($1>8) x=int($1/3)
+            print x}')
+        (cd $wdir; vips bandrank "$(echo $mlist)" $target.bgmin.$ext[strip] --index=$x)
+        
         # shift average level to bgres
         x=$(AImstat $wdir/$target.bgmin.$ext | awk -v m=$bgres '{
             printf("%.0f", m-$5); if(NF>13) {printf(",%.0f,%.0f", m-$9, m-$13)}}')
@@ -19749,8 +20760,6 @@ AIbgmodel () {
         echo "# measured sd=$sd" >&2
     fi
     test "$verbose" && opts="-v"
-    rgbscale $opts $cdir/$target.bgm${bgmult}res.$ext $sd > $wdir/$target.$ext
-    imlist2=$target.$ext
     for x in $imlist
     do
         rgbscale $opts $x $sd > ${x/.norm/}
@@ -19772,6 +20781,7 @@ AIbgmodel () {
             $imlist2 -geometry +4+2 -) > bgres.$target.$ext
         display bgres.$target.$ext &
     fi
+    test "$verbose" && echo "# imlist2 = $imlist2" >&2
 
     # apply model
     if [ "$testonly" ] || [ "$allsets" ]
@@ -20670,8 +21680,8 @@ AIaladin () {
         test "$1" == "-a" && apass=1 && shift 1
     done
     
-    local par1=${1:-""}     # image set or center RA  or comet
-    local par2=${2:-""}     #              center DEC or uttime or utdate
+    local par1=${1:-""}     # image set or center RA  or comet                    or other object designation
+    local par2=${2:-""}     #              center DEC or uttime or utdate or "now"
     local par3=${3:-""}     #                                      uttime
     local sname
     local comet
@@ -20698,11 +21708,9 @@ AIaladin () {
     # single parameter: setname or object
     if [ $# -eq 1 ]
     then
-        if [ -s set.dat ]
+        if [ -s set.dat ] && is_setname $par1
         then
             sname=$par1
-            ! is_setname $sname &&
-                echo "ERROR: unknown image set $sname." >&2 && return 255
             x=$(imcoord $sname)
             test $? -ne 0 &&
                 echo "ERROR: unable to determine image coordinates." >&2 && return 255
@@ -20713,8 +21721,10 @@ AIaladin () {
             labelpos=$(get_header -q -s $sname.head AI_CORA,AI_CODEC | tr '\n' ',')
             # test -z "$labelpos" && labelpos="$ra,$dec"
         else
+            echo "# trying to search for object $par1"
             ra=$par1
             dec=""
+            label=$par1
         fi
     fi
 
@@ -20727,7 +21737,13 @@ AIaladin () {
     # two parameters, first one with letters
     test -z "$ra" && if [ $# -eq 2 ] && [ "${1//[a-zA-Z]/}" != "$1" ]
     then
-        comet=$par1; utdate=$(date +'%Y-%m-%d'); uttime=$par2
+        comet=$par1; utdate=$(date +'%Y-%m-%d')
+        if [ "$par2" == "now" ]
+        then
+            uttime=$(date -u +'%H:%M')
+        else
+            uttime=$par2
+        fi
     fi
     
     # three parameters
@@ -20754,13 +21770,24 @@ AIaladin () {
         # use the full featured desktop version
         script="$ra $dec; reticle off"
         catlayer=2
-        test "$labelpos" &&
-            catlayer=3 &&
-            script="$script; draw red tag($labelpos $label,60,30,bigcircle,16)" &&
+        if [ "$label" ]
+        then
+            catlayer=3
+            if [ "$dec" ]
+            then
+                # using sky coordinates
+                script="$script; draw red tag($labelpos $label,60,30,bigcircle,16)"
+            else
+                # draw to center of image
+                script="$script; setconf frame=XY image; draw red tag(250 -250 $label,60,30,bigcircle,16)"
+            fi
             script="$script; set @2 opacity=40"
-        test "$apass" &&
-            script="$script; get VizieR(II/336/apass9) $ra $dec 60'" &&
+        fi
+        if [ "$apass" ]
+        then
+            script="$script; get VizieR(II/336/apass9) $ra $dec 60'"
             script="$script; set @$catlayer opacity=5; set @$catlayer size=3"
+        fi
         # TODO: check for running aladin instance
         #ps -C aladin >/dev/null && echo ok
         echo "# aladin script commands: "
@@ -21355,6 +22382,7 @@ CD2_2   =      0.0003   / Linear projection matrix
             fi
                         
             # combine individual bad region masks with (per set) bad pixel image
+            # and add image edge (2pix) to badtmp
             badreg="bgvar/"$(basename ${img%.*}.bad.reg)
             if [ -f $badreg ]
             then
@@ -21368,17 +22396,19 @@ CD2_2   =      0.0003   / Linear projection matrix
                 echo "using badimg $(identify $badimg | cut -d ' ' -f1-3)" >&2
             if [ -f $badimg ] && [ "$badpix" ]
             then
-                convert $badimg $badpix -evaluate-sequence max $badtmp
+                convert $badimg $badpix -evaluate-sequence max \
+                    -shave 2x2 -bordercolor white -border 2x2 $badtmp
             else
                 if [ -f $badimg ]
                 then
-                    cp $badimg $badtmp
+                    convert $badimg -shave 2x2 -bordercolor white -border 2x2 $badtmp
                 else
                     if [ "$badpix" ]
                     then
-                        cp $badpix $badtmp
+                        convert $badpix -shave 2x2 -bordercolor white -border 2x2 $badtmp
                     else
-                        echo -e "P2\n1 1\n1\n0" | pnmtile $w $h > $badtmp
+                        echo -e "P2\n1 1\n1\n0" | pnmtile $w $h | \
+                            convert - -shave 2x2 -bordercolor white -border 2x2 $badtmp
                     fi
                 fi
             fi
@@ -21858,6 +22888,7 @@ AIphotmatch () {
     local cbmag
     local cvmag
     local crmag
+    local cimag
     local cbvmag    # B-V column
     local cvrmag    # V-R column
     local delim="|" # column delimiter in vizier catalogs
@@ -21886,6 +22917,7 @@ AIphotmatch () {
     cbmag=$(get_param $catdef cb $cattype); test "$cbmag" == "-" && cbmag=0
     cvmag=$(get_param $catdef cv $cattype); test "$cvmag" == "-" && cvmag=0
     crmag=$(get_param $catdef cr $cattype); test "$crmag" == "-" && crmag=0
+    cimag=$(get_param $catdef ci $cattype); test "$cimag" == "-" && cimag=0
     cbvmag=$(get_param $catdef cbv $cattype); test "$cbvmag" == "-" && cbvmag=0
     cvrmag=$(get_param $catdef cvr $cattype); test "$cvrmag" == "-" && cvrmag=0
     case "$cattype" in
@@ -21893,13 +22925,13 @@ AIphotmatch () {
     esac
 
     # combine magnitudes
-    echo "# id      x       y        bmag   gmag   rmag    bcat   vcat   rcat   am"
+    echo "# id      x       y        bmag   gmag   rmag    bcat   vcat   rcat   icat   am"
     while read id x y r g b z
     do
         test "${id:0:1}" == "#" && continue
         test -z "$b" && continue
-        bvr=$(cat $vizcat | grep -v -E -- "---|^#|^$" | \
-            awk -F $delim -v id=$id -v cid=$cid -v cb=$cbmag -v cv=$cvmag -v cr=$crmag \
+        bvri=$(cat $vizcat | grep -v -E -- "---|^#|^$" | \
+            awk -F $delim -v id=$id -v cid=$cid -v cb=$cbmag -v cv=$cvmag -v cr=$crmag -v ci=$cimag \
                 -v cbv=$cbvmag -v cvr=$cvrmag '{
                 catid=""
                 if (cid == "0") {
@@ -21942,13 +22974,22 @@ AIphotmatch () {
                             r="-"
                         }
                     }
+                    if (ci>0) {
+                        i=$ci; if(i~/^[ ]*$/ || i~/[a-zA-Z]/) i="-"
+                    } else {
+                        i="-"
+                    }
                     
-                    print b" "v" "r
+                    if (split(b,a,".")>1 && length(a[2])>3) b=sprintf("%6.3f", b)
+                    if (split(v,a,".")>1 && length(a[2])>3) v=sprintf("%6.3f", v)
+                    if (split(r,a,".")>1 && length(a[2])>3) r=sprintf("%6.3f", r)
+                    if (split(i,a,".")>1 && length(a[2])>3) i=sprintf("%6.3f", i)
+                    print b" "v" "r" "i
                 }
             }')
-        echo $id $x $y $b $g $r $bvr | awk '{
-            printf("%-8s  %7.2f %7.2f  %6.3f %6.3f %6.3f  %6s %6s %6s\n",
-                $1, $2, $3, $4, $5, $6, $7, $8, $9)}'
+        echo $id $x $y $b $g $r $bvri | awk '{
+            printf("%-8s  %7.2f %7.2f  %6.3f %6.3f %6.3f  %6s %6s %6s %6s\n",
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10)}'
     done < $photcat > $tmp1
 
     # if $photcat is related to image set, then add airmass column
@@ -21971,43 +23012,52 @@ AIphotmatch () {
 AIphotcal () {
     # note: as of airfun version 4 it requires gnuplot version 5
     local showhelp
-    local color="V"     # color band name (V|B|R)
-    local citerm=""     # color index term (e.g. B-V or V-R) 
+    local color="V"     # catalog color band name (e.g. B or V)
+    local citerm=""     # catalog color index term (e.g. B-V or V-R) 
     local skip=""       # refcat id's of neglected objects separated by space
     local cxy           # object center <x>,<y> (in fits coordinates)
-    local rlim          # max. distance (>= 100 in pix, <100 in % diam) from object
+    local rlim          # max. distance (> 100 in pix, <=100 in % diam) from object
     local nlim=100      # max. number of stars in sextractor source cat (starting
                         #   at brightest)
     local mlim          # aphot mag limit used for final curve fit
     local magerrlim=0.05
     local fittype=0     # 0-normal, 1-color, 2-ext, 3-color+ext
-    local maxdist=2     # max distance for position matching in pixels
+    local maxdist       # max distance for position matching in pixels
     local no_update     # if set do not save results in header keywords
-    local adr=10        # apass data release number
+    local adr=10        # apass data release number (web query only)
+    local do_all_ci     # use all catalog stars, even those having extreme colors
     local codir="comet"
     local i
-    for i in $(seq 1 18)
+    for i in $(seq 1 15)
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
+
         test "$1" == "-B" && color="B" && shift 1
         test "$1" == "-V" && color="V" && shift 1
         test "$1" == "-R" && color="R" && shift 1
+        test "$1" == "-BT" && color="BT" && shift 1
+        test "$1" == "-VT" && color="VT" && shift 1
+        test "$1" == "-G" && color="G" && shift 1
+        test "$1" == "-GB" && color="GB" && shift 1
+        #test "$1" == "-GR" && color="GR" && shift 1
+        
+        test "$1" == "-ci" && citerm="$2" && fittype=$((fittype+1)) && shift 2 # color correction
+        test "$1" == "-e"  && fittype=$((fittype+2)) && shift 1    # fit extinction
+
         test "$1" == "-s" && skip="$2" && shift 2
         test "$1" == "-r" && rlim="$2" && shift 2
         test "$1" == "-n" && nlim="$2" && shift 2
         test "$1" == "-c" && cxy="$2" && shift 2
         test "$1" == "-m" && magerrlim="$2" && shift 2
-        test "$1" == "-e"  && fittype=$((fittype+2)) && shift 1    # extinction
-        test "$1" == "-bv" && citerm="B-V" && fittype=$((fittype+1)) && shift 1 # color correction
-        test "$1" == "-vr" && citerm="V-R" && fittype=$((fittype+1)) && shift 1 # color correction
         test "$1" == "-l" && mlim="$2" && shift 2
         test "$1" == "-d" && maxdist="$2" && shift 2
         test "$1" == "-t" && no_update=1 && shift 1
-        test "$1" == "-a" && adr="$2" && shift 2
+        test "$1" == "-a" && do_all_ci=1 && shift 1
     done
     local setname=${1:-""}
-    local catalog=${2:-""}  # e.g. tycho2
-    local aprad=${3:-""}
+    local plane=${2:-""}    # image plane number (channel number)
+    local catalog=${3:-""}  # e.g. tycho2
+    local aprad=${4:-""}
     local tdir=${AI_TMPDIR:-"/tmp"}
     local tmp1=$(mktemp "$tdir/tmp_dat1.XXXXXX.dat")
     local tmp2=$(mktemp "$tdir/tmp_dat2.XXXXXX.dat")
@@ -22026,7 +23076,7 @@ AIphotcal () {
     local texp
     local nexp
     local magzero
-    #local pixscale
+    local pixscale
     local flen
     local xoff=0
     local yoff=0
@@ -22034,12 +23084,17 @@ AIphotcal () {
     local refcolumn
     local ct1column  # id of column used by color term (minuend)
     local ct2column  # id of column used by color term (subtrahend)
-    local amcolumn=10
+    local amcolumn=11
     local gapcorr
     local refmd
     local colormd=0
+    local cimin=-99
+    local cimax=99
     local amref
     local nstars
+    local rmlim     # if mlim is not set estimate reasonable maglim
+    local catradius # max distance from object (deg) used to select catalog stars (catalog query)
+    local matchrlim # max distance from object (pix) used to select match stars
     # local apmagmd
     local w
     local h
@@ -22060,8 +23115,8 @@ AIphotcal () {
     local bfit
     local cfit
     local efit
-    local aidx
     local pidx
+    local icol
     local comag
     #local codia
     local stmlim
@@ -22077,9 +23132,9 @@ AIphotcal () {
     local idlist
     local no
 
-    (test "$showhelp" || test $# -lt 2) &&
-        echo "usage: AIphotcal [-B|-V|-R] [-bv|-vr] [-t] [-e] [-s skip] [-l maglim] [-d maxdist]" \
-            "[-m magerrlim|$magerrlim] [-n nlim] [-r rlim] [-c xc,yc] <set> <refcat> <aprad>" >&2 &&
+    (test "$showhelp" || test $# -lt 3) &&
+        echo "usage: AIphotcal [-t] [-a] [-B|-V|-R|-VT|-GB|...] [-ci colorIndex] [-e] [-s skip] [-l maglim] [-d maxdist]" \
+            "[-m magerrlim|$magerrlim] [-n nlim] [-r rlim] [-c xc,yc] <set> <plane> <refcat> [aprad]" >&2 &&
         return 1
 
     # checkings
@@ -22105,6 +23160,12 @@ AIphotcal () {
     test -z "$inext" &&
         echo "ERROR: no input image ${setname}.p[gp]m found." >&2 && return 255
 
+    # check plane
+    test "$inext" == "pgm" && test $plane -ne 1 &&
+        echo "ERROR: invalid plane number on pgm image" >&2 && return 255
+    test "$inext" == "ppm" && test $plane -ne 1 && test $plane -ne 2 && test $plane -ne 3 &&
+        echo "ERROR: invalid plane number on ppm image" >&2 && return 255
+
     # check gnuplot version
     gpversion=$(gnuplot -V | awk '{printf("%s", $2)}')
     case "$gpversion" in
@@ -22113,19 +23174,50 @@ AIphotcal () {
             return 255
     esac
     
-    # set columns of aperture photometry file according to color
+    # get columns of aperture photometry file according to image color plane
+    if [ "$inext" == "ppm" ]
+    then
+        if [ "$plane" ]
+        then
+            apcolumn=$((7-$plane))
+        else
+            case "$color" in
+                B|BT)     apcolumn=4;;
+                V|VT|GB)  apcolumn=5;;
+                R|G)      apcolumn=6;;
+                *)  echo "ERROR: unknown color $color." >&2 && return 255;;
+            esac
+            plane=$((7-$apcolumn))
+        fi
+    else
+        apcolumn=4
+        plane=1
+    fi
     case "$color" in
-        B)  apcolumn=4; refcolumn=7;;
-        V)  apcolumn=5; refcolumn=8;;
-        R)  apcolumn=6; refcolumn=9;;
+        B|BT)     refcolumn=7;;
+        V|VT|GB)  refcolumn=8;;
+        R|G)      refcolumn=9;;
         *)  echo "ERROR: unknown color $color." >&2 && return 255;;
     esac
     # set columns of aperture photometry file to use in color index term
     case "$citerm" in
-        B-V) ct1column=7; ct2column=8;;
-        V-R) ct1column=8; ct2column=9;;
+        B-V|BT-VT) ct1column=7; ct2column=8;;
+        V-R|GB-G)  ct1column=8; ct2column=9;;
+        GB-GR)     ct1column=8; ct2column=10;;
         *)  test "$citerm" && echo "ERROR: unknown color term $citerm." >&2 && return 255;;
     esac
+    # set limits on color index for GAIA catalog stars
+    test -z "$do_all_ci" && case $catalog in
+        gaia*)  test "$citerm" == "GB-G"  && cimin=0.1 && cimax=0.8
+                test "$citerm" == "GB-GR" && cimin=0.4 && cimax=1.4
+            ;;
+    esac
+    test "$cimin$cimax" != "-9999" &&
+        echo "# clipping valid color index to $cimin .. $cimax"
+
+    # get image color (filter) associated with plane (fallback: plane number)
+    icol=$(get_header $head AC_ICOL$plane)
+    test -z "$icol" && icol=$plane
 
     # determine magzero
     texp=""
@@ -22147,32 +23239,42 @@ AIphotcal () {
         echo "ERROR: magzero unknown." >&2 && return 255
     
     # determine pixscale
-    #pixscale=$(get_wcspscale $whead)
-    #test -z "$pixscale" &&
-    #    echo "ERROR: pixscale unknown." >&2 && return 255
+    pixscale=$(get_wcspscale $whead)
+    test -z "$pixscale" &&
+        echo "ERROR: pixscale unknown." >&2 && return 255
 
 
     test -d phot || mkdir phot
 
     # calculate image size (degrees)
-    size=$(echo $(imsize $setname.$inext) $(get_wcspscale $whead) | \
+    size=$(echo $(imsize $setname.$inext) $pixscale | \
         awk '{printf("%.1fx%.1f", $1*$3/3600, $2*$3/3600)}')
     test "$AI_DEBUG" && echo "size=$size" >&2
 
+    # determine max distance to select match stars (in pixels)
     # old: set rlim for wide field images >3 deg to 1/6 diagonale
     # new 150828: set rlim to 1/6 diagonale, 150922: 1/4 diagonale
     # 200909: lower radius 0.25->0.19, 0.22->0.17, 0.19->0.15, 0.17->0.14, 0.16->0.13
-    test -z "$rlim" &&
-        rlim=$(echo ${size/x/ } $(get_wcspscale $whead) | awk '{
+    if [ -z "$rlim" ]
+    then
+        matchrlim=$(echo ${size/x/ } $pixscale | awk '{
             dia=sqrt($1*$1+$2*$2); m=0.19
             if (dia > 4) m=0.17
             if (dia > 6) m=0.15
             if (dia > 8) m=0.14
             if (dia > 12) m=0.13
             printf("%d", m*dia*3600/$3)}')
-    # search radius for catalog query
-    radius=$(echo $size | awk -F "x" '{x=0.4*sqrt($1*$1+$2*$2); printf("%.1f", x+0.1)}')
-    #radius=$(echo $rlim $(get_wcspscale $whead) | awk '{x=$1*$2/3600; fmt="%.2f"
+    else
+        matchrlim=$(echo $rlim $(imsize $setname.$inext) | awk '{
+            if ($1 > 100) {
+                print $1
+            } else {
+                printf("%.0f", $1/100*sqrt($2*$2+$3*$3))
+            }}')
+    fi
+    # search radius for catalog query (in degrees)
+    catradius=$(echo $size | awk -F "x" '{x=0.5*sqrt($1*$1+$2*$2); printf("%.1f", x+0.1)}')
+    #catradius=$(echo $matchrlim $pixscale | awk '{x=$1*$2/3600; fmt="%.2f"
     #    if(x>2) {fmt="%.1f"}; if(x>20) {fmt="%.0f"}; printf(fmt, x)}')
 
     # get center of comet cxy=<xfits>,<yfits>, if comet/$setname.cometin.reg
@@ -22199,29 +23301,14 @@ AIphotcal () {
             printf("%.0f,%.0f\n", (x1+x2)/2, (y1+y2)/2)}')
     fi
     test -z "$cxy" && cxy=$((w/2))","$((h/2))
-
-    # get fwhm
-    fwhm=$(get_header -q $head AI_FWHM)
-    if [ -z "$fwhm" ] && [ -f $scat ]
-    then
-        fwhm=$(sexselect -s $scat "" 0.03 $rlim "$cxy" "" 0 | \
-            grep FWHM_IMAGE | awk '{if($7>3) printf("%.2f", $2)}')
-    fi
-    test -z "$fwhm" &&
-        echo "ERROR: unknown FWHM." >&2 && return 255
-
-    # determine aprad and gap
-    test -z "$aprad" && aprad=$(echo $fwhm | awk '{printf("%.1f", 3*sqrt($1+1)+0.1*$1-2.0)}')
-    test -z "$aprad" &&
-        echo "ERROR: cannot determine aprad." >&2 && return 255
-    gap=$(echo $aprad | awk '{printf("%.1f", 2+$1/2.5)}')
-    echo "# aprad=$aprad  gap=$gap  size=${size}deg  rlim=$rlim  radius=${radius}deg cxy=$cxy" >&2
+    echo "# field size=${size}deg  catradius=${catradius}deg" >&2
+    echo "# region center:  cxy=$cxy  matchrlim=${matchrlim}px" >&2
 
     # download reference stars
     centerdeg=$(echo "object ${cxy//,/ }" | xy2rade -f - $whead | awk '{printf("%s %s", $1, $2)}')
     echo "# centerdeg=$centerdeg" >&2
     #echo $centerdeg >&2
-    if [ -s phot/$setname.$catalog.dat ]
+    if [ -s phot/$setname.$catalog.dat ] && [ -s phot/$setname.$catalog.xy.dat ]
     then
         echo "reusing photometric reference catalog phot/$setname.$catalog.dat" >&2
     else
@@ -22235,7 +23322,7 @@ AIphotcal () {
                         echo "ERROR: no access to url $url." >&2 &&
                         return 255
                     set - $centerdeg
-                    opts="ra=$1&dec=$2&radius=$radius"
+                    opts="ra=$1&dec=$2&radius=$catradius"
                     echo "opts=$opts" >&2
                     wget -O $tmp1 "$url?$opts&outtype=1"
                     case "$adr" in
@@ -22251,7 +23338,7 @@ AIphotcal () {
                             ;;
                     esac
                     ;;
-            *)      mkrefcat -n 10000 $catalog $centerdeg $radius > phot/$setname.$catalog.dat;;
+            *)      mkrefcat -n 10000 $catalog $centerdeg $catradius > phot/$setname.$catalog.dat;;
         esac
     fi
     test ! -s phot/$setname.$catalog.dat &&
@@ -22266,8 +23353,8 @@ AIphotcal () {
     c=0
     test "$clist" && for c in $clist
     do
-        x=$(get_header -s $head AP_PCAT$c,AP_PCOL$c | tr '\n' ';')
-        test "$x" == "$catalog;$color;" &&
+        x=$(get_header -s $head AP_PCAT$c,AP_AIDX$c | tr '\n' ';')
+        test "$x" == "$catalog;$plane;" &&
             has_photcal=1 &&
             pidx=$c && break
     done
@@ -22275,19 +23362,65 @@ AIphotcal () {
     test -z "$pidx" && pidx=$((c+1))
    
 
+    # get fwhm
+    fwhm=$(get_header -q $head AI_FWHM)
+    if [ -z "$fwhm" ] && [ -f $scat ]
+    then
+        fwhm=$(sexselect -s $scat "" 0.03 $matchrlim "$cxy" "" 0 | \
+            grep FWHM_IMAGE | awk '{if($7>3) printf("%.2f", $2)}')
+    fi
+    test -z "$fwhm" &&
+        echo "ERROR: unknown FWHM." >&2 && return 255
+
     # reuse existing aperture photometry if no critical parameters have changed
     paramchange=""
-    test ! "$paramchange" &&
-        test "$(get_header -q $head AP_RMAX$pidx)" != "$rlim" && paramchange=1 &&
-        gapcorr=""
-    test ! "$paramchange" &&
-        test -z "$(get_header -q $head AP_NMAX$pidx)" && paramchange=1
-    test ! "$paramchange" &&
-        test $(get_header -q $head AP_NMAX$pidx) -lt $nlim && paramchange=1
-    test ! "$paramchange" &&
-        test "$(get_header -q $head AP_ARAD$pidx)" != "$aprad" && paramchange=1 &&
-        gapcorr=""
-
+    x=$(get_header -q $head AP_ARAD$pidx)
+    # determine aprad and gap
+    test -z "$aprad" &&
+        aprad=$(echo $fwhm | awk '{printf("%.1f", 3*sqrt($1+1)+0.1*$1-2.0)}')
+    gap=$(echo $aprad | awk '{printf("%.1f", 2+$1/2.5)}')
+    #echo "## check aprad change: x=$x aprad=$aprad" >&2
+    if [ "$(echo $x $aprad | awk '{if(NF==2) {x=$1-$2; if(x!=0) print 1}}')" ]
+    then
+        paramchange=1 && gapcorr=""
+        echo "# aprad changed ($x -> $aprad)  gap=$gap" >&2
+    else
+        echo "# aprad=$aprad  gap=$gap" >&2
+    fi
+    # region for matching stars changed?
+    # note: both AP_RMAX and matchrlim must be converted to the same unit (% diam)
+    if [ ! "$paramchange" ]
+    then
+        x=$(get_header -q $head AP_RMAX$pidx)   # nonempty if user has provided a value previously
+        if [ -z "$x" ]
+        then
+            #echo "## check rlim change: x=$x rlim=$rlim" >&2
+            test "$rlim" && paramchange=1 &&
+                echo "# user provided rlim=$rlim" >&2
+        else
+            x=$(echo $x $(imsize $setname.$inext) | awk '{
+                if ($1>100) {printf("%.0f", 100*$1/sqrt($2*$2+$3*$3))} else {print $1}}')
+            r=$(echo $matchrlim $(imsize $setname.$inext) | awk '{
+                printf("%.0f", 100*$1/sqrt($2*$2+$3*$3))}')
+            #echo "## check rlim change: x=$x r=$r" >&2
+            test "${x}${rlim}" && test "$x" != "$r" && paramchange=1 &&
+                echo "# rlim changed ($x -> $r)" >&2
+        fi
+    fi
+    # max number of stars changed?
+    if [ ! "$paramchange" ]
+    then
+        x=$(get_header -q $head AP_NMAX$pidx)
+        #echo "## check nmax change: x=$x nlim=$nlim" >&2
+        test -z "$x" && paramchange=1
+        test "$x" && test $x -ne $nlim && paramchange=1 &&
+            echo "# nmax changed ($x -> $nlim)" >&2
+    fi
+    test -s phot/$setname.$catalog.xphot.dat && test "$paramchange" &&
+        echo "# paramchange detected" >&2
+    #return 255
+    
+    
     # aperture photometry and matching with reference catalog
     if [ -s phot/$setname.$catalog.xphot.dat ] &&
        [ phot/$setname.$catalog.xphot.dat -nt phot/$setname.$catalog.dat ] &&
@@ -22296,6 +23429,14 @@ AIphotcal () {
         echo "reusing phot/$setname.$catalog.xphot.dat" >&2
     else
         echo "# matching stars ..."
+        # determine maxdist
+        if [ ! "$maxdist" ]
+        then
+            maxdist=$(echo $pixscale $fwhm | awk '{printf("%.0f", 2+2/$1+0.3*$2)}')
+            echo "# setting maxdist=${maxdist}px" >&2
+        else
+            echo "# user provided maxdist=${maxdist}px" >&2
+        fi
         # convert photometric reference catalog
         delim="|"
         test "$catalog" == "apass10" && delim=","
@@ -22314,14 +23455,15 @@ AIphotcal () {
                 echo "ERROR: file phot/$setname.$catalog.xy.dat is empty" >&2 &&
                 return 255
             #xy2reg $setname.$inext phot/$setname.$catalog.xy.dat > phot/$setname.$catalog.xy.reg
-            #sexselect -r $scat "" 0.03 "$rlim" "$cxy" | grep "^circ" | \
+            #sexselect -r $scat "" 0.03 "$matchrlim" "$cxy" | grep "^circ" | \
             #    sort -n -k4,4 | head -$((nlim*2)) | reg2xy $setname.$inext - > $tmp1
             xy2reg $setname.$inext phot/$setname.$catalog.xy.dat $xoff $(echo "-1 * $yoff" | bc) $((maxdist+8)) \
                 > phot/$setname.$catalog.xy.reg
             refxydat=phot/$setname.$catalog.xy.dat
             refxyreg=phot/$setname.$catalog.xy.reg
         fi
-        sexselect -f $scat "" $magerrlim "$rlim" "$cxy" | \
+        # TODO: limit fwhm to exclude galaxies
+        sexselect -f $scat "" $magerrlim "$matchrlim" "$cxy" | \
             regfilter - $refxyreg | sexselect -r - | \
             grep "^circ" | sort -n -k4,4 | lines $((nlim*2)) | \
             reg2xy $setname.$inext - > $tmp1
@@ -22342,6 +23484,7 @@ AIphotcal () {
         nstars=$(cat $tmp1 | wc -l)
         test $nstars -lt 4 &&
             echo "ERROR: only $nstars stars matched (min=4)" >&2 && return 255
+        # TODO: only measure stars not present in phot/$setname.$catalog.phot.dat
         echo "# AIaphot on $nstars stars ..." >&2
         AI_MAGZERO=$magzero AIaphot $setname.$inext $tmp1 $aprad $gap > phot/$setname.$catalog.phot.dat
         test "$AI_DEBUG" && echo "AIphotmatch phot/$setname.$catalog.phot.dat" \
@@ -22369,15 +23512,65 @@ AIphotcal () {
         mv $tmp1 phot/$setname.$catalog.xphot.dat
     fi
     
+    # find close companion stars:
+    #   stars which have multiple matches in the reference catalog
+    #   if brightness differs by >1mag skip the faint one, the brighter one
+    #     might still be usable
+    #   if brightness differs by <=1mag and catalog is from GAIA then
+    #     this is probably a double star unresolved in image and we skip both
+    grep -v "^#" phot/$setname.$catalog.xphot.dat | sort -k2,3 | awk -v mcol=$refcolumn '{
+        str=$2" "$3
+        if (str==laststr) {
+            if ($mcol != "-") {
+                if (incr > 0) {
+                    num++
+                    incr=0
+                    printf("%d %s %s\n", num, lastid, lastmag)
+                }
+                printf("%d %s %s\n", num, $1, $mcol)
+            }
+        } else {
+            incr=1
+        }
+        lastid=$1
+        lastmag=$mcol
+        laststr=str
+    }' > $tmp1
+    skip2=$(for x in $(cut -d ' ' -f1 $tmp1 | sort -u)
+    do
+        grep "^$x " $tmp1 | LANG=C sort -n -k 3,3 | awk -v lim=1.0 -v cat=$catalog '{
+            if (NR==1) {
+                m=$3; bright=$2
+            } else {
+                if ($3-m > lim) {
+                    printf("%s ", $2)
+                } else {
+                    if (cat ~ /^gaia/) printf("%s %s ", bright, $2)
+                }
+            }}'
+    done)
+    if [ "$skip2" ]
+    then
+        echo "# skipping $(echo $skip2 | wc -w) close companions"
+        cp phot/$setname.$catalog.xphot.dat $tmp1
+        for id in $skip2
+        do
+            sed --follow-symlinks -i 's/^'$id' /#'$id'/' $tmp1
+        done
+        touch -r phot/$setname.$catalog.xphot.dat $tmp1
+        mv $tmp1 phot/$setname.$catalog.xphot.dat
+    fi
+
+
     # measure gapcorr (photometry offset with respect to large apertures)
     if [ -z "$gapcorr" ]
     then
         # select bright stars
         if [ -s $codir/$setname.psfphot.dat ]
         then
-            # using psf stars within rlim
+            # using psf stars within matchrlim
             echo "# determine gapcorr using psf stars"
-            grep -v "^#" $codir/$setname.psfphot.dat | awk -v h=$h -v cx=${cxy%,*} -v cy=${cxy#*,} -v rlim=$rlim '{
+            grep -v "^#" $codir/$setname.psfphot.dat | awk -v h=$h -v cx=${cxy%,*} -v cy=${cxy#*,} -v rlim=$matchrlim '{
                 dx=$2-cx; dy=$3-(h-cy)
                 d=sqrt(dx*dx+dy*dy)
                 if (d<rlim) {print $0}}' > $tmpbright
@@ -22385,7 +23578,7 @@ AIphotcal () {
             # select 30 brightest stars
             # TODO: only use starlike sources
             echo "# determine gapcorr using brightest calibration stars"
-            sexselect -r $scat "" $magerrlim "$rlim" "$cxy" | \
+            sexselect -r $scat "" $magerrlim "$matchrlim" "$cxy" | \
                 grep "^circ" | sort -n -k4,4 | lines 50 | \
                 awk -v f=$fwhm '{
                     x=$1; gsub(/[(),]/," ",x);
@@ -22419,7 +23612,7 @@ AIphotcal () {
         done
         yrange=$(kappasigma $tmp2 2 | awk '{l=$1-5*$2-0.05; h=$1+4*$2+0.05
             printf("%.2f:%.2f", h, l)}')
-        str=$setname.$catalog.$color.apcorr
+        str=$setname.$catalog.$icol.apcorr
         AIplot -p -o x.$str.png -t "Large Aperture Correction of Stars (m_{r$r}-m_{r$aprad}, $setname)" \
             -g "set xlabel 'mag'; set ylabel 'dmag'; set grid" $tmp2 1 2 "" "" "[][$yrange]" 
         (test -f phot/$str.png && diff -q x.$str.png phot/$str.png >/dev/null) || \
@@ -22427,7 +23620,7 @@ AIphotcal () {
     fi
     
     # if mlim is not set, use reasonable limit on faint end based
-    # on number statistics of stars
+    # on number statistics of stars (possibly eliminating faintest stars)
     if [ ! "$mlim" ]
     then
         nstars=$(grep -v "^#"  phot/$setname.$catalog.xphot.dat | wc -l)
@@ -22442,23 +23635,29 @@ AIphotcal () {
                 awk -v ca=$apcolumn '{printf("%s\n", $ca)}' | \
                 sort -n | tail -$nlow | lines $((nlow-nskip)) > $tmp1
             sd=$(stddev $tmp1)
-            mlim=$(tail -1 $tmp1 | awk -v s=$sd '{printf("%.2f", $1+s+0.1)}')
+            rmlim=$(tail -1 $tmp1 | awk -v s=$sd '{printf("%.2f", $1+s+0.1)}')
             str=$(printf "sd=%.3f" $sd)
-            echo "# setting mlim=$mlim  (stats: unused=$nskip, n=$((nlow-nskip)), $str)" >&2
+            echo "# setting maglim=$rmlim  (stats: unused=$nskip, n=$((nlow-nskip)), $str)" >&2
         else
-            mlim=99
+            rmlim=99
         fi
+    else
+        rmlim=$mlim
     fi
      
-    # remove stars with missing ref mags
+    # remove stars with missing ref mags and with extreme colors
+    # apply maglim (rmlim)
     if [ $fittype -eq 1 ] || [ $fittype -eq 3 ]
     then
         # fitting color requires color information
-        # TODO allow mlim with 2 values
+        # TODO allow maglim with high/low values
         grep -v "^#" phot/$setname.$catalog.xphot.dat | lines $nlim | \
             grep -vEw "^${skip// / |^} " | \
-            awk -v lim=$mlim -v ca=$apcolumn -v cr=$refcolumn -v cc1=$ct1column -v cc2=$ct2column '{
+            awk -v lim=$rmlim -v ca=$apcolumn -v cr=$refcolumn \
+                -v cc1=$ct1column -v cc2=$ct2column \
+                -v cimin=$cimin -v cimax=$cimax '{
                 if ($ca>lim || $cr=="-" || $cc1=="-" || $cc2=="-") next
+                if ($cc1-$cc2 < cimin || $cc1-$cc2 > cimax) next
                 print $0}' > $tmp1
         test $(cat $tmp1 | wc -l) -lt 3 &&
             echo "ERROR: less than 3 stars with known mags" >&2 &&
@@ -22469,7 +23668,7 @@ AIphotcal () {
     else
         grep -v "^#" phot/$setname.$catalog.xphot.dat | lines $nlim | \
             grep -vEw "^${skip// / |^} " | \
-            awk -v lim=$mlim -v ca=$apcolumn -v cr=$refcolumn '{
+            awk -v lim=$rmlim -v ca=$apcolumn -v cr=$refcolumn '{
                 if ($ca>lim || $cr=="-") next
                 print $0}' > $tmp1
         colormd=0
@@ -22603,13 +23802,15 @@ AIphotcal () {
     #echo $tmp1; echo $tmpgp; echo $tmpres
     #return
     
+    #### TODO: use $tmpres to check for very strong outliers, e.g. >8*sd
+    
     # save residuals to permanent data file
-    str=$setname.$catalog.$color.resid
+    str=$setname.$catalog.$icol.resid
     (test -f phot/$str.dat && diff -q $tmpres phot/$str.dat >/dev/null) || \
         cp -p $tmpres phot/$str.dat
     #r=$(echo $aprad | awk '{print $1+2}')
-    x=$(median phot/$setname.$catalog.$color.resid.dat 9)   # median of residuals
-    xy2reg $setname.$inext phot/$setname.$catalog.$color.resid.dat "" "" $aprad "" "" "" 9 |
+    x=$(median phot/$setname.$catalog.$icol.resid.dat 9)   # median of residuals
+    xy2reg $setname.$inext phot/$setname.$catalog.$icol.resid.dat "" "" $aprad "" "" "" 9 |
         awk -v md=$x '{
             if ($1~/^circle/) {
                 printf("%s", $0)
@@ -22627,7 +23828,7 @@ AIphotcal () {
     # extinction
     if [ $fittype -eq 2 ] || [ $fittype -eq 3 ]
     then
-        str=$setname.$catalog.$color.ext
+        str=$setname.$catalog.$icol.ext
         grep -v "^#" $tmpres | AIplot -q -o x.$str.png \
             -t "Extinction (aprad=$aprad, $setname, $catalog)" \
             -g "set xlabel 'air mass'; set ylabel 'dmag'; set yrange [] reverse" \
@@ -22638,7 +23839,7 @@ AIphotcal () {
     # color term
     if [ "$cfit" ]
     then
-        str=$setname.$catalog.$color.color
+        str=$setname.$catalog.$icol.color
         grep -v "^#" $tmpres | AIplot -q -o x.$str.png \
             -t "Color term (aprad=$aprad, $setname, $catalog)" \
             -g "set xlabel '$citerm'; set ylabel 'dmag'; set yrange [] reverse" \
@@ -22647,18 +23848,21 @@ AIphotcal () {
             cp -p x.$str.png phot/$str.png
     fi
     # linearity
-    str=$setname.$catalog.$color.lin
+    str=$setname.$catalog.$icol.lin
+    x="set xlabel 'mag'; set ylabel 'mag - f($color)'; set yrange [] reverse"
+    test "$citerm" &&
+        x="set xlabel 'mag'; set ylabel 'mag - f($color, $citerm)'; set yrange [] reverse"
     grep -v "^#" $tmpres | AIplot -q -p -o x.$str.png \
         -t "Photometric error (aprad=$aprad, $setname, $catalog)" \
-        -g "set xlabel 'mag'; set ylabel 'mag - $color ($catalog)'; set yrange [] reverse" \
+        -g "$x" \
         - 4 9
     (test -f phot/$str.png && diff -q x.$str.png phot/$str.png >/dev/null) || \
         cp -p x.$str.png phot/$str.png
     # residuals
     false && (
-    str=$setname.$catalog.$color.resid
+    str=$setname.$catalog.$icol.resid
     grep -v "^#" $tmpres | AIplot -q -o x.$str.png \
-        -t "Residuals (aprad=$aprad, $setname, $catalog)" \
+        -t "Residuals (aprad=${aprad}px, $setname, $catalog)" \
         -g "set xlabel 'mag'; set ylabel 'mag - $color ($catalog)'; set yrange [] reverse" \
         - 4 8
     (test -f phot/$str.png && diff -q x.$str.png phot/$str.png >/dev/null) || \
@@ -22668,57 +23872,50 @@ AIphotcal () {
     # search for multiple matches of the same star
     # skip2 ... reference star matches multiple stars in image
     # skip3 ... multiple reference stars match same star in image
-    skip2=$(grep -v "^#" phot/$setname.$catalog.xphot.dat | cut -d ' ' -f1 | sort | awk '{
+    skip2=$(grep -v "^#" phot/$setname.$catalog.$icol.resid.dat | cut -d ' ' -f1 | sort | awk '{
         if($1==last)print $1;last=$1}')
-    skip3=$(grep -v "^#" phot/$setname.$catalog.xphot.dat | sort -k2,3 | awk '{
+    skip3=$(grep -v "^#" phot/$setname.$catalog.$icol.resid.dat | sort -k2,3 | awk '{
         s=$2" "$3; if(s==last)print lastid" "$1;last=s;lastid=$1}')
     (test "$skip2" || test "$skip3") && echo "ambigeous star matches:" >&2 &&
         echo $skip2 $skip3 | tr ' ' '\n' | sort -u | tr '\n' ' ' | sed -e 's/$/\n/' >&2
 
     # show possible outliers
-    if [ $(cat phot/$setname.$catalog.$color.resid.dat | wc -l) -ge 9 ]
+    if [ $(cat phot/$setname.$catalog.$icol.resid.dat | wc -l) -ge 9 ]
     then
         rescol=9
-        set - $(grep -v "^#" phot/$setname.$catalog.$color.resid.dat | tr '/' ' ' | \
+        set - $(grep -v "^#" phot/$setname.$catalog.$icol.resid.dat | tr '/' ' ' | \
             kappasigma - $rescol 4 2)
         dv=$(echo $1 | awk '{printf("%.2f", $1)}')
         x=$(echo $2 | awk '{printf("%.2f", 4*$1)}')
-        grep -v "^#" phot/$setname.$catalog.$color.resid.dat | tr '/' ' ' | \
+        grep -v "^#" phot/$setname.$catalog.$icol.resid.dat | tr '/' ' ' | \
                 awk -v rcol=$rescol -v dv=$dv -v lim=$x '{
                     x=$rcol+dv; d=x; if(x<0) d=-1*x;
                     if (d>lim) {printf("%s dm=%5.2f |dm|=%5.2f\n", $0, x, d)}
                 }' | sort -t '=' -nr -k3,3 > $tmp2
         # limit number of outliers to display (3+3%)
-        no=$(grep -v "^#" phot/$setname.$catalog.$color.resid.dat | wc -l | \
+        no=$(grep -v "^#" phot/$setname.$catalog.$icol.resid.dat | wc -l | \
             awk '{printf("%.0f", 3+0.03*$1)}')
-        test -s "$tmp2" && echo "outliers (mean mag-ref=$dv, rejection limit=$x)" >&2 &&
-            cat $tmp2 | lines $no >&2 &&
-            cat $tmp2 | lines $no | awk 'BEGIN{printf("# idlist:")}{printf(" %s", $1)}END{printf("\n")}'
+        if [ -s "$tmp2" ]
+        then
+            echo "outliers (mean mag-ref=$dv, rejection limit=$x)" >&2
+            cat $tmp2 | lines $no >&2
+            str=$(cat $tmp2 | lines $no | awk '{printf(" %s", $1)}')
+            echo "# idlist:" $str
+            for x in $str
+            do
+                sed -i '/text={'$x' /s, color=.*, color=red,' x.$setname.$catalog.reg
+            done
+        fi
     fi
 
 
     # saving results to header keywords
-    # get matching index of related large aperture measurements data set
-    #   unmatched/undefined is represented by value 0
-    clist=$(get_header $head all | grep "^AC_ICOL[1-9]=" | cut -c8 | sort -nu)
-    aidx=0
-    test "$clist" && for c in $clist
-    do
-        x=$(get_header -s $head AC_ICOL$c | tr -d "'") # instrumental color band
-        test -z "$x" && continue
-        case "$x" in
-            B|V|R)  test "$x" == "$color" && aidx=$c;;
-            G|L)    test "$color" == "V"  && aidx=$c;;
-        esac
-        test $aidx -ne 0 && break
-    done
-    test "$clist" && test $aidx -eq 0 && test $c -eq 1 && aidx=$c
-    
     # determine comet magnitude and coma diameter if appropriate
     comag=""
     #codia=""
     stmlim=""
-    if [ $aidx -eq 0 ]
+    # TODO: deal with header files in case of AI_VERSION<2.7
+    if [ $plane -eq 0 ]
     then
         echo "WARNING: no matching comet measurements data found." >&2
         # trying old keywords from AI_VERSION<2.7
@@ -22730,12 +23927,12 @@ AIphotcal () {
         #test "$x" && is_number "$x" &&
         #    codia=$(echo $x $pixscale | awk '{printf("%4.1f", $1*$2/60)}')
     else
-        echo "# using comet aperture measurements in $x color band"
-        x=$(get_header -s $head AC_ASUM$aidx,AI_ACOR$aidx | tr '\n' ' ' | awk '{if(NF>=1) print $1+$2}')
+        echo "# using comet aperture measurements from image color plane $plane"
+        x=$(get_header -s $head AC_ASUM$plane,AI_ACOR$plane | tr '\n' ' ' | awk '{if(NF>=1) print $1+$2}')
         test "$x" && comag=$(i2mag $x $texp $magzero  | awk '{printf("%.2f", $1)}')
-        x=$(get_header -s $head AI_ALIM$aidx)
+        x=$(get_header -s $head AI_ALIM$plane)
         test "$x" && stmlim=$(i2mag $x $texp $magzero | awk '{printf("%.1f", $1)}')
-        #x=$(get_header $head AC_DIAM$aidx)
+        #x=$(get_header $head AC_DIAM$plane)
         #test "$x" && is_number "$x" &&
         #    codia=$(echo $x $pixscale | awk '{printf("%4.1f", $1*$2/60)}')
     fi
@@ -22744,8 +23941,9 @@ AIphotcal () {
     
     
     # write results
+    # key is made from AP_AIDX + AP_PCAT
     test -z "$has_photcal" && str="writing new calibration results"
-    test "$has_photcal"    && str="updating calibration results for $catalog/$color"
+    test "$has_photcal"    && str="updating calibration results"
     str="$str (AP-index=$pidx)"
     if [ "$no_update" ]
     then
@@ -22755,14 +23953,29 @@ AIphotcal () {
         
         set_header $head \
         AP_VERS$pidx="${AI_VERSION}    / airfun version (AIphotcal)" \
-        AP_AIDX$pidx="$aidx            / Index of related aperture photometry data" \
+        AP_AIDX$pidx="$plane           / Index of related aperture photometry data" \
         AP_PCAT$pidx="$catalog         / Photometric reference catalog" \
-        AP_PCOL$pidx="$color           / Photometric reference color band" \
-        AP_RMAX$pidx="$rlim            / Search radius for catalog objects in pix" \
+        AP_PCOL$pidx="$color           / Photometric reference color band"
+
+        if [ "$rlim" ]
+        then
+            set_header $head \
+        AP_RMAX$pidx="$rlim            / Max. distance for matching catalog objects"
+        else
+            set_header $head AP_RMAX$pidx=""
+        fi
+        if [ "$mlim" ]
+        then
+            set_header $head \
+        AP_RLIM$pidx="$mlim            / Mag limit of reference stars"
+        else
+            set_header $head AP_RLIM$pidx=""
+        fi
+
+        set_header $head \
         AP_NMAX$pidx="$nlim            / Max. number of reference stars" \
         AP_NFIT$pidx="$nstars          / Number of valid reference stars" \
         AP_ARAD$pidx="$aprad           / Aperture radius in pix" \
-        AP_RLIM$pidx="$mlim            / Mag limit of reference stars" \
         AP_RMAG$pidx="$refmd           / Reference catalog mag (median)" \
         AP_DMAG$pidx="${afit%,*}       / Mag offset from MAGZERO" \
         AP_DMER$pidx="${afit#*,}       / Mag offset error" \
@@ -23126,7 +24339,7 @@ physical" > $tmpreg
     
     # determine mean brightness and background of psf stars
     echo "# $(date +'%H:%M:%S') measure psf stars for first iteration"
-    for col in 4 5 6
+    for col in $(seq 4 $((ncol+3)))
     do
         test "$psfrgb" && psfrgb="$psfrgb,"
         x=$(grep -v "^#" $psfphot | awk -v col=$col '{
@@ -23145,8 +24358,13 @@ physical" > $tmpreg
     x=$(echo $bgwidth $gap | awk '{printf("%.1f", $1+$2)}')
     echo "# bg annulus r=$gap-$x (aprad=$r)" >&2
     AIaphot -bg $starstack $psfphot $r $gap $bgwidth > $tmpdat
-    psfbg=$(grep -v "^#" $tmpdat | awk '{
-        r=r+$2; g=g+$3; b=b+$4}END{printf("%.1f,%.1f,%.1f", r/NR, g/NR, b/NR)}')
+    psfbg=$(grep -v "^#" $tmpdat | awk -v ncol=$ncol '{
+            r=r+$2
+            if(ncol==3) {g=g+$3; b=b+$4}
+        }END{
+            printf("%.1f", r/NR)
+            if(ncol==3) printf(",%.1f,%.1f", g/NR, b/NR)
+        }')
     echo "# psfbg=$psfbg  (n=$(grep -v "^#" $tmpdat | wc -l))"
 
     # determine intensity multiplier
@@ -23206,7 +24424,9 @@ physical" > $tmpreg
         echo "# $(date +'%H:%M:%S') starcombine" >&2
         starcombine -b $psfbg -o $psfoff -m $psfmult -f $fwhm $resampopts $psfstarsdir $tmppsf $psfsize $scale
         (test $? -ne 0 || ! is_pnm $tmppsf) &&
-            echo "ERROR: starcombine failed" >&2 && return 255
+            echo "ERROR: starcombine failed" >&2 &&
+            echo "    starcombine -b $psfbg -o $psfoff -m $psfmult -f $fwhm $resampopts $psfstarsdir $tmppsf $psfsize $scale" >&2 &&
+            return 255
         test "$AI_DEBUG" && cp -p $tmppsf x.psf0.$ext
         
         # mask central region
@@ -23226,12 +24446,15 @@ physical" > $tmpreg
             echo "# $(date +'%H:%M:%S') AIskygen" >&2
         AIskygen -o $tmpim1 $tmpdat $tmppsf $texp $magzero $scale $w $h $psfoff
         (test $? -ne 0 || ! is_pnm $tmpim1) && echo "ERROR: failed command:" >&2 &&
-            echo "  AIskygen -o $tmpim1 $tmpdat $tmppsf $texp $x $scale $w $h $psfoff" >&2 &&
+            echo "  AIskygen -o $tmpim1 $tmpdat $tmppsf $texp $magzero $scale $w $h $psfoff" >&2 &&
             return 255
 
         # create second approximation of psf
         echo "# $(date +'%H:%M:%S') subtract stars for second iteration"
-        pnmccdred -d $tmpim1 $img $tmpim2
+        #pnmccdred -d $tmpim1 $img $tmpim2
+        pnmccdred2 -d $tmpim1 $img $tmpim2
+        test $? -ne 0 &&
+            echo "ERROR in pnmccdred2" >&2 && return 255
         cp $hdr ${tmpim2%.*}.head
 
         if [ -z "$trail" ]
@@ -23240,14 +24463,21 @@ physical" > $tmpreg
             #   this value is used by AIcomet as bg value of starstack/cometstack
             echo "# $(date +'%H:%M:%S') measure improved psfbg"
             AIaphot -bg $tmpim2 $psfphot $r $gap $bgwidth > $tmpdat
-            psfbg=$(grep -v "^#" $tmpdat | awk '{
-                r=r+$2; g=g+$3; b=b+$4}END{printf("%.1f,%.1f,%.1f", r/NR, g/NR, b/NR)}')
+            psfbg=$(grep -v "^#" $tmpdat | awk -v ncol=$ncol '{
+                    r=r+$2
+                    if(ncol==3) {g=g+$3; b=b+$4}
+                }END{
+                    printf("%.1f", r/NR)
+                    if(ncol==3) printf(",%.1f,%.1f", g/NR, b/NR)
+                }')
             echo "# psfbg=$psfbg" >&2
             # TODO: write values to image header
         else
             psfbg=$(get_header -q $hdr AI_PSFBG)
             test "$psfbg" && echo "# reusing psfbg=$psfbg"
         fi
+        test -z "$psfbg" &&
+            echo "ERROR: unable to determine psfbg" >&2 && return 255
         
         rm -rf $tmpstarsdir/*
         #test "$AI_DEBUG" &&
@@ -23295,7 +24525,8 @@ physical" > $tmpreg
         mcorr=$(echo ${psfrgb//,/ } $4 $5 $6 | awk '{
             dr=$4-$1; dg=$5-$2; db=$6-$3
             if(dr>0) {dr=0}; if(dg>0) {dg=0}; if(db>0) {db=0}
-            printf("%.3f,%.3f,%.3f", dr, dg, db)}')
+            printf("%.3f", dr)
+            if (NF>4) printf(",%.3f,%.3f", dg, db)}')
         echo "# mcorr=$mcorr" >&2
         set_header $hdr "AI_PSFMC=$mcorr"
         
@@ -23306,17 +24537,23 @@ physical" > $tmpreg
     else
         mcorr=$(get_header -q $hdr AI_PSFMC)
         test "$mcorr" && echo "# reusing mcorr=$mcorr"
-        test -z "$mcorr" && mcorr="0,0,0" &&
+        if [ -z "$mcorr" ]
+        then
+            mcorr="0,0,0"
+            test $ncol -eq 1 && mcorr="0"
             echo "WARNING: unknown AI_PSFMC, using mcorr=$mcorr" >&2
+        fi
     fi
 
     # subtract both psf and companion stars
     echo "# $(date +'%H:%M:%S') AIskygen" >&2
     # apply mag correction
     cat $psfphot $subphot | grep -v "^#" | sort -u | \
-        awk -v mcorr=$mcorr 'BEGIN{split(mcorr,mc,",")}{
+        awk -v mcorr=$mcorr 'BEGIN{ncol=split(mcorr,mc,",")}{
+        r=$4+mc[1]
+        if (ncol==3) {g=$5+mc[2]; b=$6+mc[3]} else {g=r; b=r}
         printf("%-10s  %7.2f %7.2f  %5.2f %5.2f %5.2f  %3d %3d  %4d %3d %.3f\n",
-        $1, $2, $3, $4+mc[1], $5+mc[2], $6+mc[3], $7, $8, $9, $10, $11)}' > $tmpphot
+        $1, $2, $3, r, g, b, $7, $8, $9, $10, $11)}' > $tmpphot
     
     AIskygen -o $tmpim1 $tmpphot $tmppsf $texp $magzero $scale $w $h $psfoff
     (test $? -ne 0 || ! is_pnm $tmpim1) && echo "ERROR: failed command:" >&2 &&
@@ -23324,7 +24561,8 @@ physical" > $tmpreg
         return 255
     echo "# $(date +'%H:%M:%S') creating residual image $(basename $outresid)" >&2
     #pnmccdred -a $((bgres-psfoff)) -d $tmpim1 $img $outresid
-    pnmccdred -d $tmpim1 $img $outresid
+    #pnmccdred -d $tmpim1 $img $outresid
+    pnmccdred2 -d $tmpim1 $img $outresid
     echo "# $(date +'%H:%M:%S') done" >&2
     
     # reject most deviating psf stars
@@ -23453,6 +24691,7 @@ AIcomet () {
     local filter
     local newmagcorr
     local add
+    local blur
     
     (test "$showhelp" || test $# -lt 4) &&
         echo "usage: AIcomet [-t] [-e] [-d outdir|$codir] [-b bgfit10] [-r rlim] [-p newphot]" \
@@ -23549,7 +24788,7 @@ AIcomet () {
     # check content of already present region files
     if [ "$skip_cosub" ]
     then
-        test -s $coreg && ! grep -q -iwE "^polygon" $coreg &&
+        test -s $coreg && ! grep -q -iwE "^circle|^polygon" $coreg &&
             echo "ERROR: no polygon region in $coreg." >&2 && return 255
         test -s $bgreg && ! grep -q -iwE "^circle|^polygon|^box" $bgreg &&
             echo "ERROR: no region in $bgreg." >&2 && return 255
@@ -23570,6 +24809,9 @@ AIcomet () {
     fwhm=$(get_header -q $hdr AI_FWHM)
     test -z "$fwhm" &&
         echo "ERROR: missing AI_FWHM in $hdr." >&2 && return 255
+    # set blur value used by imblur
+    blur=$(echo $fwhm | awk '{printf("%.1f", sqrt(0.4-0.07*$1+0.06*$1*$1))}')
+    echo "# blur=$blur"
 
     texp=""     # exposure time in sec
     nexp=""     # number of exposures that have been averaged
@@ -23603,15 +24845,21 @@ AIcomet () {
         # select stars from $starphot according to rlim and apply mag correction -> $tmpphot
         mcorr=$(get_header -q $hdr AI_PSFMC)
         test "$mcorr" && echo "# mcorr=$mcorr"
-        test -z "$mcorr" && mcorr="0,0,0" &&
+        if [ -z "$mcorr" ]
+        then
+            mcorr="0,0,0"
+            test $ncol -eq 1 && mcorr="0"
             echo "WARNING: unknown AI_PSFMC, using mcorr=$mcorr" >&2
+        fi
         set - $(echo $omove | awk -F '@' '{printf("%s", $NF)}' | tr ',' ' ')
         grep -v "^#" $starphot | awk -v rlim=${rlim:-"100"} -v w=$w -v h=$h -v xc=$1 -v yc=$2 -v mcorr=$mcorr \
-            'BEGIN{split(mcorr,mc,","); rmax=rlim/100*sqrt(w*w+h*h)}{
+            'BEGIN{ncol=split(mcorr,mc,","); rmax=rlim/100*sqrt(w*w+h*h)}{
             dx=$2-xc; dy=$3-yc; dr=sqrt(dx*dx+dy*dy)
             if (dr > rmax) next
+            r=$4+mc[1]
+            if (ncol==3) {g=$5+mc[2]; b=$6+mc[3]} else {g=r; b=r}
             printf("%-10s  %7.2f %7.2f  %6.3f %6.3f %6.3f  %3d %3d  %4d %3d %.3f\n",
-            $1, $2, $3, $4+mc[1], $5+mc[2], $6+mc[3], $7, $8, $9, $10, $11)}' > $tmpphot
+            $1, $2, $3, r, g, b, $7, $8, $9, $10, $11)}' > $tmpphot
         y=$(cat $starphot | grep -v "^#" | wc -l)
 
         # merging newphot
@@ -23654,9 +24902,13 @@ AIcomet () {
             echo "ERROR: failed command: AIskygen -o $tmpim2 $tmpdat1 $tmpim1" \
                 "$texp $magzero $scale $w $h $psfoff" >&2 && return 255
         #pnmccdred -a $((bgres-psfoff)) -d $tmpim2 $ststack $stsub
-        add=$(echo $outbg ${inbg//,/ } | awk '{printf("%.0f,%.0f,%.0f", $1-$2, $1-$3, $1-$4)}')
+        add=$(echo $outbg ${inbg//,/ } | awk '{
+            printf("%.0f", $1-$2)
+            if (NF>2) printf(",%.0f,%.0f", $1-$3, $1-$4)
+        }')
         #echo "pnmccdred -a $add -d $tmpim2 $ststack $stsub" >&2
-        pnmccdred -a "$add" -d $tmpim2 $ststack $stsub
+        #pnmccdred -a "$add" -d $tmpim2 $ststack $stsub
+        pnmccdred2 -a "$add" -d $tmpim2 $ststack $stsub
         test $? -ne 0 &&
             echo "ERROR: failed command: pnmccdred -a $add -d $tmpim2 $ststack $stsub" >&2 &&
             return 255
@@ -23673,8 +24925,12 @@ AIcomet () {
             echo "ERROR: failed command: AIskygen -o $tmpim2 $tmpdat1 $tmpim1" \
                 "$texp $magzero $scale $w $h $psfoff" >&2 && return 255
         #pnmccdred -a $((bgres-psfoff)) -d $tmpim2 $costack $cosub
-        add=$(echo $outbg ${inbg//,/ } | awk '{printf("%.0f,%.0f,%.0f", $1-$2, $1-$3, $1-$4)}')
-        pnmccdred -a $add -d $tmpim2 $costack $cosub
+        add=$(echo $outbg ${inbg//,/ } | awk '{
+            printf("%.0f", $1-$2)
+            if (NF>2) printf(",%.0f,%.0f", $1-$3, $1-$4)
+        }')
+        #pnmccdred -a $add -d $tmpim2 $costack $cosub
+        pnmccdred2 -a $add -d $tmpim2 $costack $cosub
         test $? -ne 0 &&
             echo "ERROR: failed command: pnmccdred -a $add -d $tmpim2 $costack $cosub" >&2 &&
             return 255
@@ -23690,26 +24946,26 @@ AIcomet () {
             x=$(echo $bgmult $comult | awk '{printf("%.6f", $2/$1)}')   # comult/bgmult
             y=$(echo $comult | awk '{printf("%.6f", 1/$1)}')            # 1/comult
             echo "$(date +'%H:%M:%S') create bg correction image ..." >&2
-            pnmccdred -m $x $bgfit10 $tmpim1
-            pnmccdred -m $y $tmpim1 - | pnmccdred -m $comult - - | \
-                pnmccdred -a $psfoff -d - $tmpim1 - | \
+            pnmccdred2 -m $x $bgfit10 $tmpim1
+            pnmccdred2 -m $y $tmpim1 - | pnmccdred2 -m $comult - - | \
+                pnmccdred2 -a $psfoff -d - $tmpim1 - | \
                 convert - -resize ${w}x${h}\! $tmpbgcorr
             # create contrast enhanced images
             echo "$(date +'%H:%M:%S') create contrast enhanced image ..." >&2
             add=$(echo $outbg | awk -F ',' -v m=$comult '{
                 printf("%.0f", $1*(1-m))}')
-            pnmccdred -a $add -m $comult $cosub - | \
-                pnmccdred -a $psfoff -d $tmpbgcorr - - | \
-                imblur - > $coblur
+            pnmccdred2 -a $add -m $comult $cosub - | \
+                pnmccdred2 -a $psfoff -d $tmpbgcorr - - | \
+                imblur -b $blur - > $coblur
         else
             if [ $comult -gt 1 ]
             then
                 add=$(echo $outbg | awk -F ',' -v m=$comult '{
                     printf("%.0f", $1*(1-m))}')
-                pnmccdred -a $add -m $comult $cosub - | \
-                    imblur - > $coblur
+                pnmccdred2 -a $add -m $comult $cosub - | \
+                    imblur -b $blur - > $coblur
             else
-                imblur $cosub > $coblur
+                imblur -b $blur $cosub > $coblur
             fi
         fi
         (! test -s $coblur || ! is_pnm $coblur) &&
@@ -23720,7 +24976,7 @@ AIcomet () {
     
     # define regions for comet and background
     str=""
-    if [ ! -f $coreg ] || ! grep -q -iwE "^polygon" $coreg
+    if [ ! -f $coreg ] || ! grep -q -iwE "^circle|^polygon" $coreg
     then
         str="do_it"
         # get jd (mean jd) and jdref
@@ -23782,7 +25038,7 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
             printf(",%.2f,%.2f",  $3-x+0.5+r,   h-$4-y+0.5+r)
             printf(",%.2f,%.2f",  $3-x,         h-$4-y+0.5+z*r)
             printf(",%.2f,%.2f",  $3-x+0.5-r,   h-$4-y+0.5+r)
-            printf(",%.2f,%.2f)", $3-x+0.5-z*r, h-$4-y)
+            printf(",%.2f,%.2f)\n", $3-x+0.5-z*r, h-$4-y)
         }' >> $coreg
     else
         echo "reusing comet region from $coreg" >&2
@@ -23823,7 +25079,7 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
     done
     
     # TODO: allow for ellipse regions, needs some tweeks in reg2pbm
-    ! grep -q -iwE "^polygon" $coreg &&
+    ! grep -q -iwE "^circle|^polygon" $coreg &&
         echo "ERROR: no polygon region in $coreg." >&2 && return 255
     ! grep -q -iwE "^circle|^polygon|^box" $bgreg &&
         echo "ERROR: no region in $bgreg." >&2 && return 255
@@ -23860,18 +25116,25 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
         set - $(imsize $ststack)
         w=$1
         h=$2
-        # TODO: allow for box or circle as well
-        coregion=$(grep "^polygon(" $coreg | tr '() ' ' ' | awk -v w=$w -v h=$h -v m=20 '{
-            n=split($2,a,/,/)
-            for (i=0;i<n/2;i++) {
-                x=a[2*i+1]; y=a[2*i+2]
-                if (i==0) {
-                    x1=x; x2=x; y1=y; y2=y
-                } else {
-                    if (x<x1) x1=x
-                    if (x>x2) x2=x
-                    if (y<y1) y1=y
-                    if (y>y2) y2=y
+        # TODO: allow for box as well
+        coregion=$(grep -E "^circle\(|^polygon\(" $coreg | tr '() ' ' ' | awk -v w=$w -v h=$h -v m=20 '{
+            if ($1 == "circle") {
+                n=split($2,a,/,/)
+                x1=a[1]-a[3]; x2=a[1]+a[3]
+                y1=a[2]-a[3]; y2=a[2]+a[3]
+            }
+            if ($1 == "polygon") {
+                n=split($2,a,/,/)
+                for (i=0;i<n/2;i++) {
+                    x=a[2*i+1]; y=a[2*i+2]
+                    if (i==0) {
+                        x1=x; x2=x; y1=y; y2=y
+                    } else {
+                        if (x<x1) x1=x
+                        if (x>x2) x2=x
+                        if (y<y1) y1=y
+                        if (y>y2) y2=y
+                    }
                 }
             }
             x1=x1-m; if (x1<0.5)   x1=0.5
@@ -23895,6 +25158,7 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
         echo "# whxy=$whxy"
 
         # comet mask
+        # TODO: use vips
         if [ "$badreg" ]
         then
             reg2pbm $cosub $badreg | imcrop -1 - $whxy | convert - -negate $tmpbadmask
@@ -23905,14 +25169,14 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
         fi
 
         # determine background in $cosub, shift intensity to bg=psfoff
-        trailbg=$(regstat -q -a $cosub $bgreg $badreg | cut -d ' ' -f1)
+        trailbg=$(regstat2 -q -a $cosub $bgreg $badreg | cut -d ' ' -f1)
         x=$(echo $trailbg | awk -F ',' -v b=$psfoff '{
             printf("%.0f", b-$1)
             if(NF==3) {printf(",%.0f,%.0f", b-$2, b-$3)}
             }')
-        imcrop -1 $cosub $whxy | pnmccdred -a $x - $tmpim1
+        imcrop -1 $cosub $whxy | pnmccdred2 -a $x - $tmpim1
         #AIpsfmask -m $tmpmask $tmpim1 $tmpim2 $psfoff
-        pnmccdred -m 0 $tmpim1 - | pnmccdred -a $psfoff - - | \
+        pnmccdred2 -m 0 -a $psfoff $tmpim1 - | \
             pnmcomp -alpha $tmpmask $tmpim1 > $tmpim2
 
         # smooth cropped costack
@@ -23953,17 +25217,20 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
         mkcotrail -o $tmpim2 $sname $tmpim1 $omove $obsdata $psfoff
         #echo "# finished mkcotrail at $(date +'%H:%M:%S')" >&2
         set - $whxy
-        pnmccdred -m 0 $ststack - | pnmpaste $tmpim2 $3 $4 - > $cotrail
+        pnmccdred2 -m 0 $ststack - | pnmpaste $tmpim2 $3 $4 - > $cotrail
     fi
 
     if [ ! "$skip_cosub" ]
     then
         # create residual image
+        echo "$(date +'%H:%M:%S') creating residual image ..." >&2
         test "$no_trail" && cp $stsub $residimg
-        test ! "$no_trail" && pnmccdred -d $cotrail $stsub $residimg
+        #test ! "$no_trail" && pnmccdred -d $cotrail $stsub $residimg
+        test ! "$no_trail" && pnmccdred2 -d $cotrail $stsub $residimg
         cp -p $hdr $residhdr
         set_header $residhdr AI_SNAME=$sname
     fi
+
     
     # --------------------------------------------------
     #   new photometry of stars affected by comet trail
@@ -24049,9 +25316,11 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
                     echo "$id $x $y" | \
                         AIaphot $residimg - $rad $gap 4 | grep -v "^#" | \
                         awk -v mcorr=$mcorr -v newcorr=$newmagcorr '
-                        BEGIN{split(mcorr,mc,","); split(newcorr,nc,",")}{
+                        BEGIN{ncol=split(mcorr,mc,","); split(newcorr,nc,",")}{
+                        r=$4+nc[1]-mc[1]
+                        if (ncol==3) {g=$5+nc[2]-mc[2]; b=$6+nc[3]-mc[3]} else {g=r; b=r}
                         printf("%-10s  %7.2f %7.2f  %6.3f %6.3f %6.3f  %3d %3d  %4d %3d %.3f\n",
-                            $1, $2, $3, $4+nc[1]-mc[1], $5+nc[2]-mc[2], $6+nc[3]-mc[3],
+                            $1, $2, $3, r, g, b,
                             $7, $8, $9, $10, $11)
                         }'
                 fi
@@ -24065,11 +25334,13 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
             # select stars from $starphot according to rlim and apply mag correction
             set - $(echo $omove | awk -F '@' '{printf("%s", $NF)}' | tr ',' ' ')
             grep -v "^#" $starphot | awk -v rlim=${rlim:-"100"} -v w=$w -v h=$h -v xc=$1 -v yc=$2 -v mcorr=$mcorr \
-            'BEGIN{split(mcorr,mc,","); rmax=rlim/100*sqrt(w*w+h*h)}{
+            'BEGIN{ncol=split(mcorr,mc,","); rmax=rlim/100*sqrt(w*w+h*h)}{
                 dx=$2-xc; dy=$3-yc; dr=sqrt(dx*dx+dy*dy)
                 if (dr > rmax) next
+                r=$4+mc[1]
+                if (ncol==3) {g=$5+mc[2]; b=$6+mc[3]} else {g=r; b=r}
                 printf("%-10s  %7.2f %7.2f  %6.3f %6.3f %6.3f  %3d %3d  %4d %3d %.3f\n",
-                $1, $2, $3, $4+mc[1], $5+mc[2], $6+mc[3], $7, $8, $9, $10, $11)}' > $tmpdat1
+                $1, $2, $3, r, g, b, $7, $8, $9, $10, $11)}' > $tmpdat1
             # merging newphot
             str=$(grep -v "^#" $newphot | awk '{printf("%s ", $1)}')
             for id in $str; do sed --follow-symlinks -i '/^'$id' /s,^,# ,' $tmpdat1; done
@@ -24087,8 +25358,12 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
                 pnmcomp -alpha $tmpmask $starpsf > $tmpim1
             AIskygen -o $tmpim2 $tmpdat1 $tmpim1 $texp $magzero $scale $w $h $psfoff
             #pnmccdred -a $((bgres-psfoff)) -d $tmpim2 $ststack $stsub
-            add=$(echo $outbg ${inbg//,/ } | awk '{printf("%.0f,%.0f,%.0f", $1-$2, $1-$3, $1-$4)}')
-            pnmccdred -a $add -d $tmpim2 $ststack $stsub
+            add=$(echo $outbg ${inbg//,/ } | awk '{
+                printf("%.0f", $1-$2)
+                if (NF>2) printf(",%.0f,%.0f", $1-$3, $1-$4)
+            }')
+            #pnmccdred -a $add -d $tmpim2 $ststack $stsub
+            pnmccdred2 -a $add -d $tmpim2 $ststack $stsub
             # subtract trails from comet stack -> new cosub
             # AIpsfmask -q -m $trailmask $trailpsf $tmpim1 $psfoff
             reg2pbm $trailpsf $trailmask > $tmpmask
@@ -24096,8 +25371,12 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
                 pnmcomp -alpha $tmpmask $trailpsf > $tmpim1
             AIskygen -o $tmpim2 $tmpdat1 $tmpim1 $texp $magzero $scale $w $h $psfoff
             #pnmccdred -a $((bgres-psfoff)) -d $tmpim2 $costack $cosub
-            add=$(echo $outbg ${inbg//,/ } | awk '{printf("%.0f,%.0f,%.0f", $1-$2, $1-$3, $1-$4)}')
-            pnmccdred -a $add -d $tmpim2 $costack $cosub
+            add=$(echo $outbg ${inbg//,/ } | awk '{
+                printf("%.0f", $1-$2)
+                if (NF>2) printf(",%.0f,%.0f", $1-$3, $1-$4)
+            }')
+            #pnmccdred -a $add -d $tmpim2 $costack $cosub
+            pnmccdred2 -a $add -d $tmpim2 $costack $cosub
             
             echo "$(date +'%H:%M:%S') extracting improved comet image ..." >&2
             if [ "$no_trail" ]
@@ -24110,7 +25389,7 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
                 then
                     reg2pbm $cosub $badreg | imcrop -1 - $whxy | convert - -negate $tmpbadmask
                     reg2pbm $cosub $coreg  | imcrop -1 - $whxy | \
-                        pnmarith -mul - $tmpbadmask > $tmpmask
+                        pnmarith -mul - $tmpbadmask 2>/dev/null > $tmpmask
                 else
                     reg2pbm $cosub $coreg  | imcrop -1 - $whxy > $tmpmask
                 fi
@@ -24121,9 +25400,9 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
                     printf("%.0f", b-$1)
                     if(NF==3) {printf(",%.0f,%.0f", b-$2, b-$3)}
                     }')
-                imcrop -1 $cosub $whxy | pnmccdred -a $x - $tmpim1
+                imcrop -1 $cosub $whxy | pnmccdred2 -a $x - $tmpim1
                 # AIpsfmask -q -m $tmpmask $tmpim1 $tmpim2 $psfoff
-                pnmccdred -m 0 $tmpim1 - | pnmccdred -a $psfoff - - | \
+                pnmccdred -m 0 -a $psfoff $tmpim1 - | \
                     pnmcomp -alpha $tmpmask $tmpim1 > $tmpim2
 
                 # smooth cropped costack
@@ -24134,10 +25413,11 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
                 # create artificial comet trail
                 mkcotrail -o $tmpim2 $sname $tmpim1 $omove $obsdata $psfoff
                 set - $whxy
-                pnmccdred -m 0 $ststack - | pnmpaste $tmpim2 $3 $4 - > $cotrail
+                pnmccdred2 -m 0 $ststack - | pnmpaste $tmpim2 $3 $4 - > $cotrail
 
                 # create improved residuals image
-                pnmccdred -d $cotrail $stsub $residimg
+                #pnmccdred -d $cotrail $stsub $residimg
+                pnmccdred2 -d $cotrail $stsub $residimg
             fi
             
             # create improved contrast enhanced and blured cosub image
@@ -24147,18 +25427,18 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
                 # create contrast enhanced images
                 add=$(echo $outbg | awk -F ',' -v m=$comult '{
                     printf("%.0f", $1*(1-m))}')
-                pnmccdred -a $add -m $comult $cosub - | \
-                    pnmccdred -a $psfoff -d $tmpbgcorr - - | \
-                imblur - > $coblur
+                pnmccdred2 -a $add -m $comult $cosub - | \
+                    pnmccdred2 -a $psfoff -d $tmpbgcorr - - | \
+                imblur -b $blur - > $coblur
             else
                 if [ $comult -gt 1 ]
                 then
                     add=$(echo $outbg | awk -F ',' -v m=$comult '{
                         printf("%.0f", $1*(1-m))}')
-                    pnmccdred -a $add -m $comult $cosub - | \
-                        imblur - > $coblur
+                    pnmccdred2 -a $add -m $comult $cosub - | \
+                        imblur -b $blur - > $coblur
                 else
-                    imblur $cosub > $coblur
+                    imblur -b $blur $cosub > $coblur
                 fi
             fi
         fi
@@ -24173,14 +25453,14 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
             echo "$(date +'%H:%M:%S') create contrast stretched image for photometry" >&2
             add=$(echo $outbg | awk -F ',' -v m=$comult '{
                 printf("%.0f", $1*(1-m))}')
-            pnmccdred -a $add -m $comult $cosub - | \
-                pnmccdred -a $psfoff -d $tmpbgcorr - $cosubimage
+            pnmccdred2 -a $add -m $comult $cosub - | \
+                pnmccdred2 -a $psfoff -d $tmpbgcorr - $cosubimage
         else
             if [ $comult -gt 1 ]
             then
                 add=$(echo $outbg | awk -F ',' -v m=$comult '{
                     printf("%.0f", $1*(1-m))}')
-                pnmccdred -a $add -m $comult $cosub $cosubimage
+                pnmccdred2 -a $add -m $comult $cosub $cosubimage
             else
                 cp -p $cosub $cosubimage
             fi
@@ -24194,7 +25474,7 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
     echo "$(date +'%H:%M:%S') large aperture photometry of comet ..." >&2
     # determine background excluding bad regions
     echo "$(date +'%H:%M:%S') measure bg" >&2
-    regstat -q $cosubimage $bgreg $badreg | cut -d ' ' -f1 | \
+    regstat2 -q $cosubimage $bgreg $badreg | cut -d ' ' -f1 | \
         awk -F ',' -v m=$comult -v b=$outbg '{
             printf("%.1f", ($1-b)/m)
             if (NF==3) printf(" %.1f %.1f", ($2-b)/m, ($3-b)/m)
@@ -24214,7 +25494,7 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
 
     # measure comet region excluding bad regions
     echo "$(date +'%H:%M:%S') measure comet" >&2
-    set - $(regstat -q -a $cosubimage $coreg $badreg)
+    set - $(regstat2 -q -a $cosubimage $coreg $badreg)
     area=$3
     sum=$(echo $4 $bgmn | tr ',' ' ' | awk -v a=$area -v m=$comult -v b=$outbg '{
         if (NF==2) printf("%.0f", ($1-a*b-a*m*$2)/m)
@@ -24222,7 +25502,7 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
             ($2-a*b-a*m*$5)/m, ($3-a*b-a*m*$6)/m)
     }')
     # measure max intensity
-    set - $(regstat -q -m $cosubimage $coreg $badreg)
+    set - $(regstat2 -q -m $cosubimage $coreg $badreg)
     x=$(echo $2 | tr ',' '\n' | sort -n | tail -1)
     echo "# comet sum=$sum (max=$x)" >&2
     test "$(echo $x $(get_header $hdr SATURATE) | awk '{if($1>=$2){printf("saturated")}}')" &&
@@ -24230,7 +25510,7 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
     # total area of comet region
     if [ "$badreg" ]
     then
-        set - $(regstat -q -a $cosubimage $coreg)
+        set - $(regstat2 -q -a $cosubimage $coreg)
         area=$3
     fi
     # circle of the same area size
@@ -24522,6 +25802,7 @@ AImapphot () {
     local tmpim1=$(mktemp "$tdir/tmp_im1_$$.XXXXXX.pnm")
     local tmpim2=$(mktemp "$tdir/tmp_im2_$$.XXXXXX.pnm")
     local tmpdat1=$(mktemp "$tdir/tmp_data1_$$.XXXXXX.dat")
+    local catlist=$(mktemp "$tdir/tmp_cat_$$.XXXXXX.dat")
     local odir="mapphot/$comet"        # output directory for check images and regions
     local mapdat="$comet.mapphot.dat" # output mapphot data file, new results are appended
     local icqdat="$comet.mapphot.icq"  # output icq data file, always overwritten
@@ -24564,6 +25845,9 @@ AImapphot () {
     local mag
     local aidx
     local xlist
+    local pcol
+    local pcat
+    local prio
     local center
     local x
     local h
@@ -24680,12 +25964,21 @@ AImapphot () {
         fi
         
         # get index of comet aperture measurements in G color band
-        aidx=""
-        xlist=$(get_header $hdr all | grep "^AC_ICOL[1-9]=" | cut -c8 | sort -nu)
+        # using catalog with highest priority
+        xlist=$(get_header $hdr all | grep "^AP_AIDX[1-9]=" | cut -c8 | sort -nu)
         for x in $xlist
         do
-            test "$(get_header $hdr AC_ICOL$x)" == "G" && aidx=$x && break
-        done
+            i=$(get_header $hdr AP_AIDX$x)
+            test "$(get_header $hdr AC_ICOL$i)" != "G" && continue
+            aidx=$(get_header -q $hdr AP_AIDX$x); test -z "$aidx" && aidx="-"
+            pcol=$(get_header -q $hdr AP_PCOL$x); test -z "$pcol" && pcol="-"
+            pcat=$(get_header -q $hdr AP_PCAT$x); test -z "$pcat" && pcat="-"
+            # choose priority from order in refcat.dat (first=highest)
+            prio=$(grep -nw "^$pcat" refcat.dat | cut -d ":" -f1)
+            echo $prio $x $pcat
+        done | sort -n -k1,1 > $catlist
+        aidx=$(lines 1 $catlist | cut -d ' ' -f2)
+        rm -f $catlist
         test -z "$aidx" && echo "ERROR: missing measurements in G color band." >&2 && return 255
 
         # get comet aperture diameter (in pix)
@@ -24697,20 +25990,8 @@ AImapphot () {
         test -z "$bgval" && echo "ERROR: missing keyword AC_BCKG$aidx." >&2 && return 255
         texp=$(echo $texp $nexp | awk '{printf $1/$2}')
         echo "# $(basename $cosub) $(basename $coreg) d=$dia bg=$bgval texp=$texp pscale=$pscale" >&2
-        
-        # get photometry results from APASS
-        # get index for comet aperture measurements in G color band
-        pidx=""
-        xlist=$(get_header $hdr all | grep "^AP_AIDX[1-9]=" | cut -c8 | sort -nu)
-        for x in $xlist
-        do
-            test "$(get_header $hdr AP_AIDX$x)" == "$aidx" &&
-            test "$(get_header $hdr AP_PCAT$x)" == "apass" && pidx=$x && break
-        done
-        test -z "$pidx" && echo "ERROR: missing photometry in APASS." >&2 && return 255
-        # old: set - $(get_header -s $hdr AI_PAPCO,AI_PCREF,AI_PAREF) x
         # get magzero (1ADU,1s) corrected for large aperture
-        magzero=$(get_header -s $hdr AP_MZER$pidx)
+        magzero=$(get_header -s $hdr AP_MZER$aidx)
         test -z "$magzero" && echo "ERROR: missing keyword." >&2 && return 255
 
         # correct magzero and background according to intensity multiplier
@@ -24803,8 +26084,8 @@ physical" > $apreg
     # show check images
     if [ "$csize" ] && [ "$showimages" ]
     then
-        AIexamine -n "CometCenters" -p "-tile" $(ls $odir/20*.{coblur,xcc}.[pr]*) &
-        AIexamine -n "Apertures"    -p "-tile" $(ls $odir/20*.{coblur,xap}.[pr]*) &
+        AIexamine -n "CometCenters" -p "-tile" $(ls $odir/[0-9]*.{coblur,xcc}.[pr]*) &
+        AIexamine -n "Apertures"    -p "-tile" $(ls $odir/[0-9]*.{coblur,xap}.[pr]*) &
     fi
     
     # show (simple) light curve
@@ -24953,7 +26234,7 @@ AInoise () {
                 	ln -s $tdir/$num.$ext $wdir/$num.$ext
                 else
                 	AI_DCRAWPARAM="$dcrawopts $AI_DCRAWPARAM" \
-                	AIraw2gray $opts $fname $dark > $wdir/$num.$ext
+                	AIraw2gray $opts $fname $wdir/$num.$ext $dark
                 fi
             else
            		echo "  $num"
@@ -24970,7 +26251,7 @@ AInoise () {
 
         # create average image, used as base for individual scaling
         echo "average images ..."
-        pnmcombine $ilist $sname.mn.$ext
+        pnmcombine2 $ilist $sname.mn.$ext
         
         # statistics for average image
         if [ $do_bayer ] || [ "$type" == "d" ]
@@ -25019,20 +26300,22 @@ EOF
                 then
                     xx=$(echo $mxx $1 $2 $3 $4 | awk '{
                         printf("%3.0f %3.0f %3.0f %3.0f\n", $1-$5, $2-$6, $3-$7, $4-$8)}')
-                    echo "$num: $xx"
+                    test "$AI_DEBUG" && echo "$num: $xx"
                     xx=$(echo $mxx $1 $2 $3 $4 | awk -v l=10000 '{
                         printf("%.0f %.0f %.0f %.0f\n",
                             l+$5-$1, l+$6-$2, l+$7-$3, l+$8-$4)}')
-                    echo -e "P2\n2 2\n65535\n$mxx" | pnmtile $w $h - | \
+                    # note pnmccdred2 does not work under parallel with pipes
+                    echo -e "P2\n2 2\n65535\n$xx" | pnmtile $w $h - | \
                         pnmccdred -a 20000 -d - $wdir/$num.$ext $tmpim &&
                         mv $tmpim $wdir/$num.$ext
                 else
                     xx=$(echo $mxx $1 $2 $3 $4 | awk '{
                         printf("%.4f %.4f %.4f %.4f\n", $1/$5, $2/$6, $3/$7, $4/$8)}')
-                    echo "$num: $xx"
+                    test "$AI_DEBUG" && echo "$num: $xx"
                     xx=$(echo $mxx $1 $2 $3 $4 | awk -v l=20000 '{
                         printf("%.0f %.0f %.0f %.0f\n",
                             l*$5/$1, l*$6/$2, l*$7/$3, l*$8/$4)}')
+                    # note pnmccdred2 does not work under parallel with pipes
                     echo -e "P2\n2 2\n65535\n$xx" | pnmtile $w $h - | \
                         pnmccdred -m 20000 -s - $wdir/$num.$ext $tmpim &&
                         mv $tmpim $wdir/$num.$ext
@@ -25042,8 +26325,8 @@ EOF
                     printf("%.0f %.0f %.0f", $5, $9, $13)}')
                 xx=$(echo $mrgb $1 $2 $3 | awk '{
                     printf("%.4f %.4f %.4f\n", $1/$4, $2/$5, $3/$6)}')
-                echo "  $num: $xx"
-                pnmccdred -m ${xx// /,} $wdir/$num.$ext $tmpim &&
+                test "$AI_DEBUG" && echo "  $num: $xx"
+                pnmccdred2 -m ${xx// /,} $wdir/$num.$ext $tmpim &&
                     mv $tmpim $wdir/$num.$ext
             fi
             rm -f $tmpim
@@ -25056,7 +26339,7 @@ EOF
 		# TODO: error handling
 
         # stddev
-        pnmcombine -s $ilist $sname.sd.$ext
+        pnmcombine2 -s $ilist $sname.sd.$ext
         
         # clean up
         rm -f $ilist
@@ -25094,9 +26377,9 @@ AIbadpix () {
     lim=$((thres*sd))
     echo sd=$sd lim=$lim >&2
     gm convert $wdir/$sname.diff.pgm -threshold $((10000+lim)) x.bad.pbm
-    AIval -a -c -0 x.bad.pbm > x.high.dat
+    AIval -a -c -1 x.bad.pbm > x.high.dat
     gm convert $wdir/$sname.diff.pgm -threshold $((10000-lim)) x.bad.pbm
-    AIval -a -c -1 x.bad.pbm > x.low.dat
+    AIval -a -c -0 x.bad.pbm > x.low.dat
     wc -l x.{high,low}.dat >&2
     cat x.high.dat x.low.dat | awk '{print NR" "$0}' | \
         xy2reg $sname.pgm - > $sname.bad.$thres.reg
@@ -25107,14 +26390,14 @@ AIbadpix () {
 }
 
 
-# find hot/cold bad pixel by analyzing bayered pgm images of a given set
+# find hot/cold bad pixel by analyzing bayered/monochrome pgm images of a given set
 AIfindbad () {
     local showhelp
     local nmax=25       # max. number of images to use
     local margin=0      # number of columns/rows to skip at each image border
     local do_display    # if set display results (stack and hotpix regions)
     local do_bgsub      # if set do bg image subtraction in AIbnorm
-    local bad=""
+    local bad=""        # used by AIccd (bayered images only)
     local i
     for i in 1 2 3 4 5 6
     do
@@ -25183,7 +26466,7 @@ AIfindbad () {
                 is_bayered=1
             else
                 x=$(get_param camera.dat ctype $sname)
-                test "$x" && test "$x" != "CCD" && is_bayered=1
+                test "$x" && test "$x" != "CCD" && test "$x" != "CMOS" && is_bayered=1
             fi
 
             diff=bad.$sname.diff.pgm
@@ -25297,7 +26580,7 @@ EOF
 
                 # determine median image (removing stars)
                 echo "# median combine difference images ..." >&2
-                pnmcombine -d $wdir/$sname.[0-9][0-9][0-9][0-9].diff.pgm $tmpim1 2>/dev/null
+                pnmcombine2 -d $wdir/$sname.[0-9][0-9][0-9][0-9].diff.pgm $tmpim1
                 convert $tmpim1 -median 3 - | pnmccdred -a 10000 -d - $tmpim1 $diff
             fi
             
@@ -25311,12 +26594,13 @@ EOF
             geom=${margin}x${margin}
             convert $diff -threshold $((10000+high)) \
                 -shave $geom -bordercolor black -border $geom bad.$sname.high.png
-            AIval -a -c -0 bad.$sname.high.png > $wdir/x.high.dat
+            test "$AI_DEBUG" && echo "AIval -a -c -1 bad.$sname.high.png" >&2
+            AIval -a -c -1 bad.$sname.high.png > $wdir/x.high.dat
             echo $(cat $wdir/x.high.dat | wc -l) "hot pixels" >&2
             
             convert $diff -threshold $((10000+low)) -negate \
                 -shave $geom -bordercolor black -border $geom bad.$sname.low.png
-            AIval -a -c -0 bad.$sname.low.png > $wdir/x.low.dat
+            AIval -a -c -1 bad.$sname.low.png > $wdir/x.low.dat
             echo $(cat $wdir/x.low.dat | wc -l) "cold pixels" >&2
             
             if [ "$is_bayered" ]
@@ -25606,11 +26890,12 @@ AIgradient () {
 # tasks started by ds9 analysis commands
 # requires a running instance of ds9 with name $DS9NAME
 ds9cmd () {
+    local overwrite # if set then previous results are deleted
+    test "$1" == "-o" && overwrite=1 && shift 1
     cmd=$1
     shift 1
     
     local tdir=${AI_TMPDIR:-"/tmp"}
-    local xpareg=$(mktemp "x.tmp_XXXXXX.reg") # should be in local dir
     local tmpdat=$(mktemp "$tdir/tmp_dat_XXXXXX.dat")
     local tmpreg=$(mktemp "$tdir/tmp_reg_XXXXXX.reg")
     local tmpmask=$(mktemp "$tdir/tmp_mask_XXXXXX.pbm")
@@ -25657,10 +26942,13 @@ ds9cmd () {
     local bgmult
     local mask
     local aprad
+    local maxstars
+    local doext
+    local dodel
     local skip
     local opts
-    local topts
-    local aopts
+    #local topts
+    #local aopts
     local fname
     local idx
     local mzero
@@ -25677,12 +26965,14 @@ ds9cmd () {
     local dec
     local binning
     local pixscale
+    local fwhm
     local url
     local object
     local script
     local isok
     local fittype
     local bsize
+    local xpareg    # should be in local dir
     local ds9version
     local retval
     
@@ -25755,7 +27045,6 @@ ds9cmd () {
                 echo "UPARM=$UPARM"
                 echo "pardir=$pardir"
                 echo "wdir=$wdir"
-                echo "xpareg=$xpareg"
                 echo "ana=$(realpath $(type -p airds9.ana))"
                 echo "airfun=$(realpath $(type -p airfun.sh))"
                 # cat $pardir/airtools.par
@@ -25809,8 +27098,7 @@ ds9cmd () {
                 line=$(cat $tmpdat | tr ' ' '\n' | grep "[0-9]" | kappasigma -)
                 test "$AI_DEBUG" && echo "stats: $line"
                 set - $line
-                test "$2" == "0" && echo "WARNING: constat data, no scaling." &&
-                    return
+                test "$2" == "0" && echo "WARNING: constat data, no scaling." && return
                 line=$(echo $1 $2 | awk '{printf("%f %f", $1-10*$2-20*sqrt($2), $1+20*$2+500*sqrt($2))}')
                 test "$AI_DEBUG" && echo "limits: $line"
                 xpaset -p $ds9name scale limits $line
@@ -25836,6 +27124,7 @@ ds9cmd () {
                     echo >&2 && return 255
                 
                 # measure stats for every single region
+                xpareg=$(mktemp x.tmp_XXXXXX.reg)
                 printf "%6s %-5s  %-6s %-7s %-6s\n" \
                     "#bgmean" "stddev" "area" "sum" "mean"
                 xpaset -p $ds9name regions system physical
@@ -25850,6 +27139,7 @@ ds9cmd () {
                     printf "%s %s  %6.0f %s %s # %s\n" \
                         "${1//,/ }" "${2//,/ }" "${3//,/ }" "${4//,/ }" "${5//,/ }" "$6"
                 done
+                rm -f $xpareg
                 echo ""
                 ;;
         movestars) # note: using flaged (red) regions only
@@ -25877,6 +27167,7 @@ ds9cmd () {
                     echo "ERROR: missing $set.head" >&2 && echo >&2 && return 255
 
                 # get marked objects (red)
+                xpareg=$(mktemp x.tmp_XXXXXX.reg)
                 xpaset -p $ds9name regions system physical
                 xpaset -p $ds9name regions save $xpareg
                 x=$(grep "^circle(.* color=red text" $xpareg | tr ' ' '\n' | grep "^text" | \
@@ -25886,6 +27177,7 @@ ds9cmd () {
                     skip=$(echo $skip $x | tr ' ' '\n' | sort -u | tr '\n' ' ')
                     echo "# new move=$skip"
                 else
+                    rm -f $xpareg
                     return
                 fi
                 
@@ -25920,6 +27212,7 @@ ds9cmd () {
                     echo "$str"
                     sed --follow-symlinks -i -e "/^$id / a $str" -e "/^$id / s,^,#," $fname
                 done
+                rm -f $xpareg
                 echo ""
                 ;;
         nostars) # note: using flaged (red) regions only
@@ -25953,15 +27246,17 @@ ds9cmd () {
                     echo >&2 && return 255
 
                 # add marked bad objects (red) to variable skip
+                xpareg=$(mktemp x.tmp_XXXXXX.reg)
                 xpaset -p $ds9name regions system physical
                 xpaset -p $ds9name regions save $xpareg
                 # old:
                 #x=$(grep "^circle(.* color=red text" $xpareg | tr ' ' '\n' | grep "^text" | \
                 #    tr '={' ' ' | awk '{printf("%s\n", $2)}')
                 test -z "$(grep -E "^circle|^polygon|^box" $xpareg | grep " color=red")" &&
-                    return
+                    rm -f $xpareg && return
                 grep -vE "^circle|^polygon|^box" $xpareg > $tmpdat               
                 grep -E "^circle|^polygon|^box" $xpareg | grep " color=red" >> $tmpdat
+                rm -f $xpareg
                 x=$(regfilter $set.src.dat $tmpdat | sexselect -r - "" "" "" "" "" 99 | \
                     grep "^circle" | tr ' ' '\n' | grep "^text" | \
                     tr '={' ' ' | awk '{printf("%s\n", $2)}')
@@ -26092,11 +27387,10 @@ ds9cmd () {
                 echo ""
                 ;;
         bggradient) img=$1
-                bgmult=$2
-                fittype=${3:-"plane"}
-                bsize=64
-                test "$4" && bgmult=$4 && bsize=$2
-                echo "running bggradient \"$img\" $bgmult $fittype $bsize"
+                fittype=${2:-"plane"}
+                bgmult=$3
+                bsize=${4:-""}
+                echo "running bggradient \"$img\" $fittype $bgmult \"$bsize\""
                 
                 # fittype option for AIbgmap
                 opts="-p"
@@ -26120,6 +27414,16 @@ ds9cmd () {
                 set=$(basename ${img%%.*})
                 test ! "$(AIsetinfo -b $set)" && set=$(basename ${img%.*})
                 
+                # determine bg mesh size
+                if [ ! "$bsize" ]
+                then
+                    bsize=64
+                    x=$(imsize $img | awk '{x=$1; if($2<$1) x=$2; print x}')
+                    test $x -lt 2500 && bsize=48
+                    test $x -lt 1500 && bsize=32
+                    test $x -lt 1000 && bsize=24
+                fi
+                
                 # check for cometstack
                 cometstack=$(get_header -q $img AI_COMST)
                 #cometstack=$(xpaget $ds9name fits header keyword AI_COMST)
@@ -26131,18 +27435,26 @@ ds9cmd () {
                 test "$cometstack" && test ! -e "$cometstack" &&
                     echo "ERROR: missing comet stack $cometstack" >&2 &&
                     echo >&2 && return 255
+                test -z "$cometstack" &&
+                    echo "WARNING: no comet stack found" >&2
+                test "$cometstack" &&
+                    echo "# cometstack=$cometstack"
 
+                # TODO: check if the currently displayed frame belongs to set
+                
                 # determine badbg region file
                 test -d bgcorr || mkdir bgcorr
                 badbg=bgcorr/$set.badbg.reg
                 
-                # info
-                test -z "$cometstack" &&
-                    echo "WARNING: no comet stack" >&2 &&
-                    echo "# using badbg=$badbg"
-                test "$cometstack" &&
-                    echo "# using badbg=$badbg cometstack=$cometstack"
-
+                # delete old results (independent of bgmult)
+                if [ "$overwrite" ]
+                then
+                    flist=$(ls bgcorr/$set.bgm* bgcorr/$set.badbg.reg 2>/dev/null)
+                    test "$flist" && echo "# removing previous data" &&
+                        for f in $flist; do rm $f; done
+                    # TODO: remove AI_BGFIT ?
+                fi
+                
                 # check for existing bg image
                 bgimg=""
                 test -f bgcorr/$set.bgm${bgmult}.$ext    && bgimg=bgcorr/$set.bgm${bgmult}.$ext
@@ -26154,10 +27466,12 @@ ds9cmd () {
                 
                 # determine bg mask
                 mask=""
-                test -s $badbg && test "$isok" && mask=$badbg
+                test -s $badbg && test "$isok" &&
+                    mask=$badbg &&
+                    echo "# reusing bad regions from $mask"
                 test -z "$mask" && test -f bgcorr/$set.bgmask.png &&
                     mask=bgcorr/$set.bgmask.png &&
-                    echo "WARNING: reusing old mask image $mask"
+                    echo "# reusing old mask image $mask"
                 if [ ! "$mask" ] 
                 then
                     # get regions from current frame
@@ -26225,6 +27539,7 @@ ds9cmd () {
                         echo "WARNING: not overwriting ${cometstack%.*}.bgs.$ext"
                     fi
                     # replace current frame
+                    # TODO: switch to frame containing the star stack first
                     AIexamine -r ${img%.*}.bgs.$ext
                 fi
                 
@@ -26270,8 +27585,8 @@ ds9cmd () {
                 test "$cometstack" && test ! -e ${cometstack%.*}".head" && ln -s $set.head ${cometstack%.*}".head"
 
                 # check for comet position keywords
-                oxy=""
-                set - $(get_header -s $set.head AI_CORA,AI_CODEC) xx
+                oxy=$(get_header -q $set.head AI_OXY)
+                test -z "$oxy" && set - $(get_header -s $set.head AI_CORA,AI_CODEC) xx
                 test $# -eq 3 &&
                     oxy=$(echo comet $1 $2 | rade2xy - $set.wcs.head | awk '{printf("%.0f,%.0f", $2, $3)}')
                 test -z "$oxy" && set - $(get_header -s $set.head AI_OXY) xx &&
@@ -26303,6 +27618,43 @@ ds9cmd () {
                     echo "# trail=$trail" >&2
                 fi
                 
+                # determine width of psf/psf trail according to fwhm
+                x=$(echo $(get_header $set.head AI_FWHM) 10 | awk '{
+                    x=1+3*$1+3*sqrt($1-0.3)
+                    if($1>3.5) x=12.5+9*sqrt(0.3*($1-2.7))
+                    printf("%.1f", x)
+                    }')
+                
+                # determine size of psf image
+                test -z "$psfsize" && psfsize=$(echo $x ${trail//,/ } | awk '{
+                    a=$4; if(a<0.5) a=1-$4; x=2*($1+a*$2+10)
+                    w=80
+                    if (x>w) {
+                        w=128; b=w; i=0
+                        while (w<x) {
+                            i++
+                            if (i%2 == 0) {
+                                w=2*b; b=w
+                            } else {
+                                w=int(w*sqrt(2)/8+0.49)*8
+                            }
+                        }
+                    }
+                    print w
+                    }') &&
+                    echo "# setting psfsize=$psfsize"
+                
+                # delete previous data
+                if [ "$overwrite" ]
+                then
+                    echo "# resetting previous data"
+                    # remove files
+                    flist=$(ls comet/$set.{star,trail}{mask,psf}.* comet/$set.{star,psf}phot.dat 2>/dev/null)
+                    test "$flist" && rm -f $flist
+                    # delete AI_PSF* keywords
+                    sed -i '/^AI_PSF/d' $set.head
+                fi
+                
                 # remove previous psf
                 test -d comet || mkdir comet
                 rm -f comet/$set.*psf.$ext
@@ -26332,10 +27684,12 @@ ds9cmd () {
                     echo "# new skip=\"\" (rlim changed)"
                 else
                     # add marked bad objects (red) to variable skip
+                    xpareg=$(mktemp x.tmp_XXXXXX.reg)
                     xpaset -p $ds9name regions system physical
                     xpaset -p $ds9name regions save $xpareg
                     x=$(grep "^circle(.* color=red text" $xpareg | tr ' ' '\n' | grep "^text" | \
                         tr '={' ' ' | awk '{printf("%s\n", $2)}')
+                    rm -f $xpareg
                     if [ "$x" ]
                     then
                         skip=$(echo $skip $x | tr ' ' '\n' | sort -un | tr '\n' ' ')
@@ -26352,6 +27706,9 @@ ds9cmd () {
                     done
                 fi
                 
+                # TODO: if nothing has changed and overwriting is not requested
+                #   then run star subtract only and display results
+                 
                 # extract PSF's
                 echo "$(date +'%H:%M:%S')  AIpsfextract on star stack ..."
                 test "$AI_DEBUG" &&
@@ -26445,6 +27802,18 @@ ds9cmd () {
                     echo "ERROR: unable to guess time stamp of individual exposures." &&
                     echo "" && return 255
                     
+                # delete previous data
+                if [ "$overwrite" ]
+                then
+                    echo "# resetting previous data"
+                    # remove files
+                    # note $set.starphot.dat is kept because it is created by psfextract
+                    flist=$(ls comet/$set.cosub*.$ext comet/$set.{comet,cometbg,bad}.reg comet/$set.newphot.dat 2>/dev/null)
+                    test "$flist" && rm -f $flist
+                    # delete AC_* keywords
+                    sed -i '/^AC_/d' $set.head
+                fi
+                
                 # comet extraction and photometry
                 xy2reg $starstack comet/$set.starphot.dat > x.stars.reg
                 test "$bgfit10" && opts="-b $bgfit10 $opts"
@@ -26520,6 +27889,7 @@ ds9cmd () {
                 echo "# set=$set photcat=$photcat nid=$nid"
                 
                 npix=$(imsize $img | awk '{print $1*$2}')
+                xpareg=$(mktemp x.tmp_XXXXXX.reg)
                 xpaset -p $ds9name regions background
                 xpaset -p $ds9name regions system physical
                 xpaset -p $ds9name regions save $xpareg
@@ -26532,6 +27902,7 @@ ds9cmd () {
                     n=$(cat $tmpdat | wc -l)
                     test "$AI_DEBUG" && test $n -gt 0 && echo "# selected: $n"
                 fi
+                rm -f $xpareg
                 xpaset -p $ds9name regions source
                 test $n -eq 0 &&
                     echo "ERROR: no region selected." >&2 &&
@@ -26614,15 +27985,30 @@ physical" > $tmpreg
                 idx=$2
                 catalog=$3
                 color=$4
-                aprad=$5
-                topts=$6
-                aopts=$7
-                skip=$8
-                echo "running photcal $set $idx $catalog \"$color\" \"$aprad\" \"$topts\" \"$aopts\""
-                test "$skip" && echo "skip=$skip"
-                test "$color" != "V" && test "$color" != "V+c(B-V)" &&
-                    echo "# WARNING: fitting the choosen color function is highly EXPERIMENTAL !!" >&2 &&
-                    sleep 5
+                # until v4.5: aprad topts aopts skip
+                maxstars=$5
+                aprad=$6
+                maglim=$7
+                doext=$8
+                skip=$9
+                shift 9
+                opts=$1
+                dodel=$2
+                # until v4.5:
+                #echo "running photcal $set $idx $catalog \"$color\" \"$aprad\" \"$topts\" \"$aopts\""
+                echo "running photcal $set $idx $catalog \"$color\" \"$maxstars\" \"$aprad\" \"$maglim\" \"$doext\""
+                test "$skip" && echo "# skip=$skip"
+                test "$opts" && echo "# opts=$opts"
+
+                # check valid catalog
+                x=$(get_param refcat.dat description $catalog)
+                test $? -ne 0 &&
+                    echo "  You are likely using an outdated version of refcat.dat." &&
+                    echo "  Consider to copy a new one by running the command" &&
+                    echo "    cp /usr/share/airtools/refcat.dat ./" &&
+                    echo "" &&
+                    return 255
+                echo "# catalog is $x"
                 
                 # check upper limit on aprad
                 test "$aprad" && test "$(echo $aprad | awk -v max=20 '{if($1>max){print "LIMIT"}}')" &&
@@ -26645,10 +28031,12 @@ physical" > $tmpreg
                 xpaaccess -c -t "2,2" $ds9name > /dev/null
         		if [ $? -ne 0 ]
         		then
+                    xpareg=$(mktemp x.tmp_XXXXXX.reg)
 					xpaset -p $ds9name regions system physical
 					xpaset -p $ds9name regions save $xpareg
 					x=$(grep "^circle(.* color=red text" $xpareg | tr ' ' '\n' | grep "^text" | \
 						tr '={' ' ' | awk '{printf("%s\n", $2)}')
+                    rm -f $xpareg
 					if [ "$x" ]
 					then
 						skip=$(echo $skip $x | tr ' ' '\n' | sort -u | tr '\n' ' ')
@@ -26657,26 +28045,40 @@ physical" > $tmpreg
                 fi
 
                 # color band
-                opts="-"$(echo ${color//[+c()]/ } | cut -d ' ' -f1)
+                opts="$opts -"$(echo ${color//[+c()]/ } | cut -d ' ' -f1)
                 # color index
-                x=$(echo ${color//[+c()]/ } | sed -e 's|^.||' | tr -d '\- ' | tr '[A-Z]' '[a-z]')
-                test "$x" && opts="$opts -$x"
-                case "$catalog" in
+                x=$(echo ${color//[+c()]/ } | awk '{print $2}')
+                test "$x" && opts="$opts -ci $x"
+                false && case "$catalog" in
                     tycho2) opts="$opts $topts";;
                     *)      opts="$opts $aopts";;
                 esac
-                test "$AI_DEBUG" && echo "AIphotcal -s \"$skip\" $opts $set" \
-                    "$catalog $aprad" >&2
-                AIphotcal -s "$skip" $opts $set $catalog $aprad
+                test "$maxstars" && opts="$opts -n $maxstars"
+                test "$maglim" && opts="$opts -l $maglim"
+                test "$doext" && opts="$opts -e"
+                test "$skip" && opts="$opts -s \"$skip\""
+
+                # delete previous data
+                if [ "$overwrite" ]
+                then
+                    echo "# resetting previous data"
+                    # remove files
+                    flist=$(ls phot/$set.* 2>/dev/null)
+                    test "$flist" && rm -f $flist
+                    # delete AP_* keywords
+                    sed -i '/^AP_/d' $set.head
+                fi
+                
+                #test "$AI_DEBUG" && 
+                echo "#" AIphotcal $opts $set $idx $catalog $aprad >&2
+                
+                eval AIphotcal $opts $set $idx $catalog $aprad
                 test $? -ne 0 && echo && return 255
                 
                 # show results
-                if [ "$(get_header -q $set.head AP_CMAG1)" ]
-                then
-                    echo ""
-                    echo "# ICQ data:"
-                    phot2icq -v -c $set $catalog
-                fi
+                echo ""
+                echo "# ICQ data:"
+                phot2icq -v -c $set $catalog
                 
                 # remove some temp files
                 if [ -z "$AI_DEBUG" ]
@@ -26715,6 +28117,7 @@ physical" > $tmpreg
                     echo "ERROR: missing $set.wcs.head" >&2 && echo >&2 && return 255
 
                 # measure coordinates for every circle region
+                xpareg=$(mktemp x.tmp_XXXXXX.reg)
                 printf "%-8s %-12s %-12s %-5s %-8s %-8s\n" \
                     "# id" "RA" "DE" "epoch" "x" "y"
                 xpaset -p $ds9name regions system physical
@@ -26725,13 +28128,14 @@ physical" > $tmpreg
                     printf "%-8s " $1
                     echo $1 $2 $3 | xy2rade -s - $set.wcs.head
                 done
+                rm -f $xpareg
                 printf "\n\n"
                 ;;
         *)      echo "WARNING: unknown command: $cmd"
                 ;;
     esac
 
-    # reset SAOImage working dir (e.g. for loading regions)
+    # TODO: reset SAOImage working dir to project dir (e.g. for loading regions)
     xpaaccess -c -t "2,2" $ds9name > /dev/null
     false && if [ $? -ne 0 ]
     then
@@ -26741,7 +28145,7 @@ physical" > $tmpreg
         rm -f $x
     fi
 
-    rm -f $xpareg $tmpdat $tmpreg $tmpim1 $tmpmask $tmpfits1 $tmpfits2 $tmpdat1 $tmpstamp
+    rm -f $tmpdat $tmpreg $tmpim1 $tmpmask $tmpfits1 $tmpfits2 $tmpdat1 $tmpstamp
 }
 
 get_frameno () {
@@ -26848,6 +28252,7 @@ wait_for_frame () {
     local has_display
     local delay=2
     local t
+    local fname
     local aiimage
     local found
 
@@ -26879,8 +28284,13 @@ wait_for_frame () {
     while test ! "$found" && test $t -lt $timeout
     do
         test "$(xpaget $ds9name frame has fits)" != "yes" && continue
-        aiimage=$(xpaget $ds9name fits header keyword AI_IMAGE)
-        test "$(basename $aiimage)" == "$(basename $img)" && found=1
+        fname=$(xpaget $ds9name file)
+        test "$fname" && test "$(basename $fname)" == "$(basename $img)" && found=1
+        if [ -z "$found" ]
+        then
+            aiimage=$(xpaget $ds9name fits header keyword AI_IMAGE)
+            test "$aiimage" && test "$(basename $aiimage)" == "$(basename $img)" && found=1
+        fi
         if [ -z "$found" ]
         then
             test "$verbose" && echo "waiting $delay seconds ..." >&2
@@ -27001,7 +28411,7 @@ AIsetinfo () {
             }' | tee $tmp1
         retval=255
         test -s $tmp1 && retval=0
-        rm -f $tmp1
+        rm -f $tmp1 $tmphead
         return $retval
     fi
 
@@ -27124,9 +28534,9 @@ AIsetinfo () {
 				if [ "$rhdr" ] && (is_fits "$rhdr" || is_fitsgz "$rhdr")
 				then
 					x=$(get_header -q $tmphead RA)
-					test "$x" && ra=$(dec2sexa -m $x 15 0)
+					test "$x" && ra=$(dec2sexa -m $(sexa2dec "${x// /:}" 15) 15 0)
 					x=$(get_header -q $tmphead DEC)
-					test "$x" && de=$(dec2sexa -h $x 1 1)
+					test "$x" && de=$(dec2sexa -h $(sexa2dec "${x// /:}") 1 1)
 				fi
 			fi
 			if [ -z "$ra" ] || [ -z "$de" ]
@@ -27284,10 +28694,11 @@ AIlist () {
     # valid project directoriy names: YYMMDDxxxx where x is empty or a letter a-z
     local showhelp
     local adirlist  # list of base directories of Airtools reductions
+    local color="G" # color channel from multiband image (either R,G or B)
     local photcat   # select given photometric catalog only
     local telid     # telescope identifier
     local site      # if set then limit to data for this site (currently unused)
-    local ndays=""  # limit output to last $nday days
+    local ndays=180 # limit output to last $nday days
     local fields    # additional fields to print out
     local do_current # if set then list only results from current project
     local do_all_obs # if set then do not skip on missing photometry
@@ -27331,7 +28742,7 @@ AIlist () {
     chmod u+x $tmpsh
 
     (test "$showhelp") &&
-        echo "usage: AIlist [-j] [-d airtoolsdir] [-n ndays] [-t telid] [-s site] [-p photcat] [-f fields] <target> [first] [last]" >&2 &&
+        echo "usage: AIlist [-j] [-c] [-d airtoolsdir] [-n ndays|$ndays] [-t telid] [-s site] [-p photcat] [-f fields] <target> [first] [last]" >&2 &&
         return 1
     
     (test "$fields" == "list" || test "$fields" == "help") &&
@@ -27341,7 +28752,9 @@ AIlist () {
     pscale  pixelscale
     rot     image_rotation
     pier    PIERSIDE
-    nfit    AP_NFIT
+    nfit    AP_NFIT (fitted phot. calib. stars)
+    ctra    AP_CTRA (color trans. coefficient)
+    mrms    AP_MRMS (rms of mag residuals)
     bg      AI_BGG
     rms     AI_RMSG
     fwhm    AI_FWHM" >&2 &&
@@ -27367,11 +28780,11 @@ AIlist () {
         echo "ERROR: missing airtoolsdir" >&2
 
     # determine date range
-    test "$adirlist" != " ." && test -z "$target" && test -z "$ndays$first$last" && ndays=30 &&
+    false && test "$adirlist" != " ." && test -z "$target" && test -z "$ndays$first$last" && ndays=30 &&
         echo "# no target provided, limiting date range" >&2
     test -z "$last" && last=$(date +'%y%m%d')
     test -z "$first" && test "$ndays" && first=$(date +'%y%m%d' -d 'now - '$ndays' days')
-    test -z "$first" && first="000000"
+    (test -z "$first" || test $first -lt 10000) && first="000000"
     test -z "$do_current" && echo "# using date range: $first - $last" >&2
 
     for adir in $adirlist
@@ -27382,7 +28795,7 @@ AIlist () {
             awk -F '/' -v f=$first -v l=$last '{
                 d=substr($NF,1,6)
                 if (d>=f && d<=l) print $0}')
-        test "$adir" == "." && dlist="."
+        test "$adir" == "." && dlist=$(realpath .)
         test -z "$dlist" && continue
         test -z "$do_current" && echo "# $adir: scanning $(echo $dlist | wc -w) subdirectories" >&2
         for d in $dlist
@@ -27394,8 +28807,8 @@ AIlist () {
                     hdr=$1
                     if (hdr != lasthdr) {
                         if (jd && object && tel) {
-                            if (!o || object~o) {
-                                if (!t || tel~t) {
+                            if (!o || object == o) {
+                                if (!t || tel == t) {
                                     printf("%s %s %s %s\n", lasthdr, jd, object, tel)
                                 }
                             }
@@ -27405,11 +28818,13 @@ AIlist () {
                     if ($2 == "JD")       jd=$3
                     if ($2 == "OBJECT")   object=$3
                     if ($2 == "AI_TELID") tel=$3
+                    gsub(/\047/,"",object)
+                    gsub(/\047/,"",tel)
                     lasthdr=hdr
                 }END{
                         if (jd && object && tel) {
-                            if (!o || object~o) {
-                                if (!t || tel~t) {
+                            if (!o || object == o) {
+                                if (!t || tel == t) {
                                     printf("%s %s %s %s\n", lasthdr, jd, object, tel)
                                 }
                             }
@@ -27453,6 +28868,7 @@ AIlist () {
 #!/bin/bash
 . airfun.sh > /dev/null
 tdir=$tdir
+color="$color"
 photcat="$photcat"
 fields="$fields"
 do_all_obs="$do_all_obs"
@@ -27490,6 +28906,7 @@ EOF
         local apilist
         local jd
         local aidx
+        local pidx
         local pcol
         local pcat
         local nfit
@@ -27498,8 +28915,15 @@ EOF
         local cind
         local ctra
         local cter
+        local cimd
         local cmag
+        local mrms
+        local prio
         local hopts=""
+        local outbase
+        local outadd
+        local outphot
+        local catlist=$(mktemp "$tdir/tmp_cat_XXXXXX.dat")
 
         test "$AI_DEBUG" && echo "#" $f >&2
         hdr=$f
@@ -27507,17 +28931,41 @@ EOF
         sname=$(basename $f)
         sname=${sname%.head}
         
-        # check for photometric data
-        # TODO: include check of color channel
+        # check for photometric data in given color channel
         apilist=$(grep "^AP_AIDX[1-9]" $hdr | cut -c 8)
         if [ -z "$apilist" ]
         then
             test "$verbose" && echo "# $hdr has no photometry" >&2
         else
-            test "$photcat" &&
+            test "$photcat" != "all" && if [ "$photcat" ]
+            then
                 apilist=$(grep "^AP_PCAT[1-9]" $hdr | grep -wi $photcat | cut -c 8)
-            test -z "$apilist" && test "$verbose" &&
-                echo "# $hdr has no photometry using $photcat" >&2
+                test -z "$apilist" &&
+                    echo "# $hdr has no photometry using $photcat" >&2
+                for i in $apilist
+                do
+                    aidx=$(get_header -q $hdr AP_AIDX$i); test -z "$aidx" && aidx="-"
+                    test "$(get_header -q $hdr AC_ICOL$aidx)" != "$color" && continue
+                    echo $i
+                done > $catlist
+                apilist=$(cat $catlist)
+                rm -f $catlist
+            else
+                # choose only data from catalog with highest priority
+                for i in $apilist
+                do
+                    aidx=$(get_header -q $hdr AP_AIDX$i); test -z "$aidx" && aidx="-"
+                    test "$(get_header -q $hdr AC_ICOL$aidx)" != "$color" && continue
+                    pcol=$(get_header -q $hdr AP_PCOL$i); test -z "$pcol" && pcol="-"
+                    pcat=$(get_header -q $hdr AP_PCAT$i); test -z "$pcat" && pcat="-"
+                    # choose priority from order in refcat.dat (first=highest)
+                    prio=$(grep -nw "^$pcat" refcat.dat | cut -d ":" -f1)
+                    echo $prio $i $pcat
+                done | sort -n -k1,1 > $catlist
+                prio=$(head -1 $catlist | cut -d ' ' -f1)
+                apilist=$(grep "^$prio" $catlist | cut -d ' ' -f2)
+                rm -f $catlist
+            fi
         fi
         test -z "$apilist" && test -z "$do_all_obs" && return
         
@@ -27558,22 +29006,23 @@ EOF
         if [ "$do_icq" ]
         then
             # TODO: convert to icq comet designation
-            printf "%11s%s  Z " "$(comet2icq ${target//\'/})" "$(jd2ut -p 2 $jd | tr '-' ' ')"
+            outbase=$(printf "%11s%s  Z " "$(comet2icq ${target//\'/})" "$(jd2ut -p 2 $jd | tr '-' ' ')")
         else
-            printf "%-8s %-5s %-8s " $dir $sname ${target//\'/}
+            outbase=$(printf "%-8s %-5s %-8s " $dir $sname ${target//\'/})
             if [ "$do_jd" ]
             then
-                printf "%11.3f" $jd
+                outbase="$outbase"$(printf "%11.3f" $jd)
             else
-                printf "%13s" $(jd2ut -p 2 $jd)
+                outbase="$outbase"$(printf "%13s" $(jd2ut -p 2 $jd))
             fi
         fi
-        
+
         # fields related to photometry
         if [ "$apilist" ]
         then
             for i in $apilist
             do
+                pidx=$i
                 aidx=$(get_header -q $hdr AP_AIDX$i); test -z "$aidx" && aidx="-"
                 pcol=$(get_header -q $hdr AP_PCOL$i); test -z "$pcol" && pcol="-"
                 pcat=$(get_header -q $hdr AP_PCAT$i); test -z "$pcat" && pcat="-"
@@ -27589,7 +29038,10 @@ EOF
                 test -z "$cter" &&
                     cter=$(get_header -q $hdr AP_CERR$i | awk '{printf("%.2f", $1)}')
                 test -z "$cter" && cter="-"
+                cimd=$(get_header -q $hdr AP_CIMD$i | awk '{printf("%.2f", $1)}')
+                test -z "$cimd" && cimd="-"
                 cmag=$(get_header -q $hdr AP_CMAG$i); test -z "$cmag" && cmag="-"
+                mrms=$(get_header -q $hdr AP_MRMS$i); test -z "$mrms" && mrms="-"
 
                 # fields related to comet counts measurement
                 # coma diameter in arcmin
@@ -27600,34 +29052,43 @@ EOF
                 }')
                 test -z "$diam" && diam=" -  "
                 
-                # show results
+                # additional output fields
+                if [ "$fields" ]
+                then
+                    outadd=$(for f in ${fields//,/ }
+                    do
+                        printf " ${!f}"
+                    done)
+                fi
+
+                # show data
                 if [ "$do_icq" ]
                 then
                     # TODO: deal with unknown cmag, diam
-                    printf "%5.2fXX XXXXX XXXXX  %2.0f                        LEHaa" $cmag $diam
+                    outphot=$(printf "%5.2fXX XXXXX XXXXX  %2.0f                        LEHaa" $cmag $diam)
                 else
-                    printf " %5s %s %-6s %-4s %s %-5s %2d %3d  %-11s" \
-                        $cmag "$diam" $pcat $mlim $mzer ${tel//\'/} $alt $az $moon
+                    outphot=$(printf " %5s %s %-6s %-4s %s %-5s %2d %3d  %-11s" \
+                        $cmag "$diam" $pcat $mlim $mzer ${tel//\'/} $alt $az $moon)
                 fi
+                echo "$outbase$outphot$outadd"
             done
         else
             aidx="-"; pcol="-"; pcat="-"; nfit="-"; mzer="-"; mlim="-"
             cind="-"; ctra="-"; cter="-"; cmag="-"; diam="-"
-            printf "  -     -   -       -    -    %-5s %2d %3d  %-11s" \
-                ${tel//\'/} $alt $az $moon
+            outphot=$(printf "  -     -   -       -    -    %-5s %2d %3d  %-11s" \
+                ${tel//\'/} $alt $az $moon)
+
+            # additional output fields
+            if [ "$fields" ]
+            then
+                outadd=$(for f in ${fields//,/ }
+                do
+                    printf " ${!f}"
+                done)
+            fi
+
+            echo "$outbase$outphot$outadd"
         fi
-        
-        # additional fields
-        if [ "$fields" ]
-        then
-            for f in ${fields//,/ }
-            do
-                printf " ${!f}"
-            done
-        fi
-        
-        # print newline
-        printf "\n"
     }
 
     export -f _ailist_parallel
