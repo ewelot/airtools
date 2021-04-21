@@ -5,7 +5,7 @@
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <meta name="author" content="Thomas Lehmann" />
-  <title>Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v3.2)</title>
+  <title>Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v4.0)</title>
   <style>
     code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
@@ -20,9 +20,9 @@
 </head>
 <body>
 <header id="title-block-header">
-<h1 class="title">Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v3.2)</h1>
+<h1 class="title">Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v4.0)</h1>
 <p class="author">Thomas Lehmann</p>
-<p class="date">Draft, December 2019</p>
+<p class="date">Draft, April 2021</p>
 </header>
 <nav id="TOC" role="doc-toc">
 <ul>
@@ -73,6 +73,7 @@
 <li><a href="http://www.astromatic.net">Astromatic Software</a> by E. Bertin: Most notably <em>sextractor</em> (Object recognitionand extraction), <em>scamp</em> (astrometry), <em>swarp</em> (image transformation and stacking), <em>skymaker</em> (modelling objects)</li>
 <li><a href="http://www.starlink.ac.uk/stilts/">Stilts</a> by M. Taylor: Analysis, filtering and transforming tabular data (e.g. FITS tables)</li>
 <li><a href="http://tdc-www.harvard.edu/software/wcstools/">WCSTools</a> by J. Mink: Tools to create and manipulate coordinate system information</li>
+<li><a href="https://libvips.github.io/libvips/">libvips</a>: A fast and memory efficient image processing library with bindings to many programming languages</li>
 </ul>
 <p>The AIRTOOLS software is freely available. The project - including source code - is hosted at <a href="https://github.com/ewelot/airtools" class="uri">https://github.com/ewelot/airtools</a>. Pre-compiled binary packages are provided for several Linux distributions.</p>
 <p>The AIRTOOLS software has been developed in the hope to proove useful. Its development relies on your feedback, so please do not hesitate to ask any question at <a href="mailto:t_lehmann@freenet.de" class="email">t_lehmann@freenet.de</a>. Any suggestion or comment or call for help is welcome.</p>
@@ -98,17 +99,17 @@
 <p>The full installation will take about half an hour to complete.</p>
 <section id="installing-oracle-virtualbox" data-number="2.1">
 <h2 data-number="2.1"><span class="header-section-number">2.1</span> Installing Oracle VirtualBox</h2>
-<p>VirtualBox (<a href="http://www.virtualbox.org" class="uri">http://www.virtualbox.org</a>) is a free and powerful virtualization software for enterprise and home users. Get the latest software package (version 6.0.12 at the time of writing) for your host operating system from the <a href="https://www.virtualbox.org/wiki/Downloads">Downloads</a> page and install it.</p>
+<p>VirtualBox (<a href="http://www.virtualbox.org" class="uri">http://www.virtualbox.org</a>) is a free and powerful virtualization software for enterprise and home users. Get the latest software package (version 6.1.18 at the time of writing) for your host operating system from the <a href="https://www.virtualbox.org/wiki/Downloads">Downloads</a> page and install it.</p>
 <p>Subsequently you should install the “Oracle VM VirtualBox Extension Pack” for improved performance and additional virtual hardware features. Get it from the appropriate section of the previously mentioned download page. Click on “All supported platforms” and open it using the Oracle VM VirtualBox software. You might be asked to provide credentials to allow installation.</p>
 </section>
 <section id="setup-of-a-virtual-machine-for-linux-os" data-number="2.2">
 <h2 data-number="2.2"><span class="header-section-number">2.2</span> Setup of a Virtual Machine for Linux OS</h2>
 <p>Start the Oracle VirtualBox Manager, if not running already. Click on the “New” button and fill in the name of the new VM, e.g. xubuntu-vm. Depending on the name you have choosen you might have to select Type=“Linux” and Version=“Ubuntu (64-bit)”. Continue by pressing “Next”.</p>
 <p>Set the memory size to &gt;=2 GB (recommended 4 GB or up to 75% of physical RAM) and press “Next”.</p>
-<p>Create a virtual hard disk of type VDI of fixed size. You can use the proposed file name but it is recommended to create the virtual disk file on a fast physical hard disk drive, e.g. SSD. The file size should be &gt;=50 GB to serve for roughly 10-20 comet observations, based on 10-20 individual exposures each. If you intent to use the AIRTOOLS software regularly to analyze all your comet observations then you should create a much larger virtual hard diskAfter pressing the “Create” button the virtual machine is created.</p>
+<p>Create a virtual hard disk of type VDI of fixed size. You can use the proposed file name but it is recommended to create the virtual disk file on a fast physical hard disk drive, e.g. SSD. The file size should be &gt;=50 GB to serve for roughly 10-20 comet observations, based on 10-20 individual exposures each. If you intent to use the AIRTOOLS software regularly to analyze all your comet observations then you should create a much larger virtual hard disk. After pressing the “Create” button the virtual machine is created.</p>
 <p>It is recommended to tweak some additional parameters for improved performance. Click the “Settings” button to access the following tabs:</p>
 <ul>
-<li>Tab System/Processor: increase number of CPU to &gt;=2 (up to number of physical cores minus one)</li>
+<li>Tab System/Processor: increase number of CPU to &gt;=2 (up to number of physical cores)</li>
 <li>Tab Display/Screen: increase Memory to 64 MB</li>
 <li>Tab USB: choose USB 3.0 Controller</li>
 </ul>
@@ -119,7 +120,7 @@
 </section>
 <section id="booting-install-medium-of-the-xubuntu-linux-distribution" data-number="2.3">
 <h2 data-number="2.3"><span class="header-section-number">2.3</span> Booting Install Medium of the Xubuntu Linux distribution</h2>
-<p>Download the ISO image file of the latest Xubuntu LTS release from <a href="http://xubuntu.org/" class="uri">http://xubuntu.org/</a>. Please note the LTS version label, which indicates a “Long Term Support” release. This Linux OS version is well supported by the AIRTOOLS software. Choose a mirror download close to your location and download the 64-bit desktop image. At the time of this writing it is named <code>xubuntu-18.04.3-desktop-amd64.iso</code>.</p>
+<p>Download the ISO image file of the latest Xubuntu LTS release from <a href="http://xubuntu.org/" class="uri">http://xubuntu.org/</a>. Please note the imprtant <strong>LTS</strong> version label, which indicates a “Long Term Support” release. This Linux OS version is well supported by the AIRTOOLS software. Choose a mirror download close to your location and download the 64-bit desktop image. At the time of this writing it is named <code>xubuntu-20.04.2.0-desktop-amd64.iso</code>.</p>
 <p>The ISO image file is used in place of a install medium for the virtual machine. To do so you have to start the VirtualBox software (if not running already) and press the “Settings” button of the selected virtual machine.</p>
 <p>Select the “Storage” tab. Within “Storage Devices” click on the CD symbol (labeled “Empty”) and from “Attributes” click the CD symbol near the right border of the window and select the previously downloaded ISO file. Pressing “OK” will save your modified settings and you are ready to start the virtual machine by pressing the green “Start” button.</p>
 <p>The following boot process is very similar to a regular boot process of a install CD/DVD on a real computer. In addition, the current virtual machine can be used to start a fully functional Linux live session to evaluate or experiment with the Xubuntu Linux OS (but this is not our goal).</p>
@@ -144,7 +145,7 @@
 <section id="xubuntu-desktop-basics" data-number="2.5">
 <h2 data-number="2.5"><span class="header-section-number">2.5</span> Xubuntu Desktop Basics</h2>
 <p>On the top of the desktop screen there is a (dark) desktop panel. If you click on the small icon on the left of this panel (it uses the Xubuntu logo which mimics the head of a mouse) the main application menu pops up. From there you can start programs, tweak several desktop settings, log out and shutdown the virtual Linux system. Note the location of the “Log out” icon at bottom-right of the menu, which is also used to shutdown or restart the Linux OS. Get familiar with how to start the web browser and the file manager and how to shutdown the Linux OS.</p>
-<p>For additional information please consult the official <a href="https://docs.xubuntu.org/1804/">Xubuntu Documentation</a> or other tutorials on the web. Please keep in mind that you do not have to worry about any hardware specific setups in your Linux system (or for example network connection) because all communication to the real devices of the host computer is transparently handled by the VirtualBox drivers.</p>
+<p>For additional information please consult the official <a href="https://docs.xubuntu.org/2004/">Xubuntu Documentation</a> or other tutorials on the web. Please keep in mind that you do not have to worry about any hardware specific setups in your Linux system (or for example network connection) because all communication to the real devices of the host computer is transparently handled by the VirtualBox drivers.</p>
 </section>
 <section id="installing-virtualbox-guest-additions" data-number="2.6">
 <h2 data-number="2.6"><span class="header-section-number">2.6</span> Installing VirtualBox Guest Additions</h2>
@@ -213,14 +214,11 @@ Used to store individual calibrated images of the project which are used by seve
 <p>Next, the setup for the first project must be configured. Select the date of observation. This will be used to make initial suggestions for names of the project directory, raw directory and temporary directory. It is allowed to modify those names, e.g. append a letter. E.g. you might want to repeat the image reduction of a given night using other parameters without interfering the original analysis. In that case you could use the same raw directory name but different names for the project and temporary directories.</p>
 <p>Further settings are:</p>
 <dl>
-<dt>Parameter files:</dt>
-<dd>Every project will use parameter files for certain configurations. Some of these files are rarely modified and therefore can be copied over from the last project. Modifying this default behaviour is almost never required.
-</dd>
 <dt>Site:</dt>
-<dd>Enter the name of your observatory site as it is used in the parameter file <code>sites.dat</code> later on (see below).
+<dd>Enter the name of your observatory site (must be single word) or choose one of the items from the combobox dropdown list (it holds items which are already defined in the parameter file <code>sites.dat</code>).
 </dd>
 <dt>TZoff:</dt>
-<dd>Enter the time zone offset with respect to UT in hours. Use the value which corresponds to the time of observation written to the header of your raw images. If your data acquisition system stores UT then you need to enter 0 here.
+<dd>Enter the time zone offset of your camera time with respect to UT in hours. The camera time is found either in RAW images metadata of DSLR cameras or in the header of your FITS images (usually stored in keyword DATE-OBS).
 </dd>
 </dl>
 </section>
@@ -292,10 +290,10 @@ Used to store individual calibrated images of the project which are used by seve
 <dd>Telescope type: L=reflector, R=refractor, A=photo Lens
 </dd>
 <dt>ctype:</dt>
-<dd>Sensor type: CCD=monochrome CCD, DSLR=DSLR raw image (as stored in camera, e.g. files with extension CR2 for a Canon DSLR), use BGGR or RGGB for a one-shot-color CCD or CMOS sensor with a Bayer filter matrix.
+<dd>Sensor type: CCD=monochrome CCD, DSLR=DSLR with native camera model RAW files, CMOS=monochrome CMOS sensor, RGGB or BGGR for a one-shot-color CMOS sensor with a Bayer filter matrix in the given layout.
 </dd>
 </dl>
-<p>Save your edits and close the text editor. Remember that for any subsequent new project you will be able to copy over those parameter files. You only need to add entries to these files if using a new observatory site or a new instrument for the first time.</p>
+<p>Save your edits and close the text editor. After any modification you can choose if the new parameter file is just applied to your current project or if you like to use it in subsequent new projects.</p>
 </section>
 <section id="raw-images-and-image-set-definition" data-number="4.4">
 <h2 data-number="4.4"><span class="header-section-number">4.4</span> Raw Images and Image Set Definition</h2>
@@ -364,13 +362,13 @@ Used to store individual calibrated images of the project which are used by seve
 <section id="image-reduction" data-number="5">
 <h1 data-number="5"><span class="header-section-number">5</span> Image Reduction</h1>
 <p>The “Image Reduction” tab is the first tab of the AIRTOOLS graphical user interface. Its main purpose is to provide general tasks for basic reduction of astronomical images that is to process all of the raw image sequences to obtain deep stacked result images of your targets.</p>
-<p>The tasks are presented in logical order and may be run one step after the other - which is recommended for first time users - or run completely unattended, including astrometry and blind stacking on a moving comet. Just select the tasks you wish to run in a row. Suitable parameters are determined automatically and will work in most cases. Special cases can be handled by supplying options via the “Expert Options” entry (see Appendix ???).</p>
-<p>It is possible to limit the requested tasks to run on a specific image set by providing the set name in the appropriate text entry field.</p>
-<p>The final group of checkboxes determines which part of the tasks is executed. Normally, you will want the program to process your images and display any diagnostic plot it creates and show all result images.</p>
-<p>Pressing the “Start” button causes the selected tasks to execute. At any time you may interrupt operation by pressing the same button again. Note that interruption is typically defered by a couple of seconds. Running a task for a second time will process any remaining image sets only.</p>
+<p>The tasks are presented in logical order and may be run one step after the other - which is recommended for first time users - or run completely unattended, including astrometry and blind stacking on a moving comet. Just select the tasks you wish to run in a row. Suitable parameters are determined automatically and will work in most cases.</p>
+<p>It is possible to limit the requested tasks to run on a specific image set (or a list of image sets) by providing the set name in the appropriate text entry field.</p>
+<p>The final group of checkboxes determines which part of the tasks is executed. Normally, you will want the program to process your images and display any diagnostic plot it creates and show all result images. Image processing is normally applied to unprocessed image sets only. You might use the checkbox “Delete previous results” if you need to re-run a specific task and overwrite previously generated data (for safety reason you need to provide the desired image set names explicitely).</p>
+<p>Pressing the “Start” button causes the selected tasks to execute. At any time you may interrupt operation by pressing the same button again. Note that interruption is typically defered by a couple of seconds.</p>
 <section id="master-darks-and-flats" data-number="5.1">
 <h2 data-number="5.1"><span class="header-section-number">5.1</span> Master Darks and Flats</h2>
-<p>The processing of calibration images involves a mixture of median and average operations. For best results it is therefore adviced to capture multiples of 6 exposures, e.g. 6 individual dark images at any required exposure time (and temperature) and 12 individual flat images for any filter used.</p>
+<p>The processing of calibration images involves a mixture of median and average operations. For best results it is therefore adviced to capture multiples of 6 exposures, e.g. 6 individual dark images at any required exposure time (and temperature) and 12 individual flat images for each filter used.</p>
 <p>Throughout this manual we refer to the term master dark by meaning of an image which has not been subtracted by a bias image. Within this definition a bias image is just a dark image at zero seconds exposure time. Furthermore a master flat image is a dark-subtracted flat field (where the corresponding master dark was taken at the same exposure time, sometimes called a flat-dark).</p>
 <p>If you don’t know your camera/sensor very well then it is a good idea to take more exposures - especially darks. The processing routines include measurements of the dark level in each image. A plot of this measurements is displayed and you can evaluate the stability of the mean intensity level. In addition, the difference of each individual dark exposure with respect to the mean image is computed. A mosaic of the much downsized and contrast enhanced difference images is created and displayed. This is helpful again to judge sensor stability and health. You may measure image intensity withing self defined regions. Note that the mean intensity of difference images has been shifted to 1000 and streched by a factor of 10.</p>
 <p>The number of individual flat images has to be choosen to be large enough to provide suitable signal to noise (not degrade the signal to noise of the stacked target image). Also its intensity level should be choosen carefully to provide high signal but fall well within linear range of the sensor response. Creating high quality flat fields is a challenge but crucial for obtaining precise photometry of extended objects like comets.</p>

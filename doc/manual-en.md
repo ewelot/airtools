@@ -1,6 +1,3 @@
-Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v3.2)
-======================================================================
-
   - [<span class="toc-section-number">1</span>
     Introduction](#introduction)
   - [<span class="toc-section-number">2</span>
@@ -95,6 +92,9 @@ astronomical image reduction are used as well, e.g.
     filtering and transforming tabular data (e.g. FITS tables)
   - [WCSTools](http://tdc-www.harvard.edu/software/wcstools/) by J.
     Mink: Tools to create and manipulate coordinate system information
+  - [libvips](https://libvips.github.io/libvips/): A fast and memory
+    efficient image processing library with bindings to many programming
+    languages
 
 The AIRTOOLS software is freely available. The project - including
 source code - is hosted at <https://github.com/ewelot/airtools>.
@@ -141,7 +141,7 @@ The full installation will take about half an hour to complete.
 
 VirtualBox (<http://www.virtualbox.org>) is a free and powerful
 virtualization software for enterprise and home users. Get the latest
-software package (version 6.0.12 at the time of writing) for your host
+software package (version 6.1.18 at the time of writing) for your host
 operating system from the
 [Downloads](https://www.virtualbox.org/wiki/Downloads) page and install
 it.
@@ -170,14 +170,14 @@ on a fast physical hard disk drive, e.g. SSD. The file size should be
 \>=50 GB to serve for roughly 10-20 comet observations, based on 10-20
 individual exposures each. If you intent to use the AIRTOOLS software
 regularly to analyze all your comet observations then you should create
-a much larger virtual hard diskAfter pressing the “Create” button the
+a much larger virtual hard disk. After pressing the “Create” button the
 virtual machine is created.
 
 It is recommended to tweak some additional parameters for improved
 performance. Click the “Settings” button to access the following tabs:
 
   - Tab System/Processor: increase number of CPU to \>=2 (up to number
-    of physical cores minus one)
+    of physical cores)
   - Tab Display/Screen: increase Memory to 64 MB
   - Tab USB: choose USB 3.0 Controller
 
@@ -192,11 +192,11 @@ Manager](images/virtualbox-manager.png "virtualbox manager")
 ## Booting Install Medium of the Xubuntu Linux distribution
 
 Download the ISO image file of the latest Xubuntu LTS release from
-<http://xubuntu.org/>. Please note the LTS version label, which
-indicates a “Long Term Support” release. This Linux OS version is well
-supported by the AIRTOOLS software. Choose a mirror download close to
-your location and download the 64-bit desktop image. At the time of this
-writing it is named `xubuntu-18.04.3-desktop-amd64.iso`.
+<http://xubuntu.org/>. Please note the imprtant **LTS** version label,
+which indicates a “Long Term Support” release. This Linux OS version is
+well supported by the AIRTOOLS software. Choose a mirror download close
+to your location and download the 64-bit desktop image. At the time of
+this writing it is named `xubuntu-20.04.2.0-desktop-amd64.iso`.
 
 The ISO image file is used in place of a install medium for the virtual
 machine. To do so you have to start the VirtualBox software (if not
@@ -285,7 +285,7 @@ shutdown or restart the Linux OS. Get familiar with how to start the web
 browser and the file manager and how to shutdown the Linux OS.
 
 For additional information please consult the official [Xubuntu
-Documentation](https://docs.xubuntu.org/1804/) or other tutorials on the
+Documentation](https://docs.xubuntu.org/2004/) or other tutorials on the
 web. Please keep in mind that you do not have to worry about any
 hardware specific setups in your Linux system (or for example network
 connection) because all communication to the real devices of the host
@@ -441,19 +441,15 @@ project and temporary directories.
 
 Further settings are:
 
-  - Parameter files:  
-    Every project will use parameter files for certain configurations.
-    Some of these files are rarely modified and therefore can be copied
-    over from the last project. Modifying this default behaviour is
-    almost never required.
   - Site:  
-    Enter the name of your observatory site as it is used in the
-    parameter file `sites.dat` later on (see below).
+    Enter the name of your observatory site (must be single word) or
+    choose one of the items from the combobox dropdown list (it holds
+    items which are already defined in the parameter file `sites.dat`).
   - TZoff:  
-    Enter the time zone offset with respect to UT in hours. Use the
-    value which corresponds to the time of observation written to the
-    header of your raw images. If your data acquisition system stores UT
-    then you need to enter 0 here.
+    Enter the time zone offset of your camera time with respect to UT in
+    hours. The camera time is found either in RAW images metadata of
+    DSLR cameras or in the header of your FITS images (usually stored in
+    keyword DATE-OBS).
 
 ## Parameter Files
 
@@ -558,15 +554,14 @@ reference for your newly added lines. The columns used are:
   - ttype:  
     Telescope type: L=reflector, R=refractor, A=photo Lens
   - ctype:  
-    Sensor type: CCD=monochrome CCD, DSLR=DSLR raw image (as stored in
-    camera, e.g. files with extension CR2 for a Canon DSLR), use BGGR or
-    RGGB for a one-shot-color CCD or CMOS sensor with a Bayer filter
-    matrix.
+    Sensor type: CCD=monochrome CCD, DSLR=DSLR with native camera model
+    RAW files, CMOS=monochrome CMOS sensor, RGGB or BGGR for a
+    one-shot-color CMOS sensor with a Bayer filter matrix in the given
+    layout.
 
-Save your edits and close the text editor. Remember that for any
-subsequent new project you will be able to copy over those parameter
-files. You only need to add entries to these files if using a new
-observatory site or a new instrument for the first time.
+Save your edits and close the text editor. After any modification you
+can choose if the new parameter file is just applied to your current
+project or if you like to use it in subsequent new projects.
 
 ## Raw Images and Image Set Definition
 
@@ -648,7 +643,7 @@ considered a comment. Each line (uncommented and non-empty) defines an
 image set using at least 11 fields (words separated by spaces) which
 are:
 
-  - h:m  
+  - h:m:  
     The local time at start of observation (approximation only, not used
     by the program)
   - set:  
@@ -708,27 +703,29 @@ the other - which is recommended for first time users - or run
 completely unattended, including astrometry and blind stacking on a
 moving comet. Just select the tasks you wish to run in a row. Suitable
 parameters are determined automatically and will work in most cases.
-Special cases can be handled by supplying options via the “Expert
-Options” entry (see Appendix ???).
 
 It is possible to limit the requested tasks to run on a specific image
-set by providing the set name in the appropriate text entry field.
+set (or a list of image sets) by providing the set name in the
+appropriate text entry field.
 
 The final group of checkboxes determines which part of the tasks is
 executed. Normally, you will want the program to process your images and
-display any diagnostic plot it creates and show all result images.
+display any diagnostic plot it creates and show all result images. Image
+processing is normally applied to unprocessed image sets only. You might
+use the checkbox “Delete previous results” if you need to re-run a
+specific task and overwrite previously generated data (for safety reason
+you need to provide the desired image set names explicitely).
 
 Pressing the “Start” button causes the selected tasks to execute. At any
 time you may interrupt operation by pressing the same button again. Note
-that interruption is typically defered by a couple of seconds. Running a
-task for a second time will process any remaining image sets only.
+that interruption is typically defered by a couple of seconds.
 
 ## Master Darks and Flats
 
 The processing of calibration images involves a mixture of median and
 average operations. For best results it is therefore adviced to capture
 multiples of 6 exposures, e.g. 6 individual dark images at any required
-exposure time (and temperature) and 12 individual flat images for any
+exposure time (and temperature) and 12 individual flat images for each
 filter used.
 
 Throughout this manual we refer to the term master dark by meaning of an
