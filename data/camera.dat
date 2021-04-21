@@ -1,3 +1,5 @@
 # tel  flen aperture fratio camera     camchip flip rot rawbits satur  gain pixscale magzero ttype ctype  # comments
 GSO     800    200    4.0   K5IIs      PDS/CAC   0    -    14   55000  0.54     1.22    21.0    L   DSLR
 T14     530    106    5.0   STL11000M  STL/KA1   1  -90    16   30000  0.79     3.5     18.7    R   CCD   # iTelescope, NM
+
+# version 4   (please leave this line untouched)
