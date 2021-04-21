@@ -15,6 +15,7 @@ import javafx.scene.control.Button;
 public class AirtoolsCLICommand {
     
     private String cmdName;
+    private String[] opts;
     private String[] args;
     private final Button btnStart;
 
@@ -37,6 +38,10 @@ public class AirtoolsCLICommand {
         this.cmdName = cmdName;
     }
 
+    public void setOpts(String[] opts) {
+        this.opts = opts;
+    }
+
     public void setArgs(String[] args) {
         this.args = args;
     }
@@ -45,22 +50,32 @@ public class AirtoolsCLICommand {
         String labelStart;
         String colorStart = "#333333";
         String colorStop = "#f00000";
+        String str;
+        int i;
         
         if (task == null) {
             // ready for new task
             logger.log("");
-            //logger.log("# " + "Running ds9cmd " + taskName + " " + args);
+            //logger.log("# " + "Running ds9cmd " + taskName + opts + args);
             logger.statusLog("Running " + cmdName + " ...");
             labelStart = btnStart.getText();
             btnStart.setText("Stop");
             btnStart.setStyle("-fx-text-fill: " + colorStop);
             
-            // convert args to argsStr
-            String str="";
-            int i;
+            // convert opts array to optsStr
+            str="";
+            for (i=0; i<opts.length; i++) {
+                 if (! str.isEmpty()) str = str + " ";
+                 str = str + opts[i];
+            }
+            final String optsStr = str;
+            //logger.log("argsStr=" + argsStr);
+            
+            // convert args array to argsStr
+            str="";
             for (i=0; i<args.length; i++) {
                  if (! str.isEmpty()) str = str + " ";
-                 str = str + "\"" + args[i] + "\"";
+                 str = str + args[i];
             }
             final String argsStr = str;
             //logger.log("argsStr=" + argsStr);
@@ -71,7 +86,7 @@ public class AirtoolsCLICommand {
                 @Override
                 protected Void call() {
                     sh.setEnvVars("");
-                    sh.setOpts("");
+                    sh.setOpts(optsStr);
                     sh.setArgs(argsStr);
                     //sh.runFunction("\"" + userCmd + "\"");
                     sh.runFunction(cmdName);

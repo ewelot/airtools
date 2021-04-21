@@ -11,7 +11,7 @@
 <?import javafx.scene.layout.RowConstraints?>
 <?import javafx.scene.layout.VBox?>
 
-<DialogPane fx:id="paramDialogPane" xmlns="http://javafx.com/javafx/8.0.171" xmlns:fx="http://javafx.com/fxml/1" fx:controller="tl.airtoolsgui.controller.ManualDataController">
+<DialogPane fx:id="paramDialogPane" xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="tl.airtoolsgui.controller.ManualDataController">
    <content>
       <VBox prefWidth="500.0" spacing="16.0">
          <children>
@@ -42,7 +42,7 @@
                         <Label text="Plasma tail length in pixel:" GridPane.rowIndex="6" />
                         <Label text="Plasma tail angle in image (right=0):" GridPane.rowIndex="7" />
                         <TextField fx:id="tfImageSet" editable="false" focusTraversable="false" style="-fx-background-color: #bbb, #f0f0f0;" text="co01 (1P)" GridPane.columnIndex="1" />
-                        <ComboBox fx:id="cbChannel" editable="true" prefWidth="150.0" GridPane.columnIndex="1" GridPane.rowIndex="1" />
+                        <ComboBox fx:id="cbChannel" prefWidth="150.0" GridPane.columnIndex="1" GridPane.rowIndex="1" />
                         <TextField fx:id="tfCCorr" GridPane.columnIndex="1" GridPane.rowIndex="2" />
                         <TextField fx:id="tfStLim" GridPane.columnIndex="1" GridPane.rowIndex="3" />
                         <TextField fx:id="tfDtLen" GridPane.columnIndex="1" GridPane.rowIndex="4" />

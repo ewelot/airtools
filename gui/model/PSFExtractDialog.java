@@ -26,12 +26,11 @@ public class PSFExtractDialog extends CometPhotometryDialog {
         controller.setImageSet(imgSet);
     }
     
+    public boolean isOverwrite() {
+        return controller.getOverwrite();
+    }
+    
     public String[] getValues() {
         return controller.getValues();
     }
-    
-    public void setValues(String[] sarray) {
-        controller.setValues(sarray);
-    }
-
 }

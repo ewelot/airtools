@@ -8,6 +8,8 @@ package tl.airtoolsgui.controller;
 import java.io.File;
 import java.net.URL;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.ResourceBundle;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
@@ -64,7 +66,9 @@ public class ListResultsController implements Initializable {
 
     private SimpleLogger logger;
     private StringProperty projectDir = new SimpleStringProperty();
-    private AirtoolsCLICommand airCmd;
+    private AirtoolsCLICommand aircliCmd;
+    private final String aircliTask = "usercmd";
+    private final String airfunFunc = "AIlist";
 
     /**
      * Initializes the controller class.
@@ -80,7 +84,7 @@ public class ListResultsController implements Initializable {
     public void setReferences (ShellScript sh, SimpleLogger logger, StringProperty projectDir) {
         this.logger = logger;
         this.projectDir = projectDir;
-        this.airCmd = new AirtoolsCLICommand(buttonStart, logger, sh);
+        this.aircliCmd = new AirtoolsCLICommand(buttonStart, logger, sh);
 
         setBaseDirectories();
         labelWarning.setText("");
@@ -176,41 +180,46 @@ public class ListResultsController implements Initializable {
     private void onButtonStart(ActionEvent event) {
         System.out.println("ListResultsController: onButtonStart()");
         labelWarning.setText("");
-        String cmd="AIlist";
+        List<String> aircliCmdOpts = new ArrayList<>();
+        List<String> aircliCmdArgs = new ArrayList<>();
+
         DateTimeFormatter fmt = DateTimeFormatter.ofPattern("YYMMdd");
         String instrument=cbInstrument.getSelectionModel().getSelectedItem();
         
         //if (! isValidInputs()) return;
-        
+        // airfun function to call
+        aircliCmdArgs.add(airfunFunc);
+                
         // add options
-        if (cbShowUncalibrated.isSelected()) cmd+=" -a";
-        if (! instrument.equalsIgnoreCase("any")) cmd+=" -t " + instrument;
+        if (cbShowUncalibrated.isSelected()) aircliCmdArgs.add("-a");
+        if (! instrument.equalsIgnoreCase("any")) aircliCmdArgs.add("-t " + instrument);
         
-        if (! tfBaseDir1.getText().isBlank()) cmd+=" -d " + tfBaseDir1.getText();
-        if (! tfBaseDir2.getText().isBlank()) cmd+=" -d " + tfBaseDir2.getText();
+        if (! tfBaseDir1.getText().isBlank()) aircliCmdArgs.add("-d " + tfBaseDir1.getText());
+        if (! tfBaseDir2.getText().isBlank()) aircliCmdArgs.add("-d " + tfBaseDir2.getText());
         
         // add parameters
         if (! tfCometName.getText().isBlank()) {
-            cmd+=" " + tfCometName.getText();
+            aircliCmdArgs.add(tfCometName.getText());
         } else {
             if (dpStart.getValue() != null || dpEnd.getValue() != null)
-                cmd+=" \"\"";
+                aircliCmdArgs.add("\"\"");
         }
         if (dpStart.getValue() != null) {
-            cmd+=" " + dpStart.getValue().format(fmt);
+            aircliCmdArgs.add(dpStart.getValue().format(fmt));
         } else {
             if (dpEnd.getValue() != null)
-                cmd+=" \"\"";
+                aircliCmdArgs.add("\"\"");
         }
         if (dpEnd.getValue() != null) {
-            cmd+=" " + dpEnd.getValue().format(fmt);
+            aircliCmdArgs.add(dpEnd.getValue().format(fmt));
         }
         
         // run command
-        System.out.println("cmd: " + cmd);
-        logger.log("# cmd: " + cmd);
-        airCmd.setArgs(cmd.split("\\s+"));
-        airCmd.run();
+        System.out.println("cmd: " + aircliCmdOpts + " " + aircliTask + " " + aircliCmdArgs);
+        logger.log("# cmd: " + aircliCmdOpts + " " + aircliTask + " " + aircliCmdArgs);
+        aircliCmd.setOpts(aircliCmdOpts.toArray(new String[0]));
+        aircliCmd.setArgs(aircliCmdArgs.toArray(new String[0]));
+        aircliCmd.run();
     }
 
     @FXML

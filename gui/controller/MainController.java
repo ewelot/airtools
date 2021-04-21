@@ -7,6 +7,7 @@ package tl.airtoolsgui.controller;
  */
 
 
+import java.io.BufferedReader;
 import tl.airtoolsgui.model.ShellScript;
 import tl.airtoolsgui.model.SimpleLogger;
 
@@ -27,15 +28,25 @@ import javafx.scene.control.TextArea;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.SimpleIntegerProperty;
 import javafx.beans.property.SimpleStringProperty;
@@ -45,10 +56,14 @@ import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
+import javafx.scene.control.Alert.AlertType;
+import javafx.scene.control.ButtonBar.ButtonData;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.Tab;
 import javafx.scene.control.TabPane;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
@@ -83,6 +98,7 @@ public class MainController implements Initializable {
     private MenuItem menuArchive;
     @FXML
     private MenuItem menuExit;
+
     @FXML
     private Menu menuEdit;
     @FXML
@@ -93,14 +109,18 @@ public class MainController implements Initializable {
     private MenuItem menuEditSiteParam;
     @FXML
     private MenuItem menuEditCameraParam;
+
     @FXML
     private Menu menuAnalysis;
+    @FXML
+    private MenuItem menuBadPixel;
     @FXML
     private MenuItem menuList;
     @FXML
     private MenuItem menuLightCurve;
     @FXML
     private MenuItem menuMapPhot;
+
     @FXML
     private Menu menuHelp;
     @FXML
@@ -131,6 +151,7 @@ public class MainController implements Initializable {
 
     // additional windows (stages)
     private Stage windowArchive;
+    private Stage windowCreateBadpixelMask;
     private Stage windowListResults;
     private Stage windowMultiApPhotometry;
     private Stage windowLightCurve;
@@ -143,7 +164,6 @@ public class MainController implements Initializable {
     private String progDate;
     private final String onlineManualURL = "https://github.com/ewelot/airtools/blob/master/doc/manual-en.md";
     private final StringProperty projectDir = new SimpleStringProperty();
-    private final StringProperty paramDir = new SimpleStringProperty();
     private final StringProperty rawDir = new SimpleStringProperty();
     private final StringProperty tempDir = new SimpleStringProperty();
     private final StringProperty site = new SimpleStringProperty();
@@ -177,19 +197,23 @@ public class MainController implements Initializable {
         
         // "Edit" menu actions
         menuProjectSettings.setOnAction((event) -> {
-            startTextEditor(".airtoolsrc");
+            startTextEditor(".airtoolsrc", false);
         });
         menuEditImageSet.setOnAction((event) -> {
-            startTextEditor("set.dat");
+            startTextEditor("set.dat", false);
         });
         menuEditSiteParam.setOnAction((event) -> {
-            startTextEditor("sites.dat");
+            startTextEditor("sites.dat", true);
         });
         menuEditCameraParam.setOnAction((event) -> {
-            startTextEditor("camera.dat");
+            startTextEditor("camera.dat", true);
         });
         
         // "Analysis" menu actions
+        menuBadPixel.setOnAction((event) -> {
+            //listResults();
+            showWindowCreateBadpixelMask();
+        });
         menuList.setOnAction((event) -> {
             //listResults();
             showWindowListResults();
@@ -269,7 +293,6 @@ public class MainController implements Initializable {
         loadProperties(configFile);
         rawDir.setValue(projectProperties.getProperty("lastRawDir", "/tmp"));
         tempDir.setValue(projectProperties.getProperty("lastTempDir", "/tmp"));
-        paramDir.setValue(projectProperties.getProperty("lastParamDir", "/usr/share/airtools"));
         site.setValue(projectProperties.getProperty("lastSite", ""));
         int i=0;
         String str = projectProperties.getProperty("lastTZOff", "0");
@@ -317,7 +340,6 @@ public class MainController implements Initializable {
             tabPane.getSelectionModel().selectFirst();
 
         projectProperties.setProperty("lastProjectDir", projectDir.getValue());
-        projectProperties.setProperty("lastParamDir", paramDir.getValue());
         projectProperties.setProperty("lastRawDir", rawDir.getValue());
         projectProperties.setProperty("lastTempDir", tempDir.getValue());
         projectProperties.setProperty("lastSite", site.getValue());
@@ -351,15 +373,29 @@ public class MainController implements Initializable {
         }
     }
     
+    public String byteToHex(byte num) {
+        char[] hexDigits = new char[2];
+        hexDigits[0] = Character.forDigit((num >> 4) & 0xF, 16);
+        hexDigits[1] = Character.forDigit((num & 0xF), 16);
+        return new String(hexDigits);
+    }
     
-    private void startTextEditor(String fileName) {
-        File textFile;
+    public String encodeHexString(byte[] byteArray) {
+        // convert byteArray to String
+        StringBuffer hexStringBuffer = new StringBuffer();
+        for (int i = 0; i < byteArray.length; i++) {
+            hexStringBuffer.append(byteToHex(byteArray[i]));
+        }
+        return hexStringBuffer.toString();
+    }
+    
+    private void startTextEditor(String fileName, boolean isParamFile) {
+        System.out.println("startTextEditor()");
+        File textFile = null;
         String dir = projectDir.getValue();
         if (fileName != null && ! fileName.isEmpty()) {
             if (dir != null && ! dir.isEmpty()) {
                 textFile = new File(dir + "/" + fileName);
-            } else {
-                textFile=null;
             }
         } else {
             FileChooser fileChooser = new FileChooser();
@@ -369,16 +405,141 @@ public class MainController implements Initializable {
             }
             textFile = fileChooser.showOpenDialog(this.appPane.getScene().getWindow());
         }
-        if (textFile != null) {
+        if (textFile == null) return;
+        
+        if (! textFile.exists()) createFileFromTemplate(textFile, isParamFile);
+
+        
+        if (textFile.exists()) {
             ProcessBuilder pb = new ProcessBuilder("/bin/bash", "-c", "mousepad " + textFile.getAbsolutePath());
             try {
-                pb.start();
+                MessageDigest md = MessageDigest.getInstance("MD5");
+                md.update(Files.readAllBytes(Paths.get(textFile.getAbsolutePath())));
+                String origChecksum = encodeHexString(md.digest());
+                Process editorProcess = pb.start();
+                if (isParamFile) {
+                    editorProcess.waitFor();
+                    // TODO: if file has changed then ask user if it should be copied to config dir
+                    md.update(Files.readAllBytes(Paths.get(textFile.getAbsolutePath())));
+                    String newChecksum = encodeHexString(md.digest());
+                    if (! newChecksum.equals(origChecksum)) {
+                        Alert alert = new Alert(AlertType.CONFIRMATION);
+                        alert.setTitle("Confirmation Dialog");
+                        alert.setHeaderText("The parameter file " + fileName + " has been modified.");
+                        alert.setContentText("Would you like to use it as default for new projects?\n\n");
+
+                        Optional<ButtonType> result = alert.showAndWait();
+                        if (result.get() == ButtonType.OK){
+                            Files.copy(Paths.get(textFile.getAbsolutePath()), Path.of(configFile).getParent().resolve(fileName),
+                                    StandardCopyOption.COPY_ATTRIBUTES, StandardCopyOption.REPLACE_EXISTING);
+                            logger.log("# local file " + fileName + " copied to " + Path.of(configFile).getParent());
+                        } else {
+                            logger.log("# WARNING: file " + fileName + " not copied to " + Path.of(configFile).getParent());
+                        }
+                    }
+                }
             } catch (IOException ex) {
+                Logger.getLogger(MainController.class.getName()).log(Level.SEVERE, null, ex);
+            } catch (InterruptedException ex) {
+                Logger.getLogger(MainController.class.getName()).log(Level.SEVERE, null, ex);
+            } catch (NoSuchAlgorithmException ex) {
+                // MD5 not found
                 Logger.getLogger(MainController.class.getName()).log(Level.SEVERE, null, ex);
             }
         }
     }
     
+
+    private void createFileFromTemplate(File destFile, boolean isParamFile) {
+        File srcFile = null;
+        File lastUsedFile = null;
+        Path confPath;
+        File testFile;
+        
+        /* check for last used file by examining configdir */
+        if (isParamFile) {
+            confPath = Path.of(configFile).getParent();
+            testFile = new File(confPath + "/" + destFile.getName());
+            if (testFile.exists()) {
+                lastUsedFile = testFile;
+                logger.log("# INFO: parameter file " + testFile.getAbsolutePath() + " exists.");
+            } else {
+                logger.log("# WARNING: parameter file " + testFile.getAbsolutePath() + " does not exist.");
+            }
+            
+            /* check for last used file by examining previous configdir */
+            if (lastUsedFile == null) {
+                // if last version is 3: check lastParamDir in ~/.airtools/3/airtools.conf
+                String confFileName = Path.of(configFile).getParent().getParent() + "/3/airtools.conf";
+                Properties oldProperties = new Properties();
+                try {
+                    InputStream inputStream = new FileInputStream(confFileName);
+                    oldProperties.load(inputStream);
+                    inputStream.close();
+                    testFile = new File(oldProperties.getProperty("lastParamDir") + "/" + destFile.getName());
+                    if (testFile.exists()) {
+                        lastUsedFile = testFile;
+                        logger.log("# INFO: parameter file " + testFile.getAbsolutePath() + " exists.");
+                    } else {
+                        logger.log("# WARNING: parameter file " + testFile.getAbsolutePath() + " does not exist.");
+                    }
+                } catch (FileNotFoundException ex) {
+                    logger.log("WARNING: old config file " + confFileName + " not found");
+                } catch (IOException ex) {
+                    logger.log("WARNING: unable to read old config file (IO Error)");
+                }
+            }
+        }
+        
+        Alert alert = new Alert(AlertType.CONFIRMATION);
+        alert.setTitle("Create Missing File");
+        alert.setHeaderText("The file " + destFile.getName() + " does not exist.");
+        alert.setContentText("You can use a template file or create it manually from scratch.\n"
+                + "Choose one of the following options:\n\n");
+        ButtonType buttonTypeLast = new ButtonType("Copy last used");
+        ButtonType buttonTypeTemp = new ButtonType("Copy template");
+        ButtonType buttonTypeEmpty = new ButtonType("Create empty file");
+        ButtonType buttonTypeCancel = new ButtonType("Cancel", ButtonData.CANCEL_CLOSE);
+
+        alert.getButtonTypes().clear();
+        if (lastUsedFile != null) alert.getButtonTypes().add(buttonTypeLast);
+        alert.getButtonTypes().addAll(buttonTypeTemp, buttonTypeEmpty, buttonTypeCancel);
+        alert.setResizable(true);
+        alert.getDialogPane().getChildren().stream().forEach(node -> {
+            ((Region)node).setMinWidth(Region.USE_PREF_SIZE);
+            ((Region)node).setMinHeight(Region.USE_PREF_SIZE);
+        });
+        //alert.getDialogPane().setMinWidth(Region.USE_PREF_SIZE);
+        //alert.getDialogPane().setPrefWidth(Region.USE_PREF_SIZE);
+        
+        Optional<ButtonType> result = alert.showAndWait();
+        if (result.get() == buttonTypeLast) {
+            srcFile = lastUsedFile;
+        } else if (result.get() == buttonTypeTemp) {
+            srcFile = new File("/usr/share/airtools/" + destFile.getName());
+        } else if (result.get() == buttonTypeEmpty) {
+            srcFile = new File(destFile.getAbsolutePath());
+        } else {
+            logger.log("# WARNING: file " + destFile.getName() + " not created");
+        }
+        if (srcFile != null) {
+            try {
+                if (srcFile.getAbsolutePath().equals(destFile.getAbsolutePath())) {
+                    destFile.createNewFile();
+                    logger.log("# created empty file " + destFile.getName());
+                } else {
+                    Files.copy(srcFile.toPath(), destFile.toPath(),
+                        StandardCopyOption.COPY_ATTRIBUTES, StandardCopyOption.REPLACE_EXISTING);
+                    logger.log("# file " + srcFile.getAbsolutePath() + " copied to project dir");
+                }
+            } catch (IOException ex) {
+                logger.log("# ERROR: unable to copy file " + srcFile.getAbsolutePath() + " to project dir");
+                Logger.getLogger(MainController.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
+        
+    }    
+
     
     private void checkDependencies() {
         //logger.log("WARNING: checkDependencies: not implemented yet.");
@@ -389,6 +550,45 @@ public class MainController implements Initializable {
         sh.runFunction("check");
         exitCode=sh.getExitCode();
         logger.log("check finished with " + exitCode);
+    }
+    
+    
+    private boolean isNewSite (String site) {
+        // check for sites.dat
+        BufferedReader inFile = null;
+        try {
+            inFile = new BufferedReader(new FileReader(projectDir.getValue() + "/sites.dat"));
+        } catch (FileNotFoundException ex) {
+            // Logger.getLogger(CometPhotometryController.class.getName()).log(Level.SEVERE, null, ex);
+            logger.log("WARNING: file " + projectDir.getValue() + "/sites.dat is missing.");
+        }
+        if (inFile == null) return true;
+        
+        String line;
+        Pattern regexp =   Pattern.compile("^[A-Z][a-zA-Z0-9]+[ ]+[a-zA-Z0-9]+[ ]+[+-]{0,1}[0-9.,]+[ ]+[+-]{0,1}[0-9.,]+[ ]+");
+        Matcher matcher = regexp.matcher("");
+        try {
+            while (( line = inFile.readLine()) != null){
+                matcher.reset(line);
+                if (matcher.find()) {
+                    String[] columns = line.split("[ ]+");
+                    if (columns.length >= 5) {
+                        // System.out.println(line);
+                        System.out.println("valid site: " + columns[1]);
+                        if (columns[1].equals(site)) return false;
+                    }
+                }
+            }
+        } catch (IOException ex) {
+            Logger.getLogger(CometPhotometryController.class.getName()).log(Level.SEVERE, null, ex);
+        } finally {
+            try {
+                inFile.close();
+            } catch (IOException ex) {
+                Logger.getLogger(CometPhotometryController.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
+        return true;
     }
     
     
@@ -440,7 +640,7 @@ public class MainController implements Initializable {
             FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource("/tl/airtoolsgui/view/NewProject.fxml"));
             Parent parent = fxmlLoader.load();
             NewProjectController dialogController = fxmlLoader.<NewProjectController>getController();
-            dialogController.setReferences(logger, projectDir, paramDir, rawDir, tempDir, site, tzoff);
+            dialogController.setReferences(configFile, logger, projectDir, rawDir, tempDir, site, tzoff);
             
             Scene scene = new Scene(parent);
             Stage stage = new Stage();
@@ -448,6 +648,19 @@ public class MainController implements Initializable {
             stage.setScene(scene);
             stage.setTitle("New AIRTOOLS Project");
             stage.showAndWait();
+
+            // handle new site entered by the user
+            if (isNewSite(site.getValue())) {
+                logger.log("# new site = " + site.getValue());
+                Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                alert.setTitle("New Observatory Site");
+                alert.setHeaderText("New site not known to sites parameter file.");
+                alert.setContentText("You requested to use a new site. Please edit the\n"
+                                + "sites parameter file (choose action from menu\n"
+                                + "\"Edit\") and fill in all required fields.\n\n");
+                alert.showAndWait();
+                // TODO: add line to sites.dat
+            }
         } catch (IOException ex) {
             Logger.getLogger(MainController.class.getName()).log(Level.SEVERE, null, ex);
         }
@@ -491,6 +704,26 @@ public class MainController implements Initializable {
             Logger.getLogger(MainController.class.getName()).log(Level.SEVERE, null, ex);
         }
         windowListResults.showAndWait();
+    }
+    
+    
+    public void showWindowCreateBadpixelMask() {
+        System.out.println("showWindowCreateBadpixelMask()");
+        if (windowListResults == null) try {
+            FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource("/tl/airtoolsgui/view/CreateBadpixelMask.fxml"));
+            Parent parent = fxmlLoader.load();
+            CreateBadpixelMaskController controller = fxmlLoader.<CreateBadpixelMaskController>getController();
+            controller.setReferences(sh, logger, projectDir);
+
+            Scene scene = new Scene(parent);
+            windowCreateBadpixelMask = new Stage();
+            //windowListResults.initModality(Modality.APPLICATION_MODAL);
+            windowCreateBadpixelMask.setScene(scene);
+            windowCreateBadpixelMask.setTitle("Create BadPixel Mask");
+        } catch (IOException ex) {
+            Logger.getLogger(MainController.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        windowCreateBadpixelMask.showAndWait();
     }
     
     

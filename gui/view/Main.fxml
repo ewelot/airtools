@@ -16,7 +16,7 @@
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.VBox?>
 
-<BorderPane fx:id="appPane" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" prefWidth="480.0" stylesheets="@Main.css" xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="tl.airtoolsgui.controller.MainController">
+<BorderPane fx:id="appPane" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" prefWidth="500.0" stylesheets="@Main.css" xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="tl.airtoolsgui.controller.MainController">
    <top>
       <MenuBar maxWidth="1.7976931348623157E308" BorderPane.alignment="CENTER">
          <menus>
@@ -40,6 +40,8 @@
             </Menu>
             <Menu fx:id="menuAnalysis" mnemonicParsing="false" text="Analysis">
               <items>
+                  <MenuItem fx:id="menuBadPixel" mnemonicParsing="false" text="Create BadPixel Mask" />
+                  <SeparatorMenuItem mnemonicParsing="false" />
                 <MenuItem fx:id="menuList" mnemonicParsing="false" text="List Results" />
                   <MenuItem fx:id="menuMapPhot" mnemonicParsing="false" text="Multi-Aperture Photometry" />
                   <MenuItem fx:id="menuLightCurve" mnemonicParsing="false" text="Plot Light Curve" />

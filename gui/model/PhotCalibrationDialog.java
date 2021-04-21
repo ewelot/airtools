@@ -5,19 +5,19 @@
  */
 package tl.airtoolsgui.model;
 
-import tl.airtoolsgui.controller.PhotometryController;
+import tl.airtoolsgui.controller.PhotCalibrationController;
 
 /**
  * FXML Controller class
  *
  * @author lehmann
  */
-public class PhotometryDialog extends CometPhotometryDialog {
-    private final PhotometryController controller;
+public class PhotCalibrationDialog extends CometPhotometryDialog {
+    private final PhotCalibrationController controller;
 
-    public PhotometryDialog(String fxml, String title) {
+    public PhotCalibrationDialog(String fxml, String title) {
         super(fxml, title);
-        controller = (PhotometryController) getController();
+        controller = (PhotCalibrationController) getController();
     }
 
     @Override
@@ -26,12 +26,11 @@ public class PhotometryDialog extends CometPhotometryDialog {
         controller.setImageSet(imgSet);
     }
     
+    public boolean isOverwrite() {
+        return controller.getOverwrite();
+    }
+    
     public String[] getValues() {
         return controller.getValues();
     }
-    
-    public void setValues(String[] sarray) {
-        controller.setValues(sarray);
-    }
-
 }

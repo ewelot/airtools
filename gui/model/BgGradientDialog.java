@@ -13,24 +13,24 @@ import tl.airtoolsgui.controller.BgGradientController;
  * @author lehmann
  */
 public class BgGradientDialog extends CometPhotometryDialog {
-    private BgGradientController controller;
+    private final BgGradientController controller;
 
     public BgGradientDialog(String fxml, String title) {
         super(fxml, title);
         controller = (BgGradientController) getController();
     }
 
+    @Override
     public void setImageSet(ImageSet imgSet) {
         super.setImageSet(imgSet);
         controller.setImageSet(imgSet);
     }
     
+    public boolean isOverwrite() {
+        return controller.getOverwrite();
+    }
+    
     public String[] getValues() {
         return controller.getValues();
     }
-    
-    public void setValues(String[] sarray) {
-        controller.setValues(sarray);
-    }
-
 }

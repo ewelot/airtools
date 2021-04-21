@@ -8,6 +8,8 @@ package tl.airtoolsgui.controller;
 import java.io.File;
 import java.net.URL;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.ResourceBundle;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
@@ -81,7 +83,9 @@ public class LightCurveController implements Initializable {
 
     private SimpleLogger logger;
     private StringProperty projectDir = new SimpleStringProperty();
-    private AirtoolsCLICommand airCmd;
+    private AirtoolsCLICommand aircliCmd;
+    private final String aircliTask = "usercmd";
+    private final String airfunFunc = "icqplot";
 
     
     private enum PlotType {
@@ -173,7 +177,7 @@ public class LightCurveController implements Initializable {
     public void setReferences (ShellScript sh, SimpleLogger logger, StringProperty projectDir) {
         this.logger = logger;
         this.projectDir = projectDir;
-        this.airCmd = new AirtoolsCLICommand(buttonStart, logger, sh);
+        this.aircliCmd = new AirtoolsCLICommand(buttonStart, logger, sh);
 
         labelWarning.setText("");
     }
@@ -230,59 +234,65 @@ public class LightCurveController implements Initializable {
     private void onButtonStart(ActionEvent event) {
         System.out.println("LightCurveController: onButtonStart()");
         labelWarning.setText("");
+        List<String> aircliCmdOpts = new ArrayList<>();
+        List<String> aircliCmdArgs = new ArrayList<>();
+
         if (! isValidInputs()) return;
-        String cmd="icqplot";
         PlotType plotType=cbPlotType.getSelectionModel().getSelectedItem();
         FitType fitType=cbFitType.getSelectionModel().getSelectedItem();
         KeyPosition keyPos=cbKeyPosition.getSelectionModel().getSelectedItem();
 
+        // airfun function to call
+        aircliCmdArgs.add(airfunFunc);
+        
         // add options
-        if (cbUseCOBS.isSelected())           cmd+=" -c";
-        if (cbScanLocalProjects.isSelected()) cmd+=" -l";
-        if (cbForceUpdate.isSelected())       cmd+=" -u";
-        if (cbMPCModel.isSelected())          cmd+=" -m";
-        if (cbDistance.isSelected())          cmd+=" -d";
-        if (fitType != FitType.NONE)          cmd+=" " + fitType.getOption();
-        if (keyPos  != KeyPosition.TOPLEFT)   cmd+=" " + keyPos.getOption();
+        if (cbUseCOBS.isSelected())           aircliCmdArgs.add("-c");
+        if (cbScanLocalProjects.isSelected()) aircliCmdArgs.add("-l");
+        if (cbForceUpdate.isSelected())       aircliCmdArgs.add("-u");
+        if (cbMPCModel.isSelected())          aircliCmdArgs.add("-m");
+        if (cbDistance.isSelected())          aircliCmdArgs.add("-d");
+        if (fitType != FitType.NONE)          aircliCmdArgs.add(fitType.getOption());
+        if (keyPos  != KeyPosition.TOPLEFT)   aircliCmdArgs.add(keyPos.getOption());
         
         if (dpStart.getValue() != null || dpEnd.getValue() != null) {
-            cmd+=" -x";
-            cmd+=" ";
+            String str = "-x ";            
             DateTimeFormatter fmt = DateTimeFormatter.ofPattern("YYYYMMdd");
             if (dpStart.getValue() != null) {
-                cmd+=dpStart.getValue().format(fmt);
+                str += dpStart.getValue().format(fmt);
             }
             if (dpEnd.getValue() != null) {
-                cmd+=":" + dpEnd.getValue().format(fmt);
+                str += ":" + dpEnd.getValue().format(fmt);
             }
+            aircliCmdArgs.add(str);
         }
         
         if (! tfModelM.getText().isBlank() && ! tfModelN.getText().isBlank()) {
-            cmd+=" -n " + tfModelM.getText() + "," + tfModelN.getText();
+            aircliCmdArgs.add("-n " + tfModelM.getText() + "," + tfModelN.getText());
         }
         
         if (! tfObsList.getText().isBlank()) {
-            cmd+=" -i \"" + tfObsList.getText() + "\"";
+            aircliCmdArgs.add("-i \"" + tfObsList.getText() + "\"");
         }
         
         if (! tfAddOptions.getText().isBlank()) {
-            cmd+=" " + tfAddOptions.getText();
+            aircliCmdArgs.add(tfAddOptions.getText());
         }
         
         // add positional parameters
-        cmd+=" " + tfCometName.getText();
+        aircliCmdArgs.add(tfCometName.getText());
         if (! tfICQFile.getText().isBlank()) {
-            cmd+=" " + tfICQFile.getText();
+            aircliCmdArgs.add(tfICQFile.getText());
         } else {
-            cmd+=" \"\"";
+            aircliCmdArgs.add("\"\"");
         }
-        cmd+=" " + plotType.name().toLowerCase();
+        aircliCmdArgs.add(plotType.name().toLowerCase());
         
         // run command
-        System.out.println("cmd: " + cmd);
-        logger.log("# cmd: " + cmd);
-        airCmd.setArgs(cmd.split("\\s+"));
-        airCmd.run();
+        System.out.println("cmd: " + aircliCmdOpts + " " + aircliTask + " " + aircliCmdArgs);
+        logger.log("# cmd: " + aircliCmdOpts + " " + aircliTask + " " + aircliCmdArgs);
+        aircliCmd.setOpts(aircliCmdOpts.toArray(new String[0]));
+        aircliCmd.setArgs(aircliCmdArgs.toArray(new String[0]));
+        aircliCmd.run();
     }
     
     @FXML

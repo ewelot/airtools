@@ -9,6 +9,7 @@ import java.net.URL;
 import java.util.ResourceBundle;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.DialogPane;
 import javafx.scene.control.Label;
@@ -33,25 +34,58 @@ public class PSFExtractController implements Initializable {
     @FXML
     private ComboBox<String> cbPsfSize;
     @FXML
+    private CheckBox cbDelete;
+    @FXML
     private Label labelWarning;
+    @FXML
+    private Label labelDelete;
+
+    private ImageSet imgSet;
 
     /**
      * Initializes the controller class.
      */
     @Override
     public void initialize(URL url, ResourceBundle rb) {
+        // disable unimplemented checkbox
+        //labelDelete.setDisable(true);
+        //cbDelete.setDisable(true);
+        
         labelWarning.setText("");
-        cbPsfSize.getItems().addAll("80", "128", "184", "256");        
+        cbPsfSize.getItems().addAll("", "80", "128", "184", "256");        
     }
     
     public void setImageSet(ImageSet imgSet) {
         if (imgSet != null) {
-            tfImageSet.setText(imgSet.toString());
+            if (imgSet.equals(this.imgSet)) {
+                resetValues();
+            } else {
+                this.imgSet = imgSet;
+                tfImageSet.setText(imgSet.toString());
+                setDefaultValues();
+            }
         } else {
             tfImageSet.setText("");
         }
     }
     
+    private void resetValues() {
+        /* reset widgets when the dialog window is shown again (same image set) */        
+        cbDelete.setSelected(false);
+    }
+
+    private void setDefaultValues() {
+        /* initialize widgets with default values upon change of image set */
+        tfRLim.setText("10");
+        tfMerrLim.setText("0.2");
+        cbPsfSize.setValue("");
+        cbDelete.setSelected(false);
+    }
+    
+    public boolean getOverwrite() {
+        return cbDelete.isSelected();
+    }
+
     public String[] getValues() {
         String[] sarray;
         sarray = new String[] {tfRLim.getText()
@@ -60,12 +94,4 @@ public class PSFExtractController implements Initializable {
         };
         return sarray;
     }
-    
-    public void setValues(String[] sarray) {
-        int size=sarray.length;
-        if (size > 0) tfRLim.setText(sarray[0]);
-        if (size > 1) tfMerrLim.setText(sarray[1]);
-        if (size > 2) cbPsfSize.setValue(sarray[2]);
-    }
-    
 }

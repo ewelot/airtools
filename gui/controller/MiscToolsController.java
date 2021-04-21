@@ -158,6 +158,12 @@ public class MiscToolsController implements Initializable {
 
     @FXML
     private void onButtonTerminal(ActionEvent event) {
+        String[] args = {""};
+        runAirtoolsCommand("terminal", args, (Button) event.getSource());
+    }
+
+    @FXML
+    private void old_onButtonTerminal(ActionEvent event) {
         String[] cmd;
         cmd = new String[] {"x-terminal-emulator", "-e",
             "env PROMPT_COMMAND=\"unset PROMPT_COMMAND; cd " + projectDir.getValue() + ";"

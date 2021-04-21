@@ -5,15 +5,10 @@
  */
 package tl.airtoolsgui.controller;
 
-import tl.airtoolsgui.model.PSFExtractDialog;
-import tl.airtoolsgui.model.ImageSet;
-import tl.airtoolsgui.model.ShellScript;
-import tl.airtoolsgui.model.SimpleLogger;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
-import java.io.FilenameFilter;
 import java.io.IOException;
 import java.net.URL;
 import java.util.ArrayList;
@@ -36,10 +31,14 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.ChoiceBox;
+import tl.airtoolsgui.model.ImageSet;
+import tl.airtoolsgui.model.ShellScript;
+import tl.airtoolsgui.model.SimpleLogger;
 import tl.airtoolsgui.model.BgGradientDialog;
+import tl.airtoolsgui.model.PSFExtractDialog;
 import tl.airtoolsgui.model.CometExtractDialog;
 import tl.airtoolsgui.model.ManualDataDialog;
-import tl.airtoolsgui.model.PhotometryDialog;
+import tl.airtoolsgui.model.PhotCalibrationDialog;
 
 /**
  * FXML Controller class
@@ -62,14 +61,14 @@ public class CometPhotometryController implements Initializable {
     @FXML
     private Button buttonRunManualdata;
     @FXML
-    private Button buttonRunPhotometry;
+    private Button buttonRunPhotCalibration;
 
     // dialogs
     private BgGradientDialog bggradientDialog = null;
     private PSFExtractDialog psfextractDialog = null;
     private CometExtractDialog cometextractDialog = null;
     private ManualDataDialog manualdataDialog = null;
-    private PhotometryDialog photometryDialog = null;
+    private PhotCalibrationDialog photcalibrationDialog = null;
 
     private SimpleLogger logger;
     private ShellScript sh;
@@ -140,7 +139,7 @@ public class CometPhotometryController implements Initializable {
         if (psfextractDialog != null)   psfextractDialog.setImageSet(null);
         if (cometextractDialog != null) cometextractDialog.setImageSet(null);
         if (manualdataDialog != null)   manualdataDialog.setImageSet(null);
-        if (photometryDialog != null)   photometryDialog.setImageSet(null);        
+        if (photcalibrationDialog != null)   photcalibrationDialog.setImageSet(null);        
     }
     
     
@@ -257,26 +256,19 @@ public class CometPhotometryController implements Initializable {
     @FXML
     private void onButtonRunBggradient(ActionEvent event) {
         System.out.println("onButtonRunBggradient()");
-        String[] defaultParams = {"64", "plane", "10"};
         if (! isReady()) return;
-        
-        // show additional user instructions
-        //logger.log("--> Note: any regions drawn on the comet stack image will be excluded from the background fit");
         
         ImageSet imgSet = cbImageSet.getSelectionModel().getSelectedItem();
         if (bggradientDialog == null) {
             bggradientDialog = new BgGradientDialog("BgGradient.fxml", "Background Gradient");
         }
-        if (bggradientDialog.isNewImageSet(imgSet)) {
-            bggradientDialog.setImageSet(imgSet);
-            bggradientDialog.setValues(defaultParams);
-        }
+        bggradientDialog.setImageSet(imgSet);            
 
         Optional<ButtonType> result = bggradientDialog.run();
         if (result.isPresent() && result.get() == ButtonType.APPLY) {
             String[] taskParam = bggradientDialog.getValues();
             System.out.println("Parameters: " + Arrays.toString(taskParam));
-            runDs9Command("bggradient", taskParam, (Button) event.getSource());
+            runDs9Command("bggradient", taskParam, bggradientDialog.isOverwrite(), (Button) event.getSource());
         }
     }
 
@@ -284,22 +276,19 @@ public class CometPhotometryController implements Initializable {
     @FXML
     private void onButtonRunPsfextract(ActionEvent event) {
         System.out.println("onButtonRunPsfextract()");
-        String[] defaultParams = {"10", "0.2", "80"};
         if (! isReady()) return;
+
         ImageSet imgSet = cbImageSet.getSelectionModel().getSelectedItem();
         if (psfextractDialog == null) {
             psfextractDialog = new PSFExtractDialog("PSFExtract.fxml", "PSF Extraction");
         }
-        if (psfextractDialog.isNewImageSet(imgSet)) {
-            psfextractDialog.setImageSet(imgSet);
-            psfextractDialog.setValues(defaultParams);
-        }
+        psfextractDialog.setImageSet(imgSet);
 
         Optional<ButtonType> result = psfextractDialog.run();
         if (result.isPresent() && result.get() == ButtonType.APPLY) {
             String[] taskParam = psfextractDialog.getValues();
             System.out.println("Task Parameters: " + Arrays.toString(taskParam));
-            runDs9Command("psfextract", taskParam, (Button) event.getSource());
+            runDs9Command("psfextract", taskParam, psfextractDialog.isOverwrite(), (Button) event.getSource());
         }
     }
     
@@ -309,52 +298,17 @@ public class CometPhotometryController implements Initializable {
         System.out.println("onButtonRunCometextract()");
         if (! isReady()) return;
         ImageSet imgSet = cbImageSet.getSelectionModel().getSelectedItem();
-        String ext = "pgm";
-        String bgImage="";
-        if (imgSet.getStarStack().endsWith(".ppm")) ext="ppm";
-        
-        // choose the latest bgcorr image (bgm10 or bgm1)
-        final String patternStr = imgSet.getSetname() + ".bgm[0-9]+." + ext
-                + "|" + imgSet.getSetname() + ".bgm[0-9]+all." + ext;
-        System.out.println("# pattern = " + patternStr);
-        File bgcorrDir = new File(projectDir.getValue() + "/bgcorr");
-        if (bgcorrDir.exists()) {
-            File[] matchedFiles=bgcorrDir.listFiles(new FilenameFilter() {
-                    final private Pattern pattern = Pattern.compile(patternStr);
-
-                    @Override
-                    public boolean accept(File dir, String name) {
-                        return pattern.matcher(new File(name).getName()).matches();
-                    }
-                });
-            if (matchedFiles.length > 0) {
-                //logger.log("# number of matched files = " + matchedFiles.length);
-                File mostRecentBgImage = Arrays
-                    .stream(matchedFiles)
-                    .filter(f -> f.isFile())
-                    .max(
-                        (f1, f2) -> Long.compare(f1.lastModified(),
-                            f2.lastModified())).get();
-
-                if (mostRecentBgImage.exists())
-                    bgImage = "bgcorr/" + mostRecentBgImage.getName();
-            }
-        }
-        String[] defaultParams = {bgImage, "10", "100"};
 
         if (cometextractDialog == null) {
             cometextractDialog = new CometExtractDialog("CometExtract.fxml", "Comet Extraction");
         }
-        if (cometextractDialog.isNewImageSet(imgSet)) {
-            cometextractDialog.setImageSet(imgSet);
-            cometextractDialog.setValues(defaultParams);
-        }
+        cometextractDialog.setImageSet(imgSet);
 
         Optional<ButtonType> result = cometextractDialog.run();
         if (result.isPresent() && result.get() == ButtonType.APPLY) {
             String[] taskParam = cometextractDialog.getValues();
             System.out.println("Task Parameters: " + Arrays.toString(taskParam));
-            runDs9Command("cometextract", taskParam, (Button) event.getSource());
+            runDs9Command("cometextract", taskParam, cometextractDialog.isOverwrite(), (Button) event.getSource());
         }
     }
 
@@ -364,17 +318,11 @@ public class CometPhotometryController implements Initializable {
         System.out.println("onButtonRunManualdata()");
         if (! isReady()) return;
         ImageSet imgSet = cbImageSet.getSelectionModel().getSelectedItem();
-        String channel = "1";
-        if (imgSet.getStarStack().endsWith(".ppm")) channel="2";
-        String[] defaultParams = {channel, "", "", "", "", "", ""};
 
         if (manualdataDialog == null) {
             manualdataDialog = new ManualDataDialog("ManualData.fxml", "Manual Measurements");
         }
-        if (manualdataDialog.isNewImageSet(imgSet)) {
-            manualdataDialog.setImageSet(imgSet);
-            manualdataDialog.setValues(defaultParams);
-        }
+        manualdataDialog.setImageSet(imgSet);
 
         Optional<ButtonType> result = manualdataDialog.run();
         if (result.isPresent() && result.get() == ButtonType.APPLY) {
@@ -386,33 +334,21 @@ public class CometPhotometryController implements Initializable {
 
     
     @FXML
-    private void onButtonRunPhotometry(ActionEvent event) {
-        System.out.println("onButtonRunPhotometry()");
+    private void onButtonRunPhotCalibration(ActionEvent event) {
+        System.out.println("onButtonRunPhotCalibration()");
         if (! isReady()) return;
         ImageSet imgSet = cbImageSet.getSelectionModel().getSelectedItem();
-        String plane = "1";
-        if (imgSet.getStarStack().endsWith(".ppm")) plane="2";
-        String refcat = "APASS";
-        String color = "V+c(B-V)";
-        String aprad = "";
-        String ty2Opts = "-l 12.5";
-        String apassOpts = "-n 200";
-        String skip="";
-        String[] defaultParams = {plane, refcat, color, aprad, ty2Opts, apassOpts, skip};
 
-        if (photometryDialog == null) {
-            photometryDialog = new PhotometryDialog("Photometry.fxml","Photometric Calibration");
+        if (photcalibrationDialog == null) {
+            photcalibrationDialog = new PhotCalibrationDialog("PhotCalibration.fxml","Photometric Calibration");
         }
-        if (photometryDialog.isNewImageSet(imgSet)) {
-            photometryDialog.setImageSet(imgSet);
-            photometryDialog.setValues(defaultParams);
-        }
+        photcalibrationDialog.setImageSet(imgSet);
 
-        Optional<ButtonType> result = photometryDialog.run();
+        Optional<ButtonType> result = photcalibrationDialog.run();
         if (result.isPresent() && result.get() == ButtonType.APPLY) {
-            String[] taskParam = photometryDialog.getValues();
+            String[] taskParam = photcalibrationDialog.getValues();
             System.out.println("Task Parameters: " + Arrays.toString(taskParam));
-            runDs9Command("photcal", taskParam, (Button) event.getSource());
+            runDs9Command("photcal", taskParam, photcalibrationDialog.isOverwrite(), (Button) event.getSource());
         }
     }
 
@@ -439,6 +375,10 @@ public class CometPhotometryController implements Initializable {
 
 
     private void runDs9Command (String taskName, String[] taskParams, Button btn) {
+        runDs9Command (taskName, taskParams, false, btn);
+    }
+    
+    private void runDs9Command (String taskName, String[] taskParams, boolean doOverwrite, Button btn) {
         System.out.println("runDs9Command(" + taskName + ", ...)");
         String str="";
         ImageSet imgSet = cbImageSet.getSelectionModel().getSelectedItem();
@@ -473,6 +413,7 @@ public class CometPhotometryController implements Initializable {
                     String setname = cbImageSet.getSelectionModel().getSelectedItem().getSetname();
                     sh.setEnvVars("");
                     sh.setOpts("");
+                    if (doOverwrite) sh.setOpts("-o");
                     sh.setArgs(taskName + " " + args);
                     sh.runFunction("ds9cmd");
                     exitCode=sh.getExitCode();

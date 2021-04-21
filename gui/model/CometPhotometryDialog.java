@@ -53,26 +53,15 @@ public class CometPhotometryDialog {
         return imageSet;
     }
     
-    public void setImageSet(ImageSet imgSet) {
-        imageSet = imgSet;
-        // note: objects must also call controller.setImageSet(imgSet)
+    public void setImageSet(ImageSet imageSet) {
+        this.imageSet = imageSet;
+        /* should be overwritten, if the imageSet has changed we sould call
+        setDefaultValues() otherwise resetValues() */
     }
     
-    public boolean isNewImageSet (ImageSet nextImageSet) {
-        boolean isNew=false;
-        if (imageSet == null) {
-            isNew = true;
-        } else {
-            isNew = ! nextImageSet.getSetname().equals(imageSet.getSetname());
-        }
-        // if (isNew) setImageSet(nextImageSet);
-        return isNew;
-    }
-
     public Optional<ButtonType> run() {
         // set focus on apply button
         dialog.getDialogPane().lookupButton(ButtonType.APPLY).requestFocus();
-
         return dialog.showAndWait();
     }
 

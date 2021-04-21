@@ -13,7 +13,7 @@
 <?import javafx.scene.layout.RowConstraints?>
 <?import javafx.scene.layout.VBox?>
 
-<AnchorPane id="AnchorPane" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" xmlns="http://javafx.com/javafx/8.0.171" xmlns:fx="http://javafx.com/fxml/1" fx:controller="tl.airtoolsgui.controller.ImageReductionController">
+<AnchorPane id="AnchorPane" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="tl.airtoolsgui.controller.ImageReductionController">
    <children>
       <VBox maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" spacing="8.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
          <children>
@@ -74,7 +74,7 @@
                   <RowConstraints vgrow="SOMETIMES" />
                </rowConstraints>
                <children>
-                  <Label text="Image Set:" />
+                  <Label text="Image Sets:" />
                   <TextField fx:id="tfImageSets" promptText="leave empty for all sets" GridPane.columnIndex="1" />
                   <Label text="Expert Options:" GridPane.rowIndex="1" />
                   <TextField fx:id="tfProgramOptions" GridPane.columnIndex="1" GridPane.rowIndex="1" />
@@ -87,10 +87,22 @@
                <children>
                   <VBox spacing="6.0">
                      <children>
+                        <HBox alignment="CENTER_LEFT" spacing="8.0">
+                           <VBox.margin>
+                              <Insets bottom="10.0" />
+                           </VBox.margin>
+                           <children>
+                              <CheckBox fx:id="cbOverwrite" mnemonicParsing="false" text="Delete previous results" />
+                              <Label fx:id="labelWarning" text="!" textFill="#e80606" />
+                           </children>
+                        </HBox>
                         <CheckBox fx:id="cbProcessImages" mnemonicParsing="false" selected="true" text="Process Images" />
                         <CheckBox fx:id="cbViewPlots" mnemonicParsing="false" selected="true" text="View Diagnostic Plots" />
                         <CheckBox fx:id="cbShowImages" mnemonicParsing="false" selected="true" text="Show Result Images" />
                      </children>
+                     <HBox.margin>
+                        <Insets />
+                     </HBox.margin>
                   </VBox>
                   <Separator visible="false" HBox.hgrow="ALWAYS" />
                   <Button fx:id="buttonStart" minWidth="80.0" mnemonicParsing="false" onAction="#onButtonStart" text="Start">
@@ -98,8 +110,11 @@
                         <Insets />
                      </opaqueInsets>
                      <padding>
-                        <Insets bottom="8.0" left="8.0" right="8.0" top="8.0" />
+                        <Insets bottom="12.0" left="8.0" right="8.0" top="12.0" />
                      </padding>
+                     <HBox.margin>
+                        <Insets />
+                     </HBox.margin>
                   </Button>
                </children>
                <padding>
@@ -108,7 +123,7 @@
             </HBox>
          </children>
          <padding>
-            <Insets bottom="8.0" left="8.0" right="8.0" top="32.0" />
+            <Insets bottom="8.0" left="16.0" right="8.0" top="32.0" />
          </padding>
       </VBox>
    </children>

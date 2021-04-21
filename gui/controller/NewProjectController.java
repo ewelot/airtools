@@ -72,15 +72,12 @@ public class NewProjectController implements Initializable {
     @FXML
     private Button buttonBrowseTempDir;
     @FXML
-    private ChoiceBox<String> cbCopyParameterFiles;
-    @FXML
     private ComboBox<String> cbSite;
     @FXML
     private Spinner<Integer> spinnerTZOffset;
 
     private SimpleLogger logger;
     private StringProperty projectDir = new SimpleStringProperty();
-    private StringProperty paramDir = new SimpleStringProperty();
     private StringProperty rawDir = new SimpleStringProperty();
     private StringProperty tempDir = new SimpleStringProperty();
     private StringProperty site = new SimpleStringProperty();
@@ -88,6 +85,7 @@ public class NewProjectController implements Initializable {
     
     private final List<String> siteList = new ArrayList<>();
     private final File distDir = new File("/usr/share/airtools");
+    private String airtoolsConfDir;
     
     /**
      * Initializes the controller class.
@@ -95,17 +93,14 @@ public class NewProjectController implements Initializable {
     @Override
     public void initialize(URL url, ResourceBundle rb) {
         dpDay.setValue(LocalDateTime.now().minusHours(22).toLocalDate());
-        cbCopyParameterFiles.setItems(FXCollections.observableArrayList(
-            "copy from last project", "create manually"));
-        cbCopyParameterFiles.getSelectionModel().selectFirst();
     }    
     
     
-    public void setReferences (SimpleLogger logger, StringProperty projectDir, StringProperty paramDir, StringProperty rawDir,
+    public void setReferences (String airtoolsConfFileName, SimpleLogger logger, StringProperty projectDir, StringProperty rawDir,
             StringProperty tempDir, StringProperty site, IntegerProperty  tzoff) {
+        this.airtoolsConfDir = new File(new File(airtoolsConfFileName).getParent()).getAbsolutePath();
         this.logger=logger;
         this.projectDir=projectDir;
-        this.paramDir=paramDir;
         this.rawDir=rawDir;
         this.tempDir=tempDir;
         this.site=site;
@@ -135,8 +130,8 @@ public class NewProjectController implements Initializable {
         
         BufferedReader inFile = null;
         try {
-            inFile = new BufferedReader(new FileReader(projectDir.getValue() + "/sites.dat"));
-            System.out.println("Info: sites.dat found");
+            inFile = new BufferedReader(new FileReader(airtoolsConfDir + "/sites.dat"));
+            System.out.println("Info: " + airtoolsConfDir + "/sites.dat found");
         } catch (FileNotFoundException ex) {
             // Logger.getLogger(CometPhotometryController.class.getName()).log(Level.SEVERE, null, ex);
             try {
@@ -304,8 +299,6 @@ public class NewProjectController implements Initializable {
         FileWriter fileWriter = null;
         DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyMMdd");
         String day = dpDay.getValue().format(fmt);
-        String lastProjectDir = projectDir.getValue();
-        String lastParamDir = paramDir.getValue();
 
         try {
             // create project directory
@@ -315,6 +308,7 @@ public class NewProjectController implements Initializable {
             } else {
                 // TODO: show alert if directory exists and is not empty
                 logger.log("WARNING: project directory " + tfProjectDir.getText() + " already exists");
+                return;
             }
 
             // create .airtoolsrc
@@ -343,57 +337,51 @@ public class NewProjectController implements Initializable {
             }
             
             // copy parameter files
-            if (cbCopyParameterFiles.getSelectionModel().getSelectedIndex() == 0) {
-                File oldDir = new File(lastParamDir);
-                Path oldPath = null;
-                Path newPath = null;
-                Path distPath = null;
-                File oldFile = null;
-                File newFile = null;
-                File distFile = null;
-                if (oldDir.exists() && oldDir.isDirectory()) {
-                    // copy parameter files
-                    String[] parameterFileNames = {"camera.dat", "sites.dat", "refcat.dat"};
-                    for (String fileName : parameterFileNames) {
-                        oldPath=Paths.get(lastParamDir + "/" + fileName);
-                        newPath=Paths.get(tfProjectDir.getText() + "/" + fileName);
-                        oldFile=new File(oldPath.toString());
-                        newFile=new File(newPath.toString());
-                        if (! newFile.exists()) {
-                            if (oldFile.exists() && oldFile.isFile()) {
+            Path oldPath = null;
+            Path newPath = null;
+            Path distPath = null;
+            File oldFile = null;
+            File newFile = null;
+            File distFile = null;
+            // copy parameter files into project directory
+            String[] parameterFileNames = {"camera.dat", "sites.dat", "refcat.dat"};
+            for (String fileName : parameterFileNames) {
+                oldPath=Paths.get(airtoolsConfDir + "/" + fileName);
+                newPath=Paths.get(tfProjectDir.getText() + "/" + fileName);
+                oldFile=new File(oldPath.toString());
+                newFile=new File(newPath.toString());
+                if (! newFile.exists()) {
+                    if (oldFile.exists() && oldFile.isFile()) {
+                        try {
+                            Files.copy(oldPath, newPath, StandardCopyOption.COPY_ATTRIBUTES);
+                        } catch (IOException ex) {
+                            logger.log("ERROR: unable to copy " + fileName);
+                            Logger.getLogger(NewProjectController.class.getName()).log(Level.SEVERE, null, ex);
+                        }
+                    } else {
+                        if (distDir.exists() && distDir.isDirectory()) {
+                            distPath=Paths.get(distDir.getPath() + "/" + fileName);
+                            distFile=new File(distPath.toString());
+                            if (distFile.exists() && distFile.isFile()) {
                                 try {
-                                    Files.copy(oldPath, newPath, StandardCopyOption.COPY_ATTRIBUTES);
+                                    Files.copy(distPath, newPath, StandardCopyOption.COPY_ATTRIBUTES);
                                 } catch (IOException ex) {
-                                    logger.log("ERROR: unable to copy " + fileName);
+                                    logger.log("ERROR: unable to copy " + fileName + " (from DISTDIR)");
                                     Logger.getLogger(NewProjectController.class.getName()).log(Level.SEVERE, null, ex);
                                 }
                             } else {
-                                if (distDir.exists() && distDir.isDirectory()) {
-                                    distPath=Paths.get(distDir.getPath() + "/" + fileName);
-                                    distFile=new File(distPath.toString());
-                                    if (distFile.exists() && distFile.isFile()) {
-                                        try {
-                                            Files.copy(distPath, newPath, StandardCopyOption.COPY_ATTRIBUTES);
-                                        } catch (IOException ex) {
-                                            logger.log("ERROR: unable to copy " + fileName + " (from DISTDIR)");
-                                            Logger.getLogger(NewProjectController.class.getName()).log(Level.SEVERE, null, ex);
-                                        }
-                                    } else {
-                                        logger.log("WARNING: missing " + distPath.toString());
-                                    }
-                                } else {
-                                    logger.log("WARNING: missing " + oldPath.toString());
-                                }
+                                logger.log("WARNING: missing " + distPath.toString());
                             }
                         } else {
-                            logger.log("WARNING: not overwriting file " + newPath.toString());
+                            logger.log("WARNING: missing " + oldPath.toString());
                         }
                     }
+                } else {
+                    logger.log("WARNING: not overwriting file " + newPath.toString());
                 }
             }
-
+            
             // note: projectDir must be changed last, because it triggers saveProperties
-            paramDir.setValue(tfProjectDir.getText());
             projectDir.setValue(tfProjectDir.getText());
 
             closeStage(event);

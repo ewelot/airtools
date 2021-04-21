@@ -5,10 +5,15 @@
  */
 package tl.airtoolsgui.controller;
 
+import java.io.File;
+import java.io.FilenameFilter;
 import java.net.URL;
+import java.util.Arrays;
 import java.util.ResourceBundle;
+import java.util.regex.Pattern;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.DialogPane;
 import javafx.scene.control.Label;
@@ -25,8 +30,6 @@ public class CometExtractController implements Initializable {
     @FXML
     private DialogPane paramDialogPane;
     @FXML
-    private Label labelWarning;
-    @FXML
     private TextField tfImageSet;
     @FXML
     private TextField tfBgImage;
@@ -34,12 +37,23 @@ public class CometExtractController implements Initializable {
     private ComboBox<String> cbCoMult;
     @FXML
     private ComboBox<String> cbMaxRadius;
+    @FXML
+    private Label labelDelete;
+    @FXML
+    private CheckBox cbDelete;
+    @FXML
+    private Label labelWarning;
+
+    private ImageSet imgSet;
 
     /**
      * Initializes the controller class.
      */
     @Override
     public void initialize(URL url, ResourceBundle rb) {
+        // disable unimplemented checkbox
+        //cbDelete.setDisable(true);
+        
         labelWarning.setText("");
         cbCoMult.getItems().addAll("1", "10");
         cbMaxRadius.getItems().addAll("10", "100");
@@ -47,12 +61,70 @@ public class CometExtractController implements Initializable {
     
     public void setImageSet(ImageSet imgSet) {
         if (imgSet != null) {
-            tfImageSet.setText(imgSet.toString());
+            if (imgSet.equals(this.imgSet)) {
+                resetValues();
+            } else {
+                this.imgSet = imgSet;
+                tfImageSet.setText(imgSet.toString());
+                setDefaultValues();
+            }
         } else {
             tfImageSet.setText("");
         }
     }
     
+    private void resetValues() {
+        /* reset widgets when the dialog window is shown again (same image set) */        
+        cbDelete.setSelected(false);
+    }
+
+    private void setDefaultValues() {
+        /* initialize widgets with default values upon change of image set */
+        tfBgImage.setText(getBgImage());
+        cbCoMult.setValue("10");
+        cbMaxRadius.setValue("100");
+        cbDelete.setSelected(false);
+    }
+
+    private String getBgImage() {
+        String ext = "pgm";
+        String bgImage="";
+        if (imgSet.getStarStack().endsWith(".ppm")) ext="ppm";
+        
+        // choose the latest bgcorr image (bgm10 or bgm1)
+        final String patternStr = imgSet.getSetname() + ".bgm[0-9]+." + ext
+                + "|" + imgSet.getSetname() + ".bgm[0-9]+all." + ext;
+        System.out.println("# pattern = " + patternStr);
+        File bgcorrDir = new File(imgSet.getProjectDir() + "/bgcorr");
+        if (bgcorrDir.exists()) {
+            File[] matchedFiles=bgcorrDir.listFiles(new FilenameFilter() {
+                    final private Pattern pattern = Pattern.compile(patternStr);
+
+                    @Override
+                    public boolean accept(File dir, String name) {
+                        return pattern.matcher(new File(name).getName()).matches();
+                    }
+                });
+            if (matchedFiles.length > 0) {
+                //logger.log("# number of matched files = " + matchedFiles.length);
+                File mostRecentBgImage = Arrays
+                    .stream(matchedFiles)
+                    .filter(f -> f.isFile())
+                    .max(
+                        (f1, f2) -> Long.compare(f1.lastModified(),
+                            f2.lastModified())).get();
+
+                if (mostRecentBgImage.exists())
+                    bgImage = "bgcorr/" + mostRecentBgImage.getName();
+            }
+        }
+        return bgImage;        
+    }
+    
+    public boolean getOverwrite() {
+        return cbDelete.isSelected();
+    }
+
     public String[] getValues() {
         String[] sarray;
         sarray = new String[] {tfBgImage.getText()
@@ -60,12 +132,5 @@ public class CometExtractController implements Initializable {
                 ,cbMaxRadius.getValue()
         };
         return sarray;
-    }
-    
-    public void setValues(String[] sarray) {
-        int size=sarray.length;
-        if (size > 0) tfBgImage.setText(sarray[0]);
-        if (size > 1) cbCoMult.setValue(sarray[1]);
-        if (size > 2) cbMaxRadius.setValue(sarray[2]);
     }
 }

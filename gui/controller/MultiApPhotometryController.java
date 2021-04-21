@@ -8,6 +8,8 @@ package tl.airtoolsgui.controller;
 import java.io.File;
 import java.net.URL;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.ResourceBundle;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
@@ -66,7 +68,9 @@ public class MultiApPhotometryController implements Initializable {
 
     private SimpleLogger logger;
     private StringProperty projectDir = new SimpleStringProperty();
-    private AirtoolsCLICommand airCmd;
+    private AirtoolsCLICommand aircliCmd;
+    private final String aircliTask = "usercmd";
+    private final String airfunFunc = "AImapphot";
 
     
     private enum ApertureUnit {
@@ -98,7 +102,7 @@ public class MultiApPhotometryController implements Initializable {
     public void setReferences (ShellScript sh, SimpleLogger logger, StringProperty projectDir) {
         this.logger = logger;
         this.projectDir = projectDir;
-        this.airCmd = new AirtoolsCLICommand(buttonStart, logger, sh);
+        this.aircliCmd = new AirtoolsCLICommand(buttonStart, logger, sh);
 
         setBaseDirectories();
         labelWarning.setText("");
@@ -207,38 +211,47 @@ public class MultiApPhotometryController implements Initializable {
     private void onButtonStart(ActionEvent event) {
         System.out.println("MultiApPhotometryController: onButtonStart()");
         labelWarning.setText("");
-        String cmd="AImapphot";
+        List<String> aircliCmdOpts = new ArrayList<>();
+        List<String> aircliCmdArgs = new ArrayList<>();
+
         DateTimeFormatter fmt = DateTimeFormatter.ofPattern("YYMMdd");
         ApertureUnit apertureUnit=cbApertureUnit.getSelectionModel().getSelectedItem();
         
         if (! isValidInputs()) return;
         
-        // add options
-        /* always create check images; TODO: allow user to set size */
-        cmd+=" -s 200";
-        if (apertureUnit == ApertureUnit.TKM) cmd+=" -k";
-        if (cbShowCheckImages.isSelected()) cmd+=" -i";
+        // add aircliCmd options
         
-        if (! tfBaseDir1.getText().isBlank()) cmd+=" -d " + tfBaseDir1.getText();
-        if (! tfBaseDir2.getText().isBlank()) cmd+=" -dd " + tfBaseDir2.getText();
+        // add airfunFunc options
+        // airfun function to call
+        aircliCmdArgs.add(airfunFunc);
+        
+        
+        /* always create check images; TODO: allow user to set size */
+        aircliCmdArgs.add("-s 200");
+        if (apertureUnit == ApertureUnit.TKM) aircliCmdArgs.add("-k");
+        if (cbShowCheckImages.isSelected()) aircliCmdArgs.add("-i");
+        
+        if (! tfBaseDir1.getText().isBlank()) aircliCmdArgs.add("-d " + tfBaseDir1.getText());
+        if (! tfBaseDir2.getText().isBlank()) aircliCmdArgs.add("-dd " + tfBaseDir2.getText());
         
         // add parameters
-        cmd+=" " + tfCometName.getText();
-        cmd+=" \"" + tfApertures.getText() + "\"";
+        aircliCmdArgs.add(tfCometName.getText());
+        aircliCmdArgs.add("\"" + tfApertures.getText() + "\"");
         
         if (dpStart.getValue() != null) {
-            cmd+=" " + dpStart.getValue().format(fmt);
+            aircliCmdArgs.add(dpStart.getValue().format(fmt));
         }
         if (dpEnd.getValue() != null) {
-            if (dpStart.getValue() == null) cmd+=" \"\"";
-            cmd+=" " + dpEnd.getValue().format(fmt);
+            if (dpStart.getValue() == null) aircliCmdArgs.add("\"\"");
+            aircliCmdArgs.add(dpEnd.getValue().format(fmt));
         }
         
         // run command
-        System.out.println("cmd: " + cmd);
-        logger.log("# cmd: " + cmd);
-        airCmd.setArgs(cmd.split("\\s+"));
-        airCmd.run();
+        System.out.println("cmd: " + aircliCmdOpts + " " + aircliTask + " " + aircliCmdArgs);
+        logger.log("# cmd: " + aircliCmdOpts + " " + aircliTask + " " + aircliCmdArgs);
+        aircliCmd.setOpts(aircliCmdOpts.toArray(new String[0]));
+        aircliCmd.setArgs(aircliCmdArgs.toArray(new String[0]));
+        aircliCmd.run();
         // paneMultiApPhotometry.getScene().getWindow().hide();
     }
 

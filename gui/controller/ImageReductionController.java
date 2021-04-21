@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.ResourceBundle;
 import javafx.application.Platform;
+import javafx.beans.value.ObservableValue;
 import javafx.concurrent.Task;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
@@ -22,6 +23,7 @@ import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
+import javafx.scene.image.ImageView;
 
 /**
  * FXML Controller class
@@ -71,6 +73,10 @@ public class ImageReductionController implements Initializable {
     @FXML
     private TextField tfImageSets;
     @FXML
+    private CheckBox cbOverwrite;
+    @FXML
+    private Label labelWarning;
+    @FXML
     private CheckBox cbProcessImages;
     @FXML
     private CheckBox cbViewPlots;
@@ -96,6 +102,17 @@ public class ImageReductionController implements Initializable {
     public void initialize(URL url, ResourceBundle rb) {
         System.out.println("ImageReductionController: initialize");
         initAirtoolsTasks();
+        ImageView icon = new ImageView("/tl/airtoolsgui/icons/warning.png");
+        labelWarning.setText("");
+        labelWarning.setGraphic(icon);
+
+        labelWarning.setVisible(false);
+        cbOverwrite.setSelected(false);
+        
+        cbOverwrite.selectedProperty().addListener(
+            (ObservableValue<? extends Boolean> ov, Boolean oldValue, Boolean newValue) -> {
+            labelWarning.setVisible(newValue);
+        });
     }
     
 
@@ -230,6 +247,11 @@ public class ImageReductionController implements Initializable {
                             skipParts+="image";
                         }
                         if (! skipParts.isEmpty()) opts+=" -x " + skipParts;
+                        
+                        // delete previous results if requested
+                        if (cbOverwrite.isSelected()) {
+                            opts+=" -o";
+                        }
 
                         // limit to given image sets if requested
                         if (! tfImageSets.getText().isEmpty()) {

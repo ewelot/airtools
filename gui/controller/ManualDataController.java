@@ -5,15 +5,21 @@
  */
 package tl.airtoolsgui.controller;
 
+import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.net.URL;
 import java.util.ResourceBundle;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.DialogPane;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
+import tl.airtoolsgui.model.Header;
 import tl.airtoolsgui.model.ImageSet;
+import tl.airtoolsgui.model.ManualData;
 
 /**
  * FXML Controller class
@@ -43,6 +49,8 @@ public class ManualDataController implements Initializable {
     @FXML
     private TextField tfPtAng;
 
+    private ImageSet imgSet;
+
     /**
      * Initializes the controller class.
      */
@@ -50,13 +58,85 @@ public class ManualDataController implements Initializable {
     public void initialize(URL url, ResourceBundle rb) {
         labelWarning.setText("");
         cbChannel.getItems().addAll("1", "2", "3");
+        /* TODO: changing channel must trigger updateFromHeader */
     }    
     
     public void setImageSet(ImageSet imgSet) {
         if (imgSet != null) {
-            tfImageSet.setText(imgSet.toString());
+            if (imgSet.equals(this.imgSet)) {
+                resetValues();
+            } else {
+                this.imgSet = imgSet;
+                tfImageSet.setText(imgSet.toString());
+                if (imgSet.getStarStack().endsWith(".ppm")) {
+                    cbChannel.getItems().setAll("1", "2", "3");
+                } else {
+                    cbChannel.getItems().setAll("1");
+                }
+                setDefaultValues();
+            }
         } else {
             tfImageSet.setText("");
+        }
+    }
+    
+    private void resetValues() {
+        /* reset widgets when the dialog window is shown again (same image set) */        
+        updateFromHeader(Integer.parseInt(cbChannel.getValue()));
+    }
+
+    private void setDefaultValues() {
+        String channel = "1";
+        if (imgSet.getStarStack().endsWith(".ppm")) channel="2";
+
+        cbChannel.setValue(channel);
+        updateFromHeader(Integer.parseInt(channel));
+    }
+    
+    private void updateFromHeader (int plane) {
+        // update some widgets with values read from header file according to channel
+        // default values
+        tfCCorr.setText("");
+        tfStLim.setText("");
+        tfDtLen.setText("");
+        tfDtAng.setText("");
+        tfPtLen.setText("");
+        tfPtAng.setText("");
+        
+        try {
+            if (imgSet != null) {
+                Header head = new Header (imgSet.getProjectDir() + "/" + imgSet.getHeader());
+
+                // find a given entry
+                ManualData myManualData = null;
+                myManualData = head.getManualData(plane);
+                if (myManualData != null) {
+                    if (myManualData.getAcor() != -1) {
+                        tfCCorr.setText(Integer.toString(myManualData.getAcor()));
+                    }
+                    if (myManualData.getAlim() != -1) {
+                        tfStLim.setText(Integer.toString(myManualData.getAlim()));
+                    }
+                    if (myManualData.getDlen()!= -1) {
+                        tfDtLen.setText(Integer.toString(myManualData.getDlen()));
+                    }
+                    if (myManualData.getDang()!= -1) {
+                        tfDtAng.setText(Integer.toString(myManualData.getDang()));
+                    }
+                    if (myManualData.getPlen()!= -1) {
+                        tfPtLen.setText(Integer.toString(myManualData.getPlen()));
+                    }
+                    if (myManualData.getPang()!= -1) {
+                        tfPtAng.setText(Integer.toString(myManualData.getPang()));
+                    }
+                }
+            }
+        } catch (FileNotFoundException exFile) {
+            System.out.println("WARNING: header file for " + imgSet.getSetname() + " not found");
+            Logger.getLogger(PhotCalibrationController.class.getName()).log(Level.SEVERE, null, exFile);
+        } catch (IOException exIO) {
+            System.out.println("WARNING: unable to read header file " + imgSet.getHeader());
+            Logger.getLogger(PhotCalibrationController.class.getName()).log(Level.SEVERE, null, exIO);
         }
     }
     
@@ -71,16 +151,5 @@ public class ManualDataController implements Initializable {
                 ,tfPtAng.getText()
         };
         return sarray;
-    }
-    
-    public void setValues(String[] sarray) {
-        int size=sarray.length;
-        if (size > 0) cbChannel.setValue(sarray[0]);
-        if (size > 1) tfCCorr.setText(sarray[1]);
-        if (size > 2) tfStLim.setText(sarray[2]);
-        if (size > 3) tfDtLen.setText(sarray[3]);
-        if (size > 4) tfDtAng.setText(sarray[4]);
-        if (size > 5) tfPtLen.setText(sarray[5]);
-        if (size > 6) tfPtAng.setText(sarray[6]);
     }
 }

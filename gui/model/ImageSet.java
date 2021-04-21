@@ -24,12 +24,17 @@ public class ImageSet {
         this.type = type;
     }
     
+    public String getProjectDir() {
+        return projectDir;
+    }
+    
     public String getSetname() {
         return setname;
     }
     
     public String getStarStack() {
         // note: prefering ppm over pgm
+        //  returns relative path to projectDir
         String fname;
         File f;
         fname = setname + ".ppm";
@@ -45,6 +50,21 @@ public class ImageSet {
         // no file found
         return "";
     }
+
+    public String getHeader() {
+        //  returns relative path to projectDir
+        String fname;
+        File f;
+        fname = setname + ".head";
+        f = new File(projectDir + "/" + fname);
+        if (f.exists() && f.isFile()) {
+            return fname;
+        }
+        
+        // no file found
+        return "";
+    }
+    
     
     public boolean isLight() {
         if (type == 1) {

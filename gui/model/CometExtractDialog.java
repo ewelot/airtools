@@ -13,24 +13,24 @@ import tl.airtoolsgui.controller.CometExtractController;
  * @author lehmann
  */
 public class CometExtractDialog extends CometPhotometryDialog {
-    private CometExtractController controller;
+    private final CometExtractController controller;
 
     public CometExtractDialog(String fxml, String title) {
         super(fxml, title);
         controller = (CometExtractController) getController();
     }
 
+    @Override
     public void setImageSet(ImageSet imgSet) {
         super.setImageSet(imgSet);
         controller.setImageSet(imgSet);
     }
     
+    public boolean isOverwrite() {
+        return controller.getOverwrite();
+    }
+    
     public String[] getValues() {
         return controller.getValues();
     }
-    
-    public void setValues(String[] sarray) {
-        controller.setValues(sarray);
-    }
-
 }

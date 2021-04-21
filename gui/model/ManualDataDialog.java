@@ -29,9 +29,4 @@ public class ManualDataDialog extends CometPhotometryDialog {
     public String[] getValues() {
         return controller.getValues();
     }
-    
-    public void setValues(String[] sarray) {
-        controller.setValues(sarray);
-    }
-
 }

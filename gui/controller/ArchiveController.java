@@ -7,6 +7,8 @@ package tl.airtoolsgui.controller;
 
 import java.io.File;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.ResourceBundle;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
@@ -58,7 +60,9 @@ public class ArchiveController implements Initializable {
 
     private SimpleLogger logger;
     private StringProperty projectDir = new SimpleStringProperty();
-    private AirtoolsCLICommand airCmd;
+    private AirtoolsCLICommand aircliCmd;
+    private final String aircliTask = "usercmd";
+    private final String airfunFunc = "AIarchive";
 
     
     private enum ArchiveType {
@@ -102,7 +106,7 @@ public class ArchiveController implements Initializable {
     public void setReferences (ShellScript sh, SimpleLogger logger, StringProperty projectDir) {
         this.logger = logger;
         this.projectDir = projectDir;
-        this.airCmd = new AirtoolsCLICommand(buttonStart, logger, sh);
+        this.aircliCmd = new AirtoolsCLICommand(buttonStart, logger, sh);
         tfDestinationDir.setText(projectDir.getValue() + ".copy");
         labelWarning.setText("");
     }
@@ -166,28 +170,33 @@ public class ArchiveController implements Initializable {
     private void onButtonStart(ActionEvent event) {
         System.out.println("ArchiveController: onButtonStart()");
         labelWarning.setText("");
-        //if (! isValidInputs()) return;
-        String cmd="AIarchive";
+        List<String> cmdOpts = new ArrayList<>();
+        List<String> cmdArgs = new ArrayList<>();
+
         ArchiveType archiveType=cbArchiveType.getSelectionModel().getSelectedItem();
-        
         if (! isValidInputs()) return;
         
-        // add options
-        if (cbDoCopy.isSelected()) {
-            cmd+=" -c " + tfDestinationDir.getText();
-        }
+        // add options (airCLITask only)
+
+        // airfun function to call
+        cmdArgs.add(airfunFunc);
         
+
         // add parameters
-        cmd+=" -" + archiveType.name().toLowerCase();
+        if (cbDoCopy.isSelected()) {
+            cmdArgs.add("-c " + tfDestinationDir.getText());
+        }
+        cmdArgs.add("-" + archiveType.name().toLowerCase());
         if (! tfImageSets.getText().isBlank()) {
-            cmd+=" \"" + tfImageSets.getText() + "\"";
+            cmdArgs.add("\"" + tfImageSets.getText() + "\"");
         }
         
         // run command
-        System.out.println("cmd: " + cmd);
-        logger.log("# cmd: " + cmd);
-        airCmd.setArgs(cmd.split("\\s+"));
-        airCmd.run();
+        System.out.println("cmd: " + cmdOpts + " " + aircliTask + " " + cmdArgs);
+        logger.log("# cmd: " + cmdOpts + " " + aircliTask + " " + cmdArgs);
+        aircliCmd.setOpts(cmdOpts.toArray(new String[0]));
+        aircliCmd.setArgs(cmdArgs.toArray(new String[0]));
+        aircliCmd.run();
         //paneArchive.getScene().getWindow().hide();
     }
 
