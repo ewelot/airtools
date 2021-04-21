@@ -1,3 +1,6 @@
+Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v4.0)
+======================================================================
+
   - [<span class="toc-section-number">1</span>
     Introduction](#introduction)
   - [<span class="toc-section-number">2</span>
@@ -103,8 +106,8 @@ distributions.
 
 The AIRTOOLS software has been developed in the hope to proove useful.
 Its development relies on your feedback, so please do not hesitate to
-ask any question at <t_lehmann@freenet.de>. Any suggestion or comment or
-call for help is welcome.
+ask any question at <t.lehmann@mailbox.org>. Any suggestion or comment
+or call for help is welcome.
 
  
 
@@ -643,7 +646,7 @@ considered a comment. Each line (uncommented and non-empty) defines an
 image set using at least 11 fields (words separated by spaces) which
 are:
 
-  - h:m:  
+  - h:m  
     The local time at start of observation (approximation only, not used
     by the program)
   - set:  
