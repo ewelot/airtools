@@ -12,7 +12,7 @@ of comet observations. A new approach by means of large aperture photometry
 allows to measure the total coma brightness in a consistent way.
 
 The underlying AIRTOOLS programs make use of powerful third party software
-commonly used in professional astronomy:
+commonly used in professional astronomy or image analysis projects:
 - [SAOImage DS9](http://ds9.si.edu/site/Home.html): image display, catalog
   viewer and analysis GUI
 - [Astromatic software](http://www.astromatic.net) by E.Bertin: automatic source
@@ -20,15 +20,17 @@ commonly used in professional astronomy:
   modeling (skymaker) and more
 - [Stilts](http://www.starlink.ac.uk/stilts/) by M. Taylor: powerful table
   processing
-- [Cexamples](http://heasarc.gsfc.nasa.gov/docs/software/fitsio/cexamples.html):
+- [CFITSIO examples](http://heasarc.gsfc.nasa.gov/docs/software/fitsio/cexamples.html):
   basic FITS routines
+- [libvips](https://libvips.github.io/libvips/): A fast and memory efficient
+  image processing library with bindings to many programming languages
 
 <img src="doc/images/splash.png" alt="AIRTOOLS in action" width="900" />
 (Screenshot of an AIRTOOLS session)
 
 ## Documentation
 
-**NEW (Sep. 2019)**: A preliminary [user manual](doc/manual-en.md) has been added.
+A preliminary [user manual](doc/manual-en.md) has been added.
 It features an in depth installation guide for all users, including those
 running a Windows or MacOS X operating system.
 

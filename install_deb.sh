@@ -13,7 +13,7 @@ exec 2> >(tee -ia install.log >&2)
 
 # process command line options
 pkglist="airtools-core airtools airtools-doc"
-pkgothers="cfitsio-examples missfits scamp sextractor skymaker stiff swarp stilts"
+pkgothers="saods9 cfitsio-examples missfits scamp sextractor skymaker stiff swarp stilts"
 svnopts="--non-interactive"
 for i in $(seq 1 10)
 do
@@ -31,7 +31,6 @@ packages=${@:-"$pkglist"}
 echo "
 Starting $(basename $0) at $(date) ..."
 sleep 3
-test "$DEBUG" && echo packages=$packages && set -x || true
 
 # determine download url depending on distribution name
 echo "# Current Linux distribution:"
@@ -41,14 +40,15 @@ dist=$(lsb_release -s -c)
 # check for supported distribution
 case "$dist" in
     # Debian
-    stretch)    ;;
+    stretch)    echo "# WARNING: use of this outdated distribution is discouraged"
+                ;;
     buster)     ;;
     # Ubuntu
     xenial)     echo "# WARNING: use of this outdated distribution is discouraged"
                 ;;
     bionic)     ;;
-    focal)      echo "# WARNING: packages for this distribution are UNTESTED"
-	        ;;
+    focal)      packages="$packages saods9"
+                ;;
     # Others
     tessa)      dist=bionic
                 echo "# WARNING: mapping to ubuntu $dist"
@@ -59,6 +59,8 @@ installer. There are no pre-compiled binaries for this Linux distribution."
                 exit -1
                 ;;
 esac
+test "$DEBUG" && echo "" && echo "# Activating DEBUG mode" &&
+    echo "#" packages=$packages && sleep 3 && set -x || true
 
 echo ""
 sleep 5
@@ -66,12 +68,12 @@ url=https://github.com/ewelot/airtools-deb.git
 ddir=/opt/airtools-deb/$dist
 test ! -d $ddir && mkdir -p $ddir
 
-# install subversion
+# install subversion and apt-utils
 str=$(dpkg -l | grep "^ii  subversion " || true)
 if [ -z "$str" ]
 then
     apt-get --allow-insecure-repositories update
-    apt-get -y install subversion
+    apt-get -y install subversion apt-utils
 fi
 
 # download packages
@@ -97,9 +99,12 @@ fi
 
 # add local package repository
 aptsrc=/etc/apt/sources.list.d/airtools-deb.list
+newentry="deb [trusted=yes] file://$ddir main/"
 if [ ! -e $aptsrc ]
 then
-    echo "deb [trusted=yes] file://$ddir main/" > $aptsrc
+    echo $newentry > $aptsrc
+else
+    sed -i "/\/opt\/airtools-deb/ s;.*;$newentry;" $aptsrc
 fi
 rm -f $ddir/main/Release
 apt-get --allow-insecure-repositories update
@@ -107,6 +112,7 @@ apt-get --allow-insecure-repositories update
 # install airtools
 if [ "$do_not_install" ]
 then
+    apt-get -us install $packages
     echo "" && echo "Script $0 finished (without installation)."
     exit 0
 fi
