@@ -613,6 +613,71 @@ def cleanbadpixel(param):
         outimg.write_to_target(target, "." + outfmt, strip=outstrip)
     exit()
 
+# subtract background image (scaled and downsized)
+# syntax: imbgsub [-f] [-o inoff] [-bgm bgmult] [-m outmult] [-b outbg] inpnm bgimg outpnm
+# processing:
+#   - divide bgimg by bgmult and resize to fit inpnm
+#   - subtract inoff from inpnm
+#   - subtract modified bgimg
+#   - multiply by outmult and shift bg to match outbg
+def imbgsub(param):
+    outfmt='ppm'
+    outstrip=True
+    inoff=0
+    bgmult=0
+    outmult=1
+    outbg=1000
+    if(param[0]=='-f'):
+        outfmt='fits'
+        outstrip=False
+        del param[0]
+    if(param[0]=='-o'):
+        inoff=float(param[1])
+        del param[0:2]
+    if(param[0]=='-bgm'):
+        bgmult=float(param[1])
+        del param[0:2]
+    if(param[0]=='-m'):
+        outmult=float(param[1])
+        del param[0:2]
+    if(param[0]=='-b'):
+        outbg=float(param[1])
+        del param[0:2]
+    infilename = param[0]
+    bgfilename = param[1]
+    outfilename = param[2]
+
+    # reading input images
+    if (infilename and infilename != '-'):
+        inimg = pyvips.Image.new_from_file(infilename)
+    else:
+        source = pyvips.Source.new_from_descriptor(sys.stdin.fileno())
+        inimg = pyvips.Image.new_from_source(source, "")
+    bgimg = pyvips.Image.new_from_file(bgfilename)
+
+    # divide bgimg by bgmult and resize to fit inimg
+    xscale=inimg.width/bgimg.width
+    yscale=inimg.height/bgimg.height
+    bgimg2=bgimg.linear(1/bgmult, 0).resize(xscale, vscale=yscale, centre=True)
+
+    # subtract bgimg2
+    outimg=inimg.linear(1, inoff).subtract(bgimg2).linear(outmult, outbg).rint().cast('ushort')
+
+    # output
+    # writing output image
+    if (outfilename and outfilename != '-'):
+        if (outfmt=='fits'):
+            outimg.fitssave(outfilename)
+        else:
+            outimg.ppmsave(outfilename, strip=1)
+    else:
+        target = pyvips.Target.new_to_descriptor(sys.stdout.fileno())
+        outimg.write_to_target(target, "." + outfmt, strip=outstrip)
+
+    exit()
+
+
+
 
 
 if __name__ == "__main__":
