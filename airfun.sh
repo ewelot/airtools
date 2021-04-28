@@ -14,9 +14,23 @@
 # - in order to use SAOImage DS9 analysis tasks (via AIexamine) you must
 #   have installed files airds9.ana and aircmd.sh
 ########################################################################
-AI_VERSION="5.0"
+AI_VERSION="5.0.1"
 : << '----'
 CHANGELOG
+    5.0.1 - 28 Apr 2021
+        * phot2icq: apply new ICQ keys for GAIA (BG for GBP mag)
+        * AIcomet:
+            - avoid piping of pnmccdred2 commands which causes file
+              corruption on certain (virtual) hardware setups,
+            - use imbgsub for bg subtraction of comet image
+        * ds9cmd psfextract: make sure background subtracted images do exist
+        * AIbgmap: added option to subtract offset from image before creating
+            background maps (useful to account for AI_BGOFF)
+        * imbgsub:
+            - check for AI_BGOFF in image header and take it into account
+            - use python function for main image processing
+        * AIplot: added option -n to skip display of resulting plot file
+
     5.0 - 21 Apr 2021
         * camera.dat: new ctype CMOS used for monochrome CMOS sensor
         * AIraw2rgb: bugfix to take image flip into account when debayering
@@ -7502,6 +7516,7 @@ phot2icq () {
     local xlist
     local aidx
     local pcat
+    local pcol
     local ptail
     local val
     local str
@@ -7575,11 +7590,13 @@ phot2icq () {
             for x in $xlist
             do
                 pcat=$(get_header $hdr AP_PCAT$x)
+                pcol=$(get_header $hdr AP_PCOL$x)
                 test "$catalog" && test "$pcat" != "$catalog" && continue
                 case "$pcat" in
                     tycho2) refcat="TK";;
                     apass)  refcat="AQ";;
-                    gaia*)  refcat="GG";;
+                    gaia*)  refcat="GG"
+                            test "$pcol" == "GB" && refcat="BG";;
                     *)      refcat="--";;
                 esac
                 mag=$(get_header  $hdr AP_CMAG$x | awk '{printf("%4.1f", $1+$2)}')
@@ -10193,7 +10210,7 @@ regskip () {
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
     done
     local reg=$1
-    local minsize=${2:-"3"}
+    local minsize=${2:-"5"}
     local x
     local rtype
     
@@ -13844,17 +13861,20 @@ datarange () {
 }
 
 
-# subtract smoothed background(s) from image
+# subtract smoothed background(s) from image (correct for AI_BGOFF first)
 # output goes to stdout
 imbgsub () {
     local showhelp
     local outmult=1
+    local bgoff         # offset which has been added to input image (e.g. AI_BGOFF)
+                        # this must be eliminated before outmult is applied
     local do_fits       # if set create FITS output instead of PNM
     local i
-    for i in 1 2 3
+    for i in 1 2 3 4
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-m" && outmult=$2 && shift 2
+        test "$1" == "-o" && bgoff=$2 && shift 2
         test "$1" == "-f" && do_fits=1 && shift 1
     done
     local img=${1:-""}
@@ -13862,17 +13882,29 @@ imbgsub () {
     local bgres=${3:-""}
     local bgmult=${4:-10}       # intensity multiplier used in bgimg, bgres
     local bgmean=${5:-1000}     # mean bg value in bgres
-    local bgval=${6:-1000}      # bg value of resulting bg-subtracted image
+    local bgval=${6:-1000}      # desired bg value of resulting bg-subtracted image
+    local hdr
+    local inbgoff               # AI_BGOFF
     local tdir=${AI_TMPDIR:-"/tmp"}
     local tmpim1=$(mktemp "/tmp/tmp_im1_XXXXXX.pnm")
     local tmpim2=$(mktemp "/tmp/tmp_im2_XXXXXX.pnm")
+    local tmpim3=$(mktemp "/tmp/tmp_im3_XXXXXX.pnm")
     local size
     local f
+    local opts
+    local retval
+    local pyprog
     
     (test "$showhelp" || test $# -lt 2) &&
-        echo "usage: imbgsub [-f] [-m outmult] <img> <bgimg> [bgres] [bgmult|$bgmult]" \
+        echo "usage: imbgsub [-f] [-o inbgoff] [-m outmult] <img> <bgimg> [bgres] [bgmult|$bgmult]" \
             "[bgresmean|$bgmean] [outbgval|$bgval]" >&2 &&
         return 1
+
+    # check for required python scripts
+    pyprog=$(which airfun.py)
+    test $? -ne 0 &&
+        echo "ERROR: missing python module airfun.py." >&2 && return 255
+
     for f in $img $bgimg $bgres
     do
         test ! -f "$f" &&
@@ -13881,34 +13913,38 @@ imbgsub () {
             echo "ERROR: image $f has unsupported file format." >&2 && return 255
     done
 
+    # check for AI_BGOFF
+    hdr=${img%.*}
+    test -e $hdr && inbgoff=$(get_header $hdr AI_BGOFF)
+    test "$inbgoff" && echo "# applying correction for AI_BGOFF" >&2 &&
+        echo "# WARNING: need switch to python, otherwise cutting at 0" >&2
+    test -z "$inbgoff" && inbgoff=0
+
+    test "$do_fits" && opts="-f"
+
+    false && (
     size=$(identify $img | cut -d ' ' -f3)
     gm convert $bgimg -resize $size\! $tmpim1
     test "$bgres" &&
         gm convert $bgres -resize $size\! - | pnmarith -add - $tmpim1 | \
             pnmccdred -a -$bgmean - $tmpim2 &&
         cp $tmpim2 $tmpim1
-    if [ "$do_fits" ]
-    then
-        # TODO: distinguish between single plane and RGB
-        # output is fits cube
-        false && (
-        pnmtomef $tmpim1 > $tmpfits
-        meftocube $tmpfits > $tmpim1
-        imarith $tmpim1 $(echo $outmult/$bgmult | bc -l) mul - > $tmpim2
-        pnmtomef $img $tmpfits
-        meftocube $tmpfits > $tmpim1
-        imarith $tmpim1 $outmult $mul - | imarith - $tmpim2 sub - | imarith - $bgval add -
-        )
-        pnmccdred2 -m $(echo $outmult/$bgmult | bc -l) $tmpim1 - | \
-            pnmccdred2 -f -premult $outmult -a $bgval -d - $tmpim1 -
-    else
-        pnmccdred2 -m $(echo $outmult/$bgmult | bc -l) $tmpim1 - | \
-            pnmccdred2 -premult $outmult -a $bgval -d - $img -
-        #pnmccdred2 -m $(echo $outmult/$bgmult | bc -l) $tmpim1 $tmpim2
-        #pnmccdred2 -m $outmult $img - | pnmccdred2 -a $bgval -d $tmpim2 - -
-    fi
-    rm -f $tmpim1 $tmpim2
-    return
+
+    # note: pyvips pipes are unreliable
+    #pnmccdred2 -m $(echo $outmult/$bgmult | bc -l) $tmpim1 - | \
+    #    pnmccdred2 -f -premult $outmult -a $bgval -d - $tmpim1 -
+    pnmccdred2 -m $(echo $outmult/$bgmult | bc -l) $tmpim1 $tmpim2
+    pnmccdred2 -a $((-1*inbgoff)) $img $tmpim3
+    pnmccdred2 $opts -premult $outmult -a $bgval -d $tmpim2 $tmpim3 -
+    )
+
+    # TODO: add bgres
+    test "$bgres" && echo "# ERROR: imbgsub bgres not supported" >&2 && return 255
+    python3 $pyprog imbgsub $opts -o $inbgoff -bgm $bgmult -m $outmult -b $bgval $img $bgimg -
+    retval=$?
+    
+    rm -f $tmpim1 $tmpim2 $tmpim3
+    return $retval
 }
 
 # remove vertical gradient pattern from image
@@ -16324,11 +16360,12 @@ AIplot () {
     local uselines  # if set plot lines and points
     local printfile # if set the plot is saved to printfile
     local gpcmd     # gnuplot commands inserted before plotting
+    local nodisplay # if set do not display resulting plot
     local title
     local quiet
     local showhelp
     local i
-    for i in $(seq 1 11)
+    for i in $(seq 1 12)
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-a" && a10k=1 && shift 1
@@ -16340,6 +16377,7 @@ AIplot () {
         test "$1" == "-o" && printfile="$2" && shift 2
         test "$1" == "-t" && title="$2" && shift 2
         test "$1" == "-g" && gpcmd="$2" && shift 2
+        test "$1" == "-n" && nodisplay=1 && shift 1
         test "$1" == "-q" && quiet=1 && shift 1
     done
     
@@ -16528,7 +16566,7 @@ AIplot () {
             lnum=$(grep -n "After .* iterations the fit converged" fit.log | \
                 tail -1 | cut -d ":" -f1) &&
             sed -ne "$lnum,\$p" fit.log
-        test "$printfile" && display $printfile &
+        test "$printfile" && test -z "$nodisplay" && display $printfile &
     else
         cat $log
         echo "ERROR: gnuplot error in AIplot."
@@ -20217,6 +20255,7 @@ AIbgmap () {
     local bgmsub    # if given, subtract it before fitting data, intensities
                     # are assumed to be scaled by mult
     local maxbad=60 # max. percent of bad pixel to exclude from bg
+    local bgoff=0   # offset (-1*pedestal) which was added to img
     local show_bg_stddev
     for i in $(seq 1 10)
     do
@@ -20228,6 +20267,7 @@ AIbgmap () {
         test "$1" == "-m" && do_minibg_only=1 && shift 1
         test "$1" == "-d" && do_diag=1 && shift 1
         test "$1" == "-b" && bgmsub=$2 && shift 2
+        test "$1" == "-o" && bgoff=$2 && shift 2
         test "$1" == "-sd" && show_bg_stddev=1 && shift 1
         test "$1" == "-x" && maxbad=$2 && shift 2
         test "$1" == "-stats" && do_stats_only=1 && shift 1
@@ -20267,7 +20307,7 @@ AIbgmap () {
     local ci
 
     (test "$showhelp" || test $# -lt 1) &&
-        echo "usage: AIbgmap [-q] [-p|s|c] [-m] [-d] [-sd] [-x maxbad|$maxbad]" \
+        echo "usage: AIbgmap [-q] [-p|s|c] [-m] [-d] [-sd] [-o pedestal] [-x maxbad|$maxbad]" \
             "[-b bgmsubimg] <img> [bsize|$bsize] [msize|$msize] [bgmask] [mult|$mult]" >&2 &&
         return 1
 
@@ -20325,13 +20365,13 @@ AIbgmap () {
         # TODO: begin run parallel (takes 45% of time)
         case $inext in
             ppm)    clist="red grn blu"
-                    pnmccdred2 -f -m $mult $img $tmpfits
+                    pnmccdred2 -f -m $mult -a $((-1*bgoff)) $img $tmpfits
                     imslice $tmpfits 1 > $tdir/$b.red.fits
                     imslice $tmpfits 2 > $tdir/$b.grn.fits
                     imslice $tmpfits 3 > $tdir/$b.blu.fits
                     ;;
             pgm)    clist="gray"
-                    pnmccdred2 -f -m $mult $img $tmpfits
+                    pnmccdred2 -f -m $mult -a $((-1*$bgoff)) $img $tmpfits
                     imslice $tmpfits 1 > $tdir/$b.$clist.fits
                     ;;
         esac
@@ -20799,7 +20839,7 @@ AIbgmodel () {
         convert $cdir/$target.bgm${bgmult}.$ext -resize $size\! - | \
             pnmarith -a - $cdir/$target.bgm${bgmult}model.$ext | \
             pnmccdred -a -1000 - $cdir/$target.bgm${bgmult}all.$ext
-        # rerun bg subtraction
+        # rerun bg image subtraction
         bgimg=$cdir/$target.bgm${bgmult}all.$ext
         imbgsub $target.$ext $bgimg "" $bgmult > $target.bgs.$ext
         test -f ${target}_m.$ext &&
@@ -23130,6 +23170,7 @@ AIphotcal () {
     local paramchange
     local photreg
     local idlist
+    local pnglist
     local no
 
     (test "$showhelp" || test $# -lt 3) &&
@@ -23693,6 +23734,7 @@ AIphotcal () {
     #ammd=$(median $tmp1 $amcolumn)
     amref=$(echo $centerdeg | rade2altaz $setname - | awk '{printf("%.3f", $3)}')
     echo "# refmd=$refmd colormd=$colormd amref=$amref" >&2
+    cp $tmp1 $tdir/x.gptmp1.dat
 
     # gnuplot fitting
     # e.g. map = a + b*(V-Vmd)     + c*((B-V)-(B-V)md) + e*(am-amref)
@@ -23802,8 +23844,6 @@ AIphotcal () {
     #echo $tmp1; echo $tmpgp; echo $tmpres
     #return
     
-    #### TODO: use $tmpres to check for very strong outliers, e.g. >8*sd
-    
     # save residuals to permanent data file
     str=$setname.$catalog.$icol.resid
     (test -f phot/$str.dat && diff -q $tmpres phot/$str.dat >/dev/null) || \
@@ -23829,35 +23869,38 @@ AIphotcal () {
     if [ $fittype -eq 2 ] || [ $fittype -eq 3 ]
     then
         str=$setname.$catalog.$icol.ext
-        grep -v "^#" $tmpres | AIplot -q -o x.$str.png \
+        grep -v "^#" $tmpres | AIplot -q -n -o x.$str.png \
             -t "Extinction (aprad=$aprad, $setname, $catalog)" \
             -g "set xlabel 'air mass'; set ylabel 'dmag'; set yrange [] reverse" \
             - 7 11
         (test -f phot/$str.png && diff -q x.$str.png phot/$str.png >/dev/null) || \
             cp -p x.$str.png phot/$str.png
+        pnglist="phot/$str.png $pnglist"
     fi
     # color term
     if [ "$cfit" ]
     then
         str=$setname.$catalog.$icol.color
-        grep -v "^#" $tmpres | AIplot -q -o x.$str.png \
+        grep -v "^#" $tmpres | AIplot -q -n -o x.$str.png \
             -t "Color term (aprad=$aprad, $setname, $catalog)" \
             -g "set xlabel '$citerm'; set ylabel 'dmag'; set yrange [] reverse" \
             - 6 10
         (test -f phot/$str.png && diff -q x.$str.png phot/$str.png >/dev/null) || \
             cp -p x.$str.png phot/$str.png
+        pnglist="phot/$str.png $pnglist"
     fi
     # linearity
     str=$setname.$catalog.$icol.lin
     x="set xlabel 'mag'; set ylabel 'mag - f($color)'; set yrange [] reverse"
     test "$citerm" &&
         x="set xlabel 'mag'; set ylabel 'mag - f($color, $citerm)'; set yrange [] reverse"
-    grep -v "^#" $tmpres | AIplot -q -p -o x.$str.png \
+    grep -v "^#" $tmpres | AIplot -q -n -p -o x.$str.png \
         -t "Photometric error (aprad=$aprad, $setname, $catalog)" \
         -g "$x" \
         - 4 9
     (test -f phot/$str.png && diff -q x.$str.png phot/$str.png >/dev/null) || \
         cp -p x.$str.png phot/$str.png
+    pnglist="phot/$str.png $pnglist"
     # residuals
     false && (
     str=$setname.$catalog.$icol.resid
@@ -23868,6 +23911,12 @@ AIphotcal () {
     (test -f phot/$str.png && diff -q x.$str.png phot/$str.png >/dev/null) || \
         cp -p x.$str.png phot/$str.png
     )
+
+    # show plots
+    for str in $pnglist
+    do
+        display $str &
+    done
 
     # search for multiple matches of the same star
     # skip2 ... reference star matches multiple stars in image
@@ -24624,7 +24673,8 @@ AIcomet () {
     # temp images which will be assigned file names later on
     local tmpim1
     local tmpim2
-    local tmpbgcorr
+    local tmpim3    # not used anymore
+    local tmpbgcorr # not used anymore
     # image masks
     local tmpmask=$(mktemp "$wdir/tmp_mask_XXXXXX.pbm")
     local tmpbadmask=$(mktemp "$wdir/tmp_badmask_XXXXXX.pbm")
@@ -24634,6 +24684,8 @@ AIcomet () {
     local tmpphot=$(mktemp "$wdir/tmp_phot_XXXXXX.dat")
     local tmpreg=$(mktemp "$wdir/tmp_reg_XXXXXX.reg")
     # temp images not removed at the end of program
+    local genstars
+    local gentrails
     local stsub
     local stsubhdr
     local cosub
@@ -24681,7 +24733,7 @@ AIcomet () {
     local mcorr
     local str
     local bgmult=10     # TODO: get value from image header?
-    local cosubimage    # result image stored in $codir
+    local cosubmult     # trail subtracted and scaled result image stored in $codir
     local bgmn
     local bgsd
     local sum
@@ -24708,6 +24760,7 @@ AIcomet () {
     # temp images
     local tmpim1=$(mktemp "$wdir/tmp_im1_XXXXXX.$ext")
     local tmpim2=$(mktemp "$wdir/tmp_im2_XXXXXX.$ext")
+    local tmpim3=$(mktemp "$wdir/tmp_im3_XXXXXX.$ext")
     local tmpbgcorr=$(mktemp "$wdir/tmp_bgcorr_XXXXXX.$ext")
 
     sname=$(basename ${ststack//.*/})
@@ -24730,7 +24783,8 @@ AIcomet () {
 
     # checkings
     for f in $ststack $costack $obsdata $newphot $bgfit10 \
-        $starpsf $trailpsf $starmask $trailmask $starphot $psfphot
+        $starpsf $trailpsf $starmask $trailmask $starphot $psfphot \
+        ${ststack/.bgs/} ${costack/.bgs/}
     do
         test ! -e $f && echo "ERROR: file $f not found." >&2 && return 255
         test ! -s $f && echo "ERROR: file $f is empty." >&2 && return 255
@@ -24745,6 +24799,8 @@ AIcomet () {
         echo "ERROR: file $wcshdr not found." >&2 && return 255
 
     # temp images not removed at the end of program
+    genstars=$tdir/x.genstars.$ext
+    gentrails=$tdir/x.gentrails.$ext
     stsub=$tdir/x.stsub.$ext
     stsubhdr=$tdir/x.stsub.head
     cosub=$tdir/x.cosub.$ext
@@ -24758,12 +24814,12 @@ AIcomet () {
     # output file name containing new or corrected photometry
     test -z "$newphot"  && newphot=$codir/$sname.newphot.dat
 
-    # check if it is required to create new cosubimage
-    #       if cosubimage -nt $newphot then do not create stsub and cosub
-    cosubimage=$codir/$sname.cosub$comult.$ext
-    test "$comult" == "1" && cosubimage=$codir/$sname.cosub.$ext
-    test -s $cosubimage && test -s $newphot && test -s $coreg && test -s $bgreg &&
-        test $cosubimage -nt $newphot &&
+    # check if it is required to create new cosubmult
+    #       if cosubmult -nt $newphot then do not create stsub and cosub
+    cosubmult=$codir/$sname.cosub$comult.$ext
+    test "$comult" == "1" && cosubmult=$codir/$sname.cosub.$ext
+    test -s $cosubmult && test -s $newphot && test -s $coreg && test -s $bgreg &&
+        test $cosubmult -nt $newphot &&
         skip_cosub=1
 
     # check for change of parameters (rlim/AC_RLIM, comult/AC_COMUL, bgfit10/AC_BGSUB) then unset skip_cosub
@@ -24897,20 +24953,20 @@ AIcomet () {
         reg2pbm $starpsf $starmask > $tmpmask
         pnmccdred -m 0 $starpsf - | pnmccdred -a $psfoff - - | \
             pnmcomp -alpha $tmpmask $starpsf > $tmpim1
-        AIskygen -o $tmpim2 $tmpdat1 $tmpim1 $texp $magzero $scale $w $h $psfoff
+        AIskygen -o $genstars $tmpdat1 $tmpim1 $texp $magzero $scale $w $h $psfoff
         test $? -ne 0 &&
-            echo "ERROR: failed command: AIskygen -o $tmpim2 $tmpdat1 $tmpim1" \
+            echo "ERROR: failed command: AIskygen -o $genstars $tmpdat1 $tmpim1" \
                 "$texp $magzero $scale $w $h $psfoff" >&2 && return 255
-        #pnmccdred -a $((bgres-psfoff)) -d $tmpim2 $ststack $stsub
+        #pnmccdred -a $((bgres-psfoff)) -d $genstars $ststack $stsub
         add=$(echo $outbg ${inbg//,/ } | awk '{
             printf("%.0f", $1-$2)
             if (NF>2) printf(",%.0f,%.0f", $1-$3, $1-$4)
         }')
-        #echo "pnmccdred -a $add -d $tmpim2 $ststack $stsub" >&2
-        #pnmccdred -a "$add" -d $tmpim2 $ststack $stsub
-        pnmccdred2 -a "$add" -d $tmpim2 $ststack $stsub
+        #echo "pnmccdred -a $add -d $genstars $ststack $stsub" >&2
+        #pnmccdred -a "$add" -d $genstars $ststack $stsub
+        pnmccdred2 -a "$add" -d $genstars $ststack $stsub
         test $? -ne 0 &&
-            echo "ERROR: failed command: pnmccdred -a $add -d $tmpim2 $ststack $stsub" >&2 &&
+            echo "ERROR: failed command: pnmccdred -a $add -d $genstars $ststack $stsub" >&2 &&
             return 255
 
         rm -f $cosubhdr
@@ -24920,19 +24976,19 @@ AIcomet () {
         reg2pbm $trailpsf $trailmask > $tmpmask
         pnmccdred -m 0 $trailpsf - | pnmccdred -a $psfoff - - | \
             pnmcomp -alpha $tmpmask $trailpsf > $tmpim1
-        AIskygen -o $tmpim2 $tmpdat1 $tmpim1 $texp $magzero $scale $w $h $psfoff
+        AIskygen -o $gentrails $tmpdat1 $tmpim1 $texp $magzero $scale $w $h $psfoff
         test $? -ne 0 &&
-            echo "ERROR: failed command: AIskygen -o $tmpim2 $tmpdat1 $tmpim1" \
+            echo "ERROR: failed command: AIskygen -o $gentrails $tmpdat1 $tmpim1" \
                 "$texp $magzero $scale $w $h $psfoff" >&2 && return 255
-        #pnmccdred -a $((bgres-psfoff)) -d $tmpim2 $costack $cosub
+        #pnmccdred -a $((bgres-psfoff)) -d $gentrails $costack $cosub
         add=$(echo $outbg ${inbg//,/ } | awk '{
             printf("%.0f", $1-$2)
             if (NF>2) printf(",%.0f,%.0f", $1-$3, $1-$4)
         }')
-        #pnmccdred -a $add -d $tmpim2 $costack $cosub
-        pnmccdred2 -a $add -d $tmpim2 $costack $cosub
+        #pnmccdred -a $add -d $gentrails $costack $cosub
+        pnmccdred2 -a $add -d $gentrails $costack $cosub
         test $? -ne 0 &&
-            echo "ERROR: failed command: pnmccdred -a $add -d $tmpim2 $costack $cosub" >&2 &&
+            echo "ERROR: failed command: pnmccdred -a $add -d $gentrails $costack $cosub" >&2 &&
             return 255
 
         cp -p $hdr $stsubhdr
@@ -24942,32 +24998,58 @@ AIcomet () {
 
         if [ "$bgfit10" ] && [ $comult -gt 1 ]
         then
+            # next section replaced in v5.0.1
+            false && (
             # scale bgcorr image to match comult
             x=$(echo $bgmult $comult | awk '{printf("%.6f", $2/$1)}')   # comult/bgmult
             y=$(echo $comult | awk '{printf("%.6f", 1/$1)}')            # 1/comult
             echo "$(date +'%H:%M:%S') create bg correction image ..." >&2
             pnmccdred2 -m $x $bgfit10 $tmpim1
-            pnmccdred2 -m $y $tmpim1 - | pnmccdred2 -m $comult - - | \
-                pnmccdred2 -a $psfoff -d - $tmpim1 - | \
+            # note: pyvips pipes are unreliable
+            #pnmccdred2 -m $y $tmpim1 - | pnmccdred2 -m $comult - - | \
+            #    pnmccdred2 -a $psfoff -d - $tmpim1 - | \
+            #    convert - -resize ${w}x${h}\! $tmpbgcorr
+            pnmccdred2 -m $y $tmpim1 $tmpim2
+            pnmccdred2 -m $comult $tmpim2 $tmpim3
+            pnmccdred2 -a $psfoff -d $tmpim3 $tmpim1 - | \
                 convert - -resize ${w}x${h}\! $tmpbgcorr
             # create contrast enhanced images
             echo "$(date +'%H:%M:%S') create contrast enhanced image ..." >&2
             add=$(echo $outbg | awk -F ',' -v m=$comult '{
                 printf("%.0f", $1*(1-m))}')
-            pnmccdred2 -a $add -m $comult $cosub - | \
-                pnmccdred2 -a $psfoff -d $tmpbgcorr - - | \
+            # note: pyvips pipes are unreliable
+            #pnmccdred2 -a $add -m $comult $cosub - | \
+            #    pnmccdred2 -a $psfoff -d $tmpbgcorr - - | \
+            #    imblur -b $blur - > $coblur
+            pnmccdred2 -a $add -m $comult $cosub $tmpim2
+            pnmccdred2 -a $psfoff -d $tmpbgcorr $tmpim2 - | \
                 imblur -b $blur - > $coblur
+            )
+            
+            echo "$(date +'%H:%M:%S') create contrast enhanced image ..." >&2
+            # scale up star trail image
+            pnmccdred2 -m 10 $gentrails $tmpim1
+            # bg subtraction and scaling of non-bgs costack, subtract trails, bluring
+            test "$AI_DEBUG" &&
+                echo "# imbgsub -m $comult $costack $bgfit10 \"\" $bgmult \"\" $outbg" >&2
+            imbgsub -m $comult ${costack/.bgs/} $bgfit10 "" $bgmult "" $outbg > $tmpim2
+            pnmccdred2 -d $tmpim1 $tmpim2 $cosubmult
+            imblur -b $blur $cosubmult > $coblur
         else
             if [ $comult -gt 1 ]
             then
+                # bgmult=1, comult>1
                 add=$(echo $outbg | awk -F ',' -v m=$comult '{
                     printf("%.0f", $1*(1-m))}')
-                pnmccdred2 -a $add -m $comult $cosub - | \
-                    imblur -b $blur - > $coblur
+                pnmccdred2 -a $add -m $comult $cosub $cosubmult
+                imblur -b $blur $cosubmult > $coblur
             else
+                # bgmult=1, comult=1
                 imblur -b $blur $cosub > $coblur
+                cp -p $cosub $cosubmult
             fi
         fi
+
         (! test -s $coblur || ! is_pnm $coblur) &&
             echo "ERROR: unable to create $coblur" >&2 && return 255
         cp -p $hdr $coblurhdr
@@ -25071,7 +25153,7 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
             echo "ERROR: $f has unsupported region file format (must be physical)." >&2 && return 255
     done
     
-    # skip regions smaller than 3 pix
+    # skip regions smaller than 5 pix
     for f in $coreg $bgreg # $badreg
     do
         test -s "$f" && regskip $f > $tmpreg &&
@@ -25175,7 +25257,6 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
             if(NF==3) {printf(",%.0f,%.0f", b-$2, b-$3)}
             }')
         imcrop -1 $cosub $whxy | pnmccdred2 -a $x - $tmpim1
-        #AIpsfmask -m $tmpmask $tmpim1 $tmpim2 $psfoff
         pnmccdred2 -m 0 -a $psfoff $tmpim1 - | \
             pnmcomp -alpha $tmpmask $tmpim1 > $tmpim2
 
@@ -25356,27 +25437,27 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
             reg2pbm $starpsf $starmask > $tmpmask
             pnmccdred -m 0 $starpsf - | pnmccdred -a $psfoff - - | \
                 pnmcomp -alpha $tmpmask $starpsf > $tmpim1
-            AIskygen -o $tmpim2 $tmpdat1 $tmpim1 $texp $magzero $scale $w $h $psfoff
-            #pnmccdred -a $((bgres-psfoff)) -d $tmpim2 $ststack $stsub
+            AIskygen -o $genstars $tmpdat1 $tmpim1 $texp $magzero $scale $w $h $psfoff
+            #pnmccdred -a $((bgres-psfoff)) -d $genstars $ststack $stsub
             add=$(echo $outbg ${inbg//,/ } | awk '{
                 printf("%.0f", $1-$2)
                 if (NF>2) printf(",%.0f,%.0f", $1-$3, $1-$4)
             }')
-            #pnmccdred -a $add -d $tmpim2 $ststack $stsub
-            pnmccdred2 -a $add -d $tmpim2 $ststack $stsub
+            #pnmccdred -a $add -d $genstars $ststack $stsub
+            pnmccdred2 -a $add -d $genstars $ststack $stsub
             # subtract trails from comet stack -> new cosub
             # AIpsfmask -q -m $trailmask $trailpsf $tmpim1 $psfoff
             reg2pbm $trailpsf $trailmask > $tmpmask
             pnmccdred -m 0 $trailpsf - | pnmccdred -a $psfoff - - | \
                 pnmcomp -alpha $tmpmask $trailpsf > $tmpim1
-            AIskygen -o $tmpim2 $tmpdat1 $tmpim1 $texp $magzero $scale $w $h $psfoff
-            #pnmccdred -a $((bgres-psfoff)) -d $tmpim2 $costack $cosub
+            AIskygen -o $gentrails $tmpdat1 $tmpim1 $texp $magzero $scale $w $h $psfoff
+            #pnmccdred -a $((bgres-psfoff)) -d $gentrails $costack $cosub
             add=$(echo $outbg ${inbg//,/ } | awk '{
                 printf("%.0f", $1-$2)
                 if (NF>2) printf(",%.0f,%.0f", $1-$3, $1-$4)
             }')
-            #pnmccdred -a $add -d $tmpim2 $costack $cosub
-            pnmccdred2 -a $add -d $tmpim2 $costack $cosub
+            #pnmccdred -a $add -d $gentrails $costack $cosub
+            pnmccdred2 -a $add -d $gentrails $costack $cosub
             
             echo "$(date +'%H:%M:%S') extracting improved comet image ..." >&2
             if [ "$no_trail" ]
@@ -25424,57 +25505,52 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
             if [ "$bgfit10" ] && [ $comult -gt 1 ]
             then
                 # TODO: move before "--> define polygon region" ...
+                false && (
                 # create contrast enhanced images
                 add=$(echo $outbg | awk -F ',' -v m=$comult '{
                     printf("%.0f", $1*(1-m))}')
-                pnmccdred2 -a $add -m $comult $cosub - | \
-                    pnmccdred2 -a $psfoff -d $tmpbgcorr - - | \
-                imblur -b $blur - > $coblur
+                # note: pyvips pipes are unreliable
+                #pnmccdred2 -a $add -m $comult $cosub - | \
+                #    pnmccdred2 -a $psfoff -d $tmpbgcorr - - | \
+                #    imblur -b $blur - > $coblur
+                pnmccdred2 -a $add -m $comult $cosub $tmpim1
+                pnmccdred2 -a $psfoff -d $tmpbgcorr $tmpim1 - | \
+                    imblur -b $blur - > $coblur
+                )
+                
+                # scale up star trail image
+                pnmccdred2 -m 10 $gentrails $tmpim1
+                # bg subtraction and scaling of non-bgs costack, subtract trails, bluring
+                imbgsub -m $comult ${costack/.bgs/} $bgfit10 "" $bgmult "" $outbg > $tmpim2
+                pnmccdred2 -d $tmpim1 $tmpim2 $cosubmult
+                imblur -b $blur $cosubmult > $coblur
             else
                 if [ $comult -gt 1 ]
                 then
                     add=$(echo $outbg | awk -F ',' -v m=$comult '{
                         printf("%.0f", $1*(1-m))}')
-                    pnmccdred2 -a $add -m $comult $cosub - | \
-                        imblur -b $blur - > $coblur
+                    pnmccdred2 -a $add -m $comult $cosub $cosubmult
+                    imblur -b $blur $cosubmult > $coblur
                 else
                     imblur -b $blur $cosub > $coblur
+                    cp -p $cosub $cosubmult
                 fi
             fi
         fi
     fi
 
 
-    if [ ! "$skip_cosub" ]
-    then
-        if [ "$bgfit10" ] && [ $comult -gt 1 ]
-        then
-            # create contrast enhanced cosub image
-            echo "$(date +'%H:%M:%S') create contrast stretched image for photometry" >&2
-            add=$(echo $outbg | awk -F ',' -v m=$comult '{
-                printf("%.0f", $1*(1-m))}')
-            pnmccdred2 -a $add -m $comult $cosub - | \
-                pnmccdred2 -a $psfoff -d $tmpbgcorr - $cosubimage
-        else
-            if [ $comult -gt 1 ]
-            then
-                add=$(echo $outbg | awk -F ',' -v m=$comult '{
-                    printf("%.0f", $1*(1-m))}')
-                pnmccdred2 -a $add -m $comult $cosub $cosubimage
-            else
-                cp -p $cosub $cosubimage
-            fi
-        fi
-    fi
-
     # ----------------------------------
     #   large aperture comet photometry
     # ----------------------------------
 
     echo "$(date +'%H:%M:%S') large aperture photometry of comet ..." >&2
+    test ! -e $cosubmult &&
+        echo "ERROR: missing $cosubmult" >&2 && return 255
+
     # determine background excluding bad regions
     echo "$(date +'%H:%M:%S') measure bg" >&2
-    regstat2 -q $cosubimage $bgreg $badreg | cut -d ' ' -f1 | \
+    regstat2 -q $cosubmult $bgreg $badreg | cut -d ' ' -f1 | \
         awk -F ',' -v m=$comult -v b=$outbg '{
             printf("%.1f", ($1-b)/m)
             if (NF==3) printf(" %.1f %.1f", ($2-b)/m, ($3-b)/m)
@@ -25494,7 +25570,7 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
 
     # measure comet region excluding bad regions
     echo "$(date +'%H:%M:%S') measure comet" >&2
-    set - $(regstat2 -q -a $cosubimage $coreg $badreg)
+    set - $(regstat2 -q -a $cosubmult $coreg $badreg)
     area=$3
     sum=$(echo $4 $bgmn | tr ',' ' ' | awk -v a=$area -v m=$comult -v b=$outbg '{
         if (NF==2) printf("%.0f", ($1-a*b-a*m*$2)/m)
@@ -25502,7 +25578,7 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
             ($2-a*b-a*m*$5)/m, ($3-a*b-a*m*$6)/m)
     }')
     # measure max intensity
-    set - $(regstat2 -q -m $cosubimage $coreg $badreg)
+    set - $(regstat2 -q -m $cosubmult $coreg $badreg)
     x=$(echo $2 | tr ',' '\n' | sort -n | tail -1)
     echo "# comet sum=$sum (max=$x)" >&2
     test "$(echo $x $(get_header $hdr SATURATE) | awk '{if($1>=$2){printf("saturated")}}')" &&
@@ -25510,7 +25586,7 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
     # total area of comet region
     if [ "$badreg" ]
     then
-        set - $(regstat2 -q -a $cosubimage $coreg)
+        set - $(regstat2 -q -a $cosubmult $coreg)
         area=$3
     fi
     # circle of the same area size
@@ -26929,11 +27005,11 @@ ds9cmd () {
     local id
     local nid
     local cnt
-    local bgrgb
     local ddiff
     local line
     local bgfit10
     local comult
+    local bgoff
     local tel
     local catalog
     local maglim
@@ -27491,6 +27567,10 @@ ds9cmd () {
                     fi
                 fi
                 
+                # get AI_BGOFF
+                bgoff=$(get_header -q $set.head AI_BGOFF)
+                test "$bgoff" && opts="$opts -o $bgoff"
+                
                 if [ "$bgimg" ] && [ $bgimg -nt $badbg ] && is_pnm $bgimg
                 then
                     echo "reusing bg gradient image $bgimg"
@@ -27522,7 +27602,7 @@ ds9cmd () {
                     if [ ! -L ${img%.*}.bgs.$ext ]
                     then
                         echo "creating ${img%.*}.bgs.$ext ..."
-                        imbgsub $img   $bgimg "" $bgmult > ${img%.*}.bgs.$ext
+                        imbgsub $img $bgimg "" $bgmult > ${img%.*}.bgs.$ext
                         test ! -e ${img%.*}.bgs.head &&
                             ln -s $set.head ${img%.*}.bgs.head
                         set_header $set.head AI_BGFIT=$fittype
@@ -27575,12 +27655,14 @@ ds9cmd () {
                     echo "ERROR: image $cometstack not found." >&2 && echo "" && return 255
                 
                 # check for bg subtracted images
-                test -f ${starstack%.*}.bgs.$ext &&
-                    starstack=${starstack%.*}.bgs.$ext &&
-                    echo "# bg subtracted star stack found: $starstack"
-                test "$cometstack" && test -f ${cometstack%.*}.bgs.$ext &&
-                    cometstack=${cometstack%.*}.bgs.$ext &&
-                    echo "# bg subtracted comet stack found: $cometstack"
+                ! test -f ${starstack%.*}.bgs.$ext &&
+                    echo "ERROR: image ${starstack%.*}.bgs.$ext not found." >&2 &&
+                    echo "" && return 255
+                starstack=${starstack%.*}.bgs.$ext
+                test "$cometstack" && ! test -f ${cometstack%.*}.bgs.$ext &&
+                    echo "ERROR: image ${cometstack%.*}.bgs.$ext not found." >&2 &&
+                    echo "" && return 255
+                cometstack=${cometstack%.*}.bgs.$ext
                 test ! -e ${starstack%.*}".head" && ln -s $set.head ${starstack%.*}".head"
                 test "$cometstack" && test ! -e ${cometstack%.*}".head" && ln -s $set.head ${cometstack%.*}".head"
 
@@ -28084,7 +28166,7 @@ physical" > $tmpreg
                 if [ -z "$AI_DEBUG" ]
                 then
                     x=$(ls x.* 2>/dev/null | \
-                        grep -vE "x.psf.reg|x.obs.dat|x.stars.reg|x.$set.$catalog")
+                        grep -vE "x.psf.reg|x.obs.dat|x.stars.reg|x.$set.$catalog.reg")
                     test "$x" && rm $x
                 fi
 

@@ -1,3 +1,9 @@
+airtools (4.0.1-1) experimental; urgency=medium
+
+  * Update to airfun.sh version 5.0.1
+
+ -- Thomas Lehmann <t.lehmann@mailbox.org>  Wed, 28 Apr 2021 18:44:03 +0200
+
 airtools (4.0-1) experimental; urgency=medium
 
   * New major upstream release making use of libvips library
