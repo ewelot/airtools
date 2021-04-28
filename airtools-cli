@@ -37,6 +37,7 @@ CHANGELOG="
         * flats, lights: added check for valid telid,
             deal with new camera type CMOS
         * darks: adjusted mesh size of small diff images
+        * lights: always add pedestal of 100 ADU
         * register: determine a first guess on fwhm and use it for source
             extraction (instead of relying on a fixed value)
         * new command: terminal
@@ -905,9 +906,8 @@ _lights () {
             ctype=$(get_param camera.dat ctype $tel | awk '{print $1}')
             echo "# tel=$tel  cam=$cam ($ctype)"
             case "$ctype" in
-                CCD)  ccdopts="-a 100";;
-                CMOS) ccdopts="";;
-                *)    ccdopts="-q 1";;
+                CCD|CMOS)   ccdopts="-a 100";;
+                *)          ccdopts="-a 100 -q 1";;
             esac
             is_calibrated=$(AIsetinfo -b $set | awk '{
                 if($9=="cal" && $10=="cal") print 1}')
@@ -1374,6 +1374,9 @@ _stack () {
         AIstack $stackopts $bopts -t $ctype -r $rtype $set
         test $? -ne 0 && retval=255
         test "$stackopts" && set_header $set.head AO_STACK="$stackopts"
+        # note: as of airtools-cli version 1.3 we always add pedestal to
+        # calibrated light images (option "-a 100" in AIccd)
+        set_header $set.head AI_BGOFF=100
     done
 
 
@@ -1445,12 +1448,12 @@ _stack () {
         else
             bin=1
         fi
-        # TODO: use the same algorith as in lights
+        # note: all lights now have pedestal of bgoff=100 ADU, this is
+        # just for compatibility with old airtools-cli versions < 1.0
         bgoff=$(get_header -q $set.head AI_BGOFF)
         test -z "$bgoff" &&
             echo "Mayhill SSO Nerpio Bathurst" | grep -w -q $AI_SITE &&
-            bgoff=100 &&
-            set_header $set.head AI_BGOFF=$bgoff
+            bgoff=100
         test -z "$bgoff" && bgoff=0
         rms=$(get_header -q $set.head AI_RMSG)
         if [ -z "$rms" ]
@@ -1908,6 +1911,7 @@ _costack () {
     local val
     local oxy
     local omove
+    local object
     local retval=0
 
     slist=$(AIsetinfo -b | awk '{if($4=="o"){print $2}}')
@@ -1938,9 +1942,10 @@ _costack () {
             echo "# $set: reusing motion vector (AI_OMOVE)"
         else
             echo "# $set: get ephemerides from MPC"
+            object=$(get_header -q $set.head OBJECT)
             get_mpcephem -w $set 2>/dev/null
             test $? -ne 0 &&
-                echo "WARNING: skipping $set: object is not a known comet." && continue
+                echo "WARNING: skipping $set: object $object is not a known comet." && continue
         fi
         
         # check for astrometric calibration
