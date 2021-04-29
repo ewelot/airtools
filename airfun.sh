@@ -17,18 +17,19 @@
 AI_VERSION="5.0.1"
 : << '----'
 CHANGELOG
-    5.0.1 - 28 Apr 2021
+    5.0.1 - 29 Apr 2021
         * phot2icq: apply new ICQ keys for GAIA (BG for GBP mag)
         * AIcomet:
             - avoid piping of pnmccdred2 commands which causes file
               corruption on certain (virtual) hardware setups,
             - use imbgsub for bg subtraction of comet image
+            - handle no star selection in photcorr (empty newphot file)
         * ds9cmd psfextract: make sure background subtracted images do exist
-        * AIbgmap: added option to subtract offset from image before creating
-            background maps (useful to account for AI_BGOFF)
-        * imbgsub:
-            - check for AI_BGOFF in image header and take it into account
-            - use python function for main image processing
+        * AIbgmap: added option to account for bg offset of the image when
+            deriving background statistics
+        * imbgsub: use python function for main image processing
+        * AIsetinfo, AIlist: take AI_BGOFF into account when showing
+            background values
         * AIplot: added option -n to skip display of resulting plot file
 
     5.0 - 21 Apr 2021
@@ -13861,20 +13862,17 @@ datarange () {
 }
 
 
-# subtract smoothed background(s) from image (correct for AI_BGOFF first)
+# subtract smoothed background(s) from image
 # output goes to stdout
 imbgsub () {
     local showhelp
     local outmult=1
-    local bgoff         # offset which has been added to input image (e.g. AI_BGOFF)
-                        # this must be eliminated before outmult is applied
     local do_fits       # if set create FITS output instead of PNM
     local i
-    for i in 1 2 3 4
+    for i in 1 2 3
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-m" && outmult=$2 && shift 2
-        test "$1" == "-o" && bgoff=$2 && shift 2
         test "$1" == "-f" && do_fits=1 && shift 1
     done
     local img=${1:-""}
@@ -13884,7 +13882,6 @@ imbgsub () {
     local bgmean=${5:-1000}     # mean bg value in bgres
     local bgval=${6:-1000}      # desired bg value of resulting bg-subtracted image
     local hdr
-    local inbgoff               # AI_BGOFF
     local tdir=${AI_TMPDIR:-"/tmp"}
     local tmpim1=$(mktemp "/tmp/tmp_im1_XXXXXX.pnm")
     local tmpim2=$(mktemp "/tmp/tmp_im2_XXXXXX.pnm")
@@ -13913,13 +13910,6 @@ imbgsub () {
             echo "ERROR: image $f has unsupported file format." >&2 && return 255
     done
 
-    # check for AI_BGOFF
-    hdr=${img%.*}
-    test -e $hdr && inbgoff=$(get_header $hdr AI_BGOFF)
-    test "$inbgoff" && echo "# applying correction for AI_BGOFF" >&2 &&
-        echo "# WARNING: need switch to python, otherwise cutting at 0" >&2
-    test -z "$inbgoff" && inbgoff=0
-
     test "$do_fits" && opts="-f"
 
     false && (
@@ -13940,7 +13930,7 @@ imbgsub () {
 
     # TODO: add bgres
     test "$bgres" && echo "# ERROR: imbgsub bgres not supported" >&2 && return 255
-    python3 $pyprog imbgsub $opts -o $inbgoff -bgm $bgmult -m $outmult -b $bgval $img $bgimg -
+    python3 $pyprog imbgsub $opts -bgm $bgmult -m $outmult -b $bgval $img $bgimg -
     retval=$?
     
     rm -f $tmpim1 $tmpim2 $tmpim3
@@ -20243,6 +20233,7 @@ EOF
 
 
 # extract smoothed background map using sextractor
+# note: bgoff is not subtracted from outsmall but taken into account for stats
 AIbgmap () {
     local showhelp
     local quiet     # if set suppress messages from sextractor
@@ -20305,6 +20296,7 @@ AIbgmap () {
     local xm
     local ym
     local ci
+    local val
 
     (test "$showhelp" || test $# -lt 1) &&
         echo "usage: AIbgmap [-q] [-p|s|c] [-m] [-d] [-sd] [-o pedestal] [-x maxbad|$maxbad]" \
@@ -20365,13 +20357,13 @@ AIbgmap () {
         # TODO: begin run parallel (takes 45% of time)
         case $inext in
             ppm)    clist="red grn blu"
-                    pnmccdred2 -f -m $mult -a $((-1*bgoff)) $img $tmpfits
+                    pnmccdred2 -f -m $mult $img $tmpfits
                     imslice $tmpfits 1 > $tdir/$b.red.fits
                     imslice $tmpfits 2 > $tdir/$b.grn.fits
                     imslice $tmpfits 3 > $tdir/$b.blu.fits
                     ;;
             pgm)    clist="gray"
-                    pnmccdred2 -f -m $mult -a $((-1*$bgoff)) $img $tmpfits
+                    pnmccdred2 -f -m $mult $img $tmpfits
                     imslice $tmpfits 1 > $tdir/$b.$clist.fits
                     ;;
         esac
@@ -20475,11 +20467,16 @@ AIbgmap () {
             gm convert $weightmap -scale $(gm identify $outsmall | cut -d ' ' -f3)\! \
                 -depth 1 pbm:- | pnmarith -mul $outsmall - 2>/dev/null | AIval -a - | \
                 grep -v -w 0 > $tmp1
-            rgb=$(median $tmp1 1)
-            test $(head -1 $tmp1 | wc -w) -eq 3 &&
-                rgb=$rgb","$(median $tmp1 2)","$(median $tmp1 3)
+            rgb=$(median $tmp1 1 | awk -v a=$((-1*bgoff*mult)) '{print $1+a}')
+            if [ $(head -1 $tmp1 | wc -w) -eq 3 ]
+            then
+                val=$(median $tmp1 2 | awk -v a=$((-1*bgoff*mult)) '{print $1+a}')
+                rgb=$rgb","$val
+                val=$(median $tmp1 3 | awk -v a=$((-1*bgoff*mult)) '{print $1+a}')
+                rgb=$rgb","$val
+            fi
         else
-            rgb=$(AIstat $outsmall | awk '{
+            rgb=$(pnmccdred -a $((-1*bgoff*mult)) $outsmall - | AIstat - | awk '{
                 if(NF>8) {printf("%.0f,%.0f,%.0f", $5, $9, $13)} else {printf("%f", $5)}}')
         fi
         false && ampl=$(imcrop -1 $outsmall 85 | AImstat - | awk -v rgb=$rgb '{
@@ -20492,7 +20489,8 @@ AIbgmap () {
             printf("%.1f", x*100)}')
 
         size=$(imsize $outsmall)
-        ampl=$(AIval -c -a $outsmall | awk -v w=${size% *} -v h=${size#* } 'BEGIN{
+        ampl=$(AIval -c -a $outsmall | \
+        awk -v w=${size% *} -v h=${size#* } -v a=$((-1*bgoff*mult)) 'BEGIN{
             rmax=w/2; if (h<w) rmax=h/2
             gmin=2^16; gmax=0; gsum=0; gnum=0
         }{
@@ -20502,7 +20500,7 @@ AIbgmap () {
             r=sqrt(dx*dx+dy*dy)
             if(r<rmax) {
                 gnum=gnum+1
-                gsum=gsum+$col
+                gsum=gsum+$col+a
                 if ($col < gmin) gmin=$col
                 if ($col > gmax) gmax=$col
                 #printf("%s %.1f %d %d\n", $0, r, gmin, gmax)
@@ -20520,10 +20518,11 @@ AIbgmap () {
     fi
     if [ "$do_diag" ] && [ ! "$do_stats_only" ]
     then
-        # create normalized bg image
+        # create normalized bg image (take bgoff into account)
         mrgb=$(echo $rgb | awk -F ',' '{x=10000; if(NF>1) {
             printf("%f,%f,%f", x/$1, x/$2, x/$3)} else {printf("%f", x/$1)}}')
-        pnmccdred -m $mrgb $outsmall $b.bgm${mult}n.$inext
+        pnmccdred -a $((-1*bgoff*mult)) $outsmall - | \
+            pnmccdred -m $mrgb - $b.bgm${mult}n.$inext
     fi
     
     test "$show_bg_stddev" && echo "$bgsd"
@@ -23875,7 +23874,7 @@ AIphotcal () {
             - 7 11
         (test -f phot/$str.png && diff -q x.$str.png phot/$str.png >/dev/null) || \
             cp -p x.$str.png phot/$str.png
-        pnglist="phot/$str.png $pnglist"
+        pnglist="$pnglist phot/$str.png"
     fi
     # color term
     if [ "$cfit" ]
@@ -23887,7 +23886,7 @@ AIphotcal () {
             - 6 10
         (test -f phot/$str.png && diff -q x.$str.png phot/$str.png >/dev/null) || \
             cp -p x.$str.png phot/$str.png
-        pnglist="phot/$str.png $pnglist"
+        pnglist="$pnglist phot/$str.png"
     fi
     # linearity
     str=$setname.$catalog.$icol.lin
@@ -23900,7 +23899,7 @@ AIphotcal () {
         - 4 9
     (test -f phot/$str.png && diff -q x.$str.png phot/$str.png >/dev/null) || \
         cp -p x.$str.png phot/$str.png
-    pnglist="phot/$str.png $pnglist"
+    pnglist="$pnglist phot/$str.png"
     # residuals
     false && (
     str=$setname.$catalog.$icol.resid
@@ -23916,6 +23915,7 @@ AIphotcal () {
     for str in $pnglist
     do
         display $str &
+        sleep 0.3
     done
 
     # search for multiple matches of the same star
@@ -24819,7 +24819,7 @@ AIcomet () {
     cosubmult=$codir/$sname.cosub$comult.$ext
     test "$comult" == "1" && cosubmult=$codir/$sname.cosub.$ext
     test -s $cosubmult && test -s $newphot && test -s $coreg && test -s $bgreg &&
-        test $cosubmult -nt $newphot &&
+        ! test $newphot -nt $cosubmult &&
         skip_cosub=1
 
     # check for change of parameters (rlim/AC_RLIM, comult/AC_COMUL, bgfit10/AC_BGSUB) then unset skip_cosub
@@ -24839,7 +24839,6 @@ AIcomet () {
         x=$(get_header -q $hdr AC_BGSUB)
         test "$x" && ! test $x == "$(basename $bgfit10)" && skip_cosub=""
     fi
-   
 
     # check content of already present region files
     if [ "$skip_cosub" ]
@@ -25367,10 +25366,14 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
         echo "# newmag in r=$rad, mcorr=$newmagcorr"
         
         newid=0
+        if [ ! -e $newphot ]
+        then
+            echo "# fwhm=$fwhm  rad=$rad  gap=$gap  xrad=$xrad" >> $newphot
+            test -e $cosubmult && touch -r $cosubmult $newphot
+        fi
         if grep -q -iwE "^circle" x.newphot.reg
         then
             # do aperture photometry on $residimg
-            echo "# fwhm=$fwhm  rad=$rad  gap=$gap  xrad=$xrad" >> $newphot
             echo "$(date +'%H:%M:%S') aperture photometry of new/corrected stars ..." >&2
             reg2xy $ststack x.newphot.reg > $tmpdat1
             xymatch $tmpdat1 $tmpphot $xrad > $tmpdat2
@@ -27576,9 +27579,9 @@ ds9cmd () {
                     echo "reusing bg gradient image $bgimg"
                     # show stats only
                     test "$AI_DEBUG" &&
-                        echo "# AIbgmap -stats -x 75 -q ../$set.$ext $bsize 1 ../$mask $bgmult" >&2
+                        echo "# AIbgmap $opts -stats -x 75 -q ../$set.$ext $bsize 1 ../$mask $bgmult" >&2
                     (cd bgcorr
-                    AIbgmap -stats -x 75 -q ../$set.$ext $bsize 1 ../$mask $bgmult)
+                    AIbgmap $opts -stats -x 75 -q ../$set.$ext $bsize 1 ../$mask $bgmult)
                 else
                     test "$AI_DEBUG" &&
                         echo "AIbgmap $opts -d -m -x 75 -q ../$set.$ext $bsize 1 ../$mask $bgmult" >&2
@@ -28534,6 +28537,8 @@ AIsetinfo () {
                 x=$(get_header $sname.head AI_RMSG); test "$x" && rms=$x
                 x=$(get_header $sname.head AI_BGG);  test "$x" && bg=$x
                 x=$(get_header $sname.head AI_FWHM); test "$x" && fwhm=$x
+                x=$(get_header -q $sname.head AI_BGOFF)
+                test "$x" && bg=$((bg-x))
             fi
         else
             # examine rawfile
@@ -28976,6 +28981,7 @@ EOF
         local texp
         local nexp
         local bg
+        local bgoff
         local rms
         local fwhm
         local alt
@@ -29072,6 +29078,9 @@ EOF
         moon=$(get_header -q -s $hdr AI_MOP,AI_MOD,AI_MOALT | tr '\n' ' ' | \
             awk '{if($3>0){printf("%.2f,%d,%d", $1, $2, $3)}}')
         line=$(pyaltaz $(dirname $f) $sname)
+        # remove offset from bg
+        bgoff=$(get_header -q $hdr AI_BGOFF)
+        test "$bgoff" && test "$bg" != "-" && bg=$((bg-bgoff))
         
         if [ $? -eq 0 ]
         then

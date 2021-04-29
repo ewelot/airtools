@@ -614,16 +614,14 @@ def cleanbadpixel(param):
     exit()
 
 # subtract background image (scaled and downsized)
-# syntax: imbgsub [-f] [-o inoff] [-bgm bgmult] [-m outmult] [-b outbg] inpnm bgimg outpnm
+# syntax: imbgsub [-f] [-bgm bgmult] [-m outmult] [-b outbg] inpnm bgimg outpnm
 # processing:
 #   - divide bgimg by bgmult and resize to fit inpnm
-#   - subtract inoff from inpnm
 #   - subtract modified bgimg
 #   - multiply by outmult and shift bg to match outbg
 def imbgsub(param):
     outfmt='ppm'
     outstrip=True
-    inoff=0
     bgmult=0
     outmult=1
     outbg=1000
@@ -631,9 +629,6 @@ def imbgsub(param):
         outfmt='fits'
         outstrip=False
         del param[0]
-    if(param[0]=='-o'):
-        inoff=float(param[1])
-        del param[0:2]
     if(param[0]=='-bgm'):
         bgmult=float(param[1])
         del param[0:2]
@@ -661,7 +656,7 @@ def imbgsub(param):
     bgimg2=bgimg.linear(1/bgmult, 0).resize(xscale, vscale=yscale, centre=True)
 
     # subtract bgimg2
-    outimg=inimg.linear(1, inoff).subtract(bgimg2).linear(outmult, outbg).rint().cast('ushort')
+    outimg=inimg.subtract(bgimg2).linear(outmult, outbg).rint().cast('ushort')
 
     # output
     # writing output image
