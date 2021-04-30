@@ -19,6 +19,7 @@ AI_VERSION="5.0.2"
 CHANGELOG
     5.0.2 - 30 Apr 2021
         * AIccd: bugfix to correctly apply -a <add> on RGB images
+        * AIlist: bugfix to correctly compute azimuth
         * AIraw2rgb: added option -a <add>
         * AIregister: catch error from kappasigma (if n2<3)
 
@@ -29095,10 +29096,6 @@ EOF
         moon=$(get_header -q -s $hdr AI_MOP,AI_MOD,AI_MOALT | tr '\n' ' ' | \
             awk '{if($3>0){printf("%.2f,%d,%d", $1, $2, $3)}}')
         line=$(pyaltaz $(dirname $f) $sname)
-        # remove offset from bg
-        bgoff=$(get_header -q $hdr AI_BGOFF)
-        test "$bgoff" && test "$bg" != "-" && bg=$((bg-bgoff))
-        
         if [ $? -eq 0 ]
         then
             set - $(echo $line)
@@ -29109,6 +29106,9 @@ EOF
         test -z "$alt"  && alt="-1"
         test -z "$az"   && az="-1"
         test -z "$moon" && moon="-"
+        # remove offset from bg
+        bgoff=$(get_header -q $hdr AI_BGOFF)
+        test "$bgoff" && test "$bg" != "-" && bg=$((bg-bgoff))
         
         # print basic info
         if [ "$do_icq" ]
