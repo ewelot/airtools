@@ -14,9 +14,14 @@
 # - in order to use SAOImage DS9 analysis tasks (via AIexamine) you must
 #   have installed files airds9.ana and aircmd.sh
 ########################################################################
-AI_VERSION="5.0.1"
+AI_VERSION="5.0.2"
 : << '----'
 CHANGELOG
+    5.0.2 - 30 Apr 2021
+        * AIccd: bugfix to correctly apply -a <add> on RGB images
+        * AIraw2rgb: added option -a <add>
+        * AIregister: catch error from kappasigma (if n2<3)
+
     5.0.1 - 29 Apr 2021
         * phot2icq: apply new ICQ keys for GAIA (BG for GBP mag)
         * AIcomet:
@@ -5475,7 +5480,7 @@ kappasigma () {
         test "$verbose" &&
             printf "# i=%d  md=%.1f sd=%.1f  skip=%d\n" $i $md $sd $((n-n2)) >&2
         test $n2 -lt 4 &&
-            echo "ERROR: too few data samples (n2<4)." >&2 && return 255
+            echo "ERROR: too few data samples (n2<3)." >&2 && return 255
         test $n2 -eq $n1 && break
     done
     if [ "$do_print_n" ]
@@ -14238,16 +14243,18 @@ AIraw2rgb () {
     local quality=3         # 0=bilinear, 1=VNG, 2=PPG, 3=AHD
     local apply_color_mult  # if set dcraw then color channel multipliers
                             # are applied
+    local add=0
     local scale=1           # intensity scaling, only applied on fitsbayer images
     local bayer_pattern     # Bayer matrix pattern (gray FITS)
     local doff=0            # offset of dark counts (FITS only)
     local do_ccdregion      # if set then crop to AI_CCDREGION
     local do_flip
     local i
-    for i in $(seq 1 8)
+    for i in $(seq 1 9)
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-q" && quality=$2 && shift 2
+        test "$1" == "-a" && add=$2 && shift 2
         test "$1" == "-s" && scale=$2 && shift 2
         test "$1" == "-c" && do_ccdregion=1 && shift 1
         test "$1" == "-f" && do_flip=1 && shift 1
@@ -14308,13 +14315,18 @@ AIraw2rgb () {
             i4=$(echo $(basename $img) | awk '{printf("%04d", 1*$1)}')
             is_integer $i4 &&
                 oscorr=$(grep -w "^$i4" "$AI_OVERSCAN" | awk -v zero=$oszero '{
-                    printf("%.1f", zero-$2)}')
+                    printf("%.0f", zero-$2)}')
             test -z "$oscorr" && echo "WARNING: no overscan value found for $i4" >&2
         fi
         test "$AI_DEBUG" && param="$param -v"
         test "$AI_DEBUG" && echo dcraw-tl -c $param -o 0 -l $img >&2
-        test -z "$oscorr" && dcraw-tl -c $param -o 0 -l $img
-        test    "$oscorr" && dcraw-tl -c $param -o 0 -l $img | pnmccdred -a $oscorr - -
+        test "$oscorr" && add=$((add + oscorr))
+        if [ $add -eq 0 ]
+        then
+            dcraw-tl -c $param -o 0 -l $img
+        else
+            dcraw-tl -c $param -o 0 -l $img | pnmccdred -a $add - -
+        fi
     else
         # flip, scale, dark, flat, debayer
         opts=""
@@ -14336,7 +14348,12 @@ AIraw2rgb () {
         fi
         #echo "# flippat=$flippat method=$method" >&2
         bayer2rgb -f $flippat -m $method -b 16 -s -t -w $1 -v $2 -i $tmpraw -o $tmptif
-        convert $tmptif ppm:-
+        if [ $add -eq 0 ]
+        then
+            convert $tmptif ppm:-
+        else
+            convert $tmptif ppm:- | pnmccdred -a $add - -
+        fi
     fi
     rm -f $tmpraw $tmptif
 }
@@ -18228,7 +18245,7 @@ AIccd () {
                             # images instead of rgb
     local quality=3         # set demosaicing algorithm ("quality"):
                             # 0=bilinear, 1=VNG, 2=PPG, 3=AHD
-    local add=0             # add offset to output image (applies only to gray images)
+    local add=0             # add offset to output image
     local doff=0            # offset of dark counts (FITS only)
     local is_calibrated     # if set ignore dark and flat
     local i
@@ -18539,16 +18556,16 @@ EOF
             if is_pgm $flat || [ -z "$flat" ]
             then
                 test "$AI_DEBUG" && echo "AI_DCRAWPARAM=\"$AI_DCRAWPARAM $dcrawopts\" \
-                AIraw2rgb $opts -q $quality $fname \"$dark\" \"$bad\" \"$flat\" > $tdir/$num.$ext"
+                AIraw2rgb $opts -a $add -q $quality $fname \"$dark\" \"$bad\" \"$flat\" > $tdir/$num.$ext"
                 AI_DCRAWPARAM="$AI_DCRAWPARAM $dcrawopts" \
-                AIraw2rgb $opts -q $quality $fname "$dark" "$bad" "$flat" > $tdir/$num.$ext
+                AIraw2rgb $opts -a $add -q $quality $fname "$dark" "$bad" "$flat" > $tdir/$num.$ext
                 retval=$?
             else
                 test "$AI_DEBUG" && echo "AI_DCRAWPARAM=\"$AI_DCRAWPARAM $dcrawopts\" \
-                AIraw2rgb $opts -q $quality $fname \"$dark\" \"$bad\"  | \
+                AIraw2rgb $opts -a $add -q $quality $fname \"$dark\" \"$bad\"  | \
                     pnmccdred -s \"$flat\" -m $fnorm - $tdir/$num.$ext"
                 AI_DCRAWPARAM="$AI_DCRAWPARAM $dcrawopts" \
-                AIraw2rgb $opts -q $quality $fname "$dark" "$bad" | \
+                AIraw2rgb $opts -a $add -q $quality $fname "$dark" "$bad" | \
                     pnmccdred -s "$flat" -m $fnorm - $tdir/$num.$ext
                 retval=$?
             fi
@@ -19333,7 +19350,6 @@ EOF
             local a
             local e
             local fw
-            local has_poor_match
 			local inldac=$(mktemp "$tdir/tmp_inldac_XXXXXX.fits")
 			local xydat=$(mktemp "$tdir/tmp_xy_XXXXXX.dat")
 			local xmldat=$(mktemp "$tdir/tmp_scamp_XXXXXX.xml")
@@ -19375,10 +19391,8 @@ EOF
                 echo "WARNING: reusing ${acat%.*}.head." >&2
             else
                 # set posmaxerr in arcmin, anglemaxerr in degrees
-                #posmaxerr=$(echo "0.1*($w+$h)/2*$pixscale/60" | bc -l)
-                posmaxerr=$(echo "0.1*($w+$h)/2*$pscale*60" | bc -l)
+                posmaxerr=$(echo "0.15*($w+$h)/2*$pscale*60" | bc -l)
                 anglemaxerr=10
-                # 151016: 0.3 -> 0.5
                 test "$has_poor_pos" &&
                     posmaxerr=$(echo "0.5*($w+$h)/2*$pscale*60" | bc -l) &&
                     anglemaxerr=40
@@ -19581,14 +19595,16 @@ EOF
                 dm=$(grep "^[ ]*$id " $xydat | awk -v mref=$mref '{printf("%.2f", mref-$7)}')
                 printf "%6s %6s  %5.2f  %5.2f\n" $idref $id $mm $dm
             done | sort -n -k3,3 | (head -$nmag; dd of=/dev/null status=none) > $tmp2
-            if [ $nmag -lt 3 ]
+            dm=-2
+            dmsd=99
+            if [ $nmag -ge 3 ]
             then
-                dm=-2
-                dmsd=99
-            else
-                set - $(kappasigma $tmp2 4)
-                dm=$(echo $1 | awk '{printf("%.3f", $1)}')
-                dmsd=$(echo $2 | awk '{printf("%.3f", $1)}')
+                set - $(kappasigma $tmp2 4 || echo error)
+                if [ "$1" != "error" ]
+                then
+                    dm=$(echo $1 | awk '{printf("%.3f", $1)}')
+                    dmsd=$(echo $2 | awk '{printf("%.3f", $1)}')
+                fi
             fi
 
             # na, dasd are undefined/unset (0)
@@ -26430,6 +26446,7 @@ EOF
 
 AIbadpix () {
     # find badpixel by analyzing local deviation in a flat field image
+    # note: superseeded by AIfindbad which also works for darks or lights
     local showhelp
     local thres=40
     local i
