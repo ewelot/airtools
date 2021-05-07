@@ -3,7 +3,7 @@
 # airfun.sh
 #   shell functions aimed towards astronomical image reduction
 #
-# Copyright: Thomas Lehmann, 2011-2020
+# Copyright: Thomas Lehmann, 2011-2021
 # License: GPL v3
 #
 # note:
@@ -14,9 +14,17 @@
 # - in order to use SAOImage DS9 analysis tasks (via AIexamine) you must
 #   have installed files airds9.ana and aircmd.sh
 ########################################################################
-AI_VERSION="5.0.2"
+AI_VERSION="5.0.3"
 : << '----'
 CHANGELOG
+    5.0.3 - 06 May 2021
+        * reactivate use of pipes with pyvips functions as the issue has been
+            fixed in libvips upstream
+        * AIcomet: derive bgmult from file name of bgfit10
+        * AIphotcal: reuse previously downloaded catalog
+        * AIplot: avoid start value of 0 for fit coefficient a0
+        * sexselect: remove left over temp files
+
     5.0.2 - 30 Apr 2021
         * AIccd: bugfix to correctly apply -a <add> on RGB images
         * AIlist: bugfix to correctly compute azimuth
@@ -5585,6 +5593,25 @@ roi2xy () {
     #   x ncoo int16, y ncoo int16
     # if subpixel==1 (options 128) then additionally
     #   xf ncoo float32, xf ncoo float 32
+}
+
+# merge png into hotpixel text file (write to stdout)
+merge_hotpix () {
+    local newpng=$1
+    local olddat=$2
+    local tdir=${$AI_TMPDIR:-"/tmp"}
+    local tmpdat1=$(mktemp $tdir/tmp_dat1_XXXXXX.dat)
+    local tmpdat2=$(mktemp $tdir/tmp_dat2_XXXXXX.dat)
+    local tmpnew=$(mktemp $tdir/tmp_new_XXXXXX.dat)
+    
+    test $# -ne 2 &&
+        echo "usage: merge_hotpix <newpng> <oldhotpixdat>" >&2 && return 255
+    
+    AIval -a -c -1 $newpng | awk '{print $1" " $2}' | sort -n > $tmpdat1
+    cat $olddat | awk '{print $1" " $2}' | sort -n > $tmpdat2
+    comm -23 $tmpdat1 $tmpdat2 > $tmpnew
+    cat $olddat
+    cat $tmpnew | awk -v d=$day '{printf("%4d %4d 1 # %s\n", $1, $2, d)}'
 }
 
 # get telescope identifiers from iTelescope log files
@@ -12058,7 +12085,7 @@ sexselect () {
             fi
         fi
     fi
-    rm $tmp1 $tmp2 $tmp3 $cmds $tmpcat
+    rm $tmp1 $tmp2 $tmp3 $tmp4 $cmds $tmpcat
     return
 }
 
@@ -16467,6 +16494,11 @@ AIplot () {
         xm=$(median $tmp1 1)
         ym=$(median $tmp1 2)
     fi
+    # avoid start value of 0 for fit coefficient a0
+    if [ "$(echo $ym | awk '{print 1*$1}')" == "0" ]
+    then
+        ym=$(minmax $tmp1 2 | awk '{printf("%f", 0.05*($2-$1))}')
+    fi
 
     # determine terminal type
     if [ "$printfile" ]
@@ -16540,6 +16572,7 @@ AIplot () {
     fi
     
     # linear fit
+    # TODO: make better guess on start values of coefficients
     test -z "$nofit" && echo "f1(x) = a0 + a1*(x-$xm)
         a0 = $ym; a1 = 0.1
         fit f1(x) '$tmp1' using 1:2 via a0, a1" >> $tmp2
@@ -23365,7 +23398,7 @@ AIphotcal () {
     centerdeg=$(echo "object ${cxy//,/ }" | xy2rade -f - $whead | awk '{printf("%s %s", $1, $2)}')
     echo "# centerdeg=$centerdeg" >&2
     #echo $centerdeg >&2
-    if [ -s phot/$setname.$catalog.dat ] && [ -s phot/$setname.$catalog.xy.dat ]
+    if [ -s phot/$setname.$catalog.dat ]
     then
         echo "reusing photometric reference catalog phot/$setname.$catalog.dat" >&2
     else
@@ -24749,7 +24782,7 @@ AIcomet () {
     local magzero
     local mcorr
     local str
-    local bgmult=10     # TODO: get value from image header?
+    local bgmult        # get value from image header?
     local cosubmult     # trail subtracted and scaled result image stored in $codir
     local bgmn
     local bgsd
@@ -24911,6 +24944,20 @@ AIcomet () {
     copos=$(echo $omove | tr ',@' ' ' | awk -v h=$h '{printf("%.0f %.0f", $3, h-$4)}')
     #echo "# omove=$omove  copos=$copos" >&2
 
+    # determine bgmult
+    if [ -f $hdr ]
+    then
+        bgmult=$(get_header -q $hdr AI_BGMUL)
+    fi
+    if [ -z "$bgmult" ]
+    then
+        x=$(echo $bgfit10 | cut -d '.' -f2 | tr -d '[a-zA-Z]')
+        is_integer $x && bgmult=$x
+    fi
+    test -z "$bgmult" &&
+        echo "WARNING: unable to determine bgmult, assuming bgmult=10" >&2 &&
+        bgmult=10
+
     # subtract stars and star trails (if not using already existing files)
     if [ ! "$skip_cosub" ]
     then
@@ -25048,8 +25095,9 @@ AIcomet () {
             # bg subtraction and scaling of non-bgs costack, subtract trails, bluring
             test "$AI_DEBUG" &&
                 echo "# imbgsub -m $comult $costack $bgfit10 \"\" $bgmult \"\" $outbg" >&2
-            imbgsub -m $comult ${costack/.bgs/} $bgfit10 "" $bgmult "" $outbg > $tmpim2
-            pnmccdred2 -d $tmpim1 $tmpim2 $cosubmult
+            # using pyvips with pipes
+            imbgsub -m $comult ${costack/.bgs/} $bgfit10 "" $bgmult "" $outbg | \
+                pnmccdred2 -d $tmpim1 - $cosubmult
             imblur -b $blur $cosubmult > $coblur
         else
             if [ $comult -gt 1 ]
@@ -25272,6 +25320,7 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
             printf("%.0f", b-$1)
             if(NF==3) {printf(",%.0f,%.0f", b-$2, b-$3)}
             }')
+        # using pyvips with pipes
         imcrop -1 $cosub $whxy | pnmccdred2 -a $x - $tmpim1
         pnmccdred2 -m 0 -a $psfoff $tmpim1 - | \
             pnmcomp -alpha $tmpmask $tmpim1 > $tmpim2
@@ -25501,6 +25550,7 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
                     printf("%.0f", b-$1)
                     if(NF==3) {printf(",%.0f,%.0f", b-$2, b-$3)}
                     }')
+                # using pyvips with pipes
                 imcrop -1 $cosub $whxy | pnmccdred2 -a $x - $tmpim1
                 # AIpsfmask -q -m $tmpmask $tmpim1 $tmpim2 $psfoff
                 pnmccdred -m 0 -a $psfoff $tmpim1 - | \
@@ -25541,8 +25591,9 @@ global color=green dashlist=8 3 width=1 font=\"helvetica 10 normal roman\" " \
                 # scale up star trail image
                 pnmccdred2 -m 10 $gentrails $tmpim1
                 # bg subtraction and scaling of non-bgs costack, subtract trails, bluring
-                imbgsub -m $comult ${costack/.bgs/} $bgfit10 "" $bgmult "" $outbg > $tmpim2
-                pnmccdred2 -d $tmpim1 $tmpim2 $cosubmult
+                # using pyvips with pipes
+                imbgsub -m $comult ${costack/.bgs/} $bgfit10 "" $bgmult "" $outbg | \
+                    pnmccdred2 -d $tmpim1 - $cosubmult
                 imblur -b $blur $cosubmult > $coblur
             else
                 if [ $comult -gt 1 ]

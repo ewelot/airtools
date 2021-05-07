@@ -1,4 +1,10 @@
-airtools (4.0.2-1) UNRELEASED; urgency=medium
+airtools (4.0.3-1) experimental; urgency=medium
+
+  * Update to airfun.sh version 5.0.3
+
+ -- Thomas Lehmann <t.lehmann@mailbox.org>  Fri, 07 May 2021 12:42:51 +0200
+
+airtools (4.0.2-1) experimental; urgency=medium
 
   * Update to airfun.sh version 5.0.2
 

@@ -4,7 +4,7 @@
 # airtools-cli
 #   AIRTOOLS tasks command-line interface
 #
-# Copyright: Thomas Lehmann, 2018-2020
+# Copyright: Thomas Lehmann, 2018-2021
 # License: GPL v3
 #
 # note: the following environment variables may be used
@@ -18,8 +18,8 @@
 ########################################################################
 AOVARS="AO_FLATS AO_LIGHT AO_BGVAR AO_REGIS AO_STACK AO_AMASK AO_ACOOR AO_ABINN"
 
-VERSION="1.3.1"
-VINFO="T. Lehmann, Apr. 2021"
+VERSION="1.3.2"
+VINFO="T. Lehmann, May. 2021"
 PINFO="\
     options:
       -h            show this help text
@@ -33,6 +33,9 @@ PINFO="\
       task          run given task    
 "
 CHANGELOG="
+    1.3.2 - 04 May 2021
+        * costack: bugfix: properly set OBJECT keyword
+
     1.3.1 - 30 Apr 2021
         * bgvar: take offset into account when plotting background values
 
@@ -1239,8 +1242,12 @@ _badpix () {
     tellist=$(AIsetinfo -b | grep -w o | awk '{printf("%s\n", $11)}' | sort -u)
     ! match proc "$SKIPPARTS" && for tel in $tellist
     do
-        #test -e badpix.${tel,,}.png &&
-        #    echo "WARNING: reusing existing badpix.${tel,,}.png" && continue
+        if [ -e badpix.${tel,,}.png ]
+        then
+            test ! -e badpix.${tel,,}.old.png &&
+                mv badpix.${tel,,}.png badpix.${tel,,}.old.png
+            # echo "WARNING: reusing existing badpix.${tel,,}.png" && continue
+        fi
         telsetlist=$(AIsetinfo -o | awk -v t=$tel -v sl="$(echo $slist)" '{
             if (tolower($12)==tolower(t) && $9>3 && sl~$1) {print $1}}')
         test -z "$telsetlist" && continue
@@ -1973,7 +1980,7 @@ _costack () {
         test $? -ne 0 && retval=255 && continue
         
         # setting some header keywords
-        set_header ${set}_m.head OBJECT=$target
+        set_header ${set}_m.head OBJECT=$(get_header -q $set.head OBJECT)
         set_header $set.head AI_COMST=${set}_m.$ext
     done
 
@@ -2127,7 +2134,7 @@ _ds9cmd () {
             error "missing header file $set.head"
     fi
     # check for running SAOImage AIRTOOLS
-    if [ "$cmd" != "photcal" ]
+    if [ "$cmd" != "photcal" ] && [ "$cmd" != "manualdata" ]
     then
         xpaaccess -c -t "2,2" AIRTOOLS > /dev/null
         if [ $? -eq 0 ]
