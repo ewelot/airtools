@@ -14,10 +14,11 @@
 <?import javafx.scene.layout.HBox?>
 <?import javafx.scene.layout.RowConstraints?>
 <?import javafx.scene.layout.VBox?>
+<?import javafx.scene.text.Font?>
 
-<AnchorPane id="AnchorPane" fx:id="paneNewProject" xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="tl.airtoolsgui.controller.NewProjectController">
+<AnchorPane id="AnchorPane" fx:id="paneNewProject" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" prefHeight="416.0" prefWidth="536.0" xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="tl.airtoolsgui.controller.NewProjectController">
    <children>
-      <VBox spacing="8.0">
+      <VBox spacing="8.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
          <children>
             <VBox spacing="16.0">
                <children>
@@ -27,50 +28,61 @@
                         <DatePicker fx:id="dpDay" editable="false" onAction="#handleDpDayAction" />
                      </children>
                   </HBox>
-                  <GridPane maxWidth="1.7976931348623157E308" vgap="8.0">
+                  <GridPane vgap="8.0">
                     <columnConstraints>
                       <ColumnConstraints fillWidth="false" />
-                      <ColumnConstraints hgrow="ALWAYS" />
-                        <ColumnConstraints fillWidth="false" />
+                      <ColumnConstraints fillWidth="false" minWidth="150.0" />
+                        <ColumnConstraints hgrow="ALWAYS" minWidth="100.0" />
+                        <ColumnConstraints fillWidth="false" minWidth="30.0" />
                     </columnConstraints>
                     <rowConstraints>
-                      <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
-                      <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
-                        <RowConstraints minHeight="10.0" prefHeight="30.0" vgrow="SOMETIMES" />
+                      <RowConstraints vgrow="SOMETIMES" />
+                      <RowConstraints vgrow="SOMETIMES" />
+                        <RowConstraints vgrow="SOMETIMES" />
+                        <RowConstraints maxHeight="10.0" minHeight="10.0" prefHeight="10.0" vgrow="SOMETIMES" />
+                        <RowConstraints vgrow="SOMETIMES" />
+                        <RowConstraints vgrow="SOMETIMES" />
+                        <RowConstraints vgrow="SOMETIMES" />
                     </rowConstraints>
                      <children>
                         <Label text="Project Directory:  " />
-                        <TextField fx:id="tfProjectDir" GridPane.columnIndex="1" />
-                        <Button fx:id="buttonBrowseProjectDir" mnemonicParsing="false" onAction="#handleButtonBrowseProjectDirAction" text="Browse" GridPane.columnIndex="2" />
+                        <TextField fx:id="tfProjectDir" prefHeight="26.0" prefWidth="327.0" GridPane.columnIndex="1" GridPane.columnSpan="2" GridPane.hgrow="ALWAYS" />
+                        <Button fx:id="buttonBrowseProjectDir" mnemonicParsing="false" onAction="#handleButtonBrowseProjectDirAction" text="Browse" GridPane.columnIndex="3" />
                         <Label text="Raw Images Dir:  " GridPane.rowIndex="1" />
-                        <TextField fx:id="tfRawDir" GridPane.columnIndex="1" GridPane.rowIndex="1" />
-                        <Button fx:id="buttonBrowseRawDir" mnemonicParsing="false" onAction="#handleButtonBrowseRawDirAction" text="Browse" GridPane.columnIndex="2" GridPane.rowIndex="1" />
+                        <TextField fx:id="tfRawDir" prefHeight="26.0" prefWidth="328.0" GridPane.columnIndex="1" GridPane.columnSpan="2" GridPane.hgrow="ALWAYS" GridPane.rowIndex="1" />
+                        <Button fx:id="buttonBrowseRawDir" mnemonicParsing="false" onAction="#handleButtonBrowseRawDirAction" text="Browse" GridPane.columnIndex="3" GridPane.rowIndex="1" />
                         <Label text="Temp. Directory:  " GridPane.rowIndex="2" />
-                        <TextField fx:id="tfTempDir" GridPane.columnIndex="1" GridPane.rowIndex="2" />
-                        <Button fx:id="buttonBrowseTempDir" mnemonicParsing="false" onAction="#handleButtonBrowseTempDirAction" text="Browse" GridPane.columnIndex="2" GridPane.rowIndex="2" />
+                        <TextField fx:id="tfTempDir" prefHeight="26.0" prefWidth="322.0" GridPane.columnIndex="1" GridPane.columnSpan="2" GridPane.hgrow="ALWAYS" GridPane.rowIndex="2" />
+                        <Button fx:id="buttonBrowseTempDir" mnemonicParsing="false" onAction="#handleButtonBrowseTempDirAction" text="Browse" GridPane.columnIndex="3" GridPane.rowIndex="2" />
+                        <Label text="Observatory Site:" GridPane.rowIndex="4" />
+                        <ComboBox fx:id="cbSite" editable="true" minWidth="120.0" GridPane.columnIndex="1" GridPane.rowIndex="4" />
+                        <Label text="ICQ Observer ID:" GridPane.rowIndex="5" />
+                        <TextField fx:id="tfObsID" minWidth="100.0" prefWidth="100.0" promptText="OBSxx" GridPane.columnIndex="1" GridPane.rowIndex="5" />
+                        <Label text="TZ Offset:" GridPane.rowIndex="6" />
+                        <Spinner fx:id="spinnerTZOffset" minWidth="100.0" prefWidth="100.0" GridPane.columnIndex="1" GridPane.rowIndex="6" />
                      </children>
                      <padding>
                         <Insets top="16.0" />
                      </padding>
                   </GridPane>
-                  <HBox alignment="CENTER_LEFT" spacing="8.0">
+                  <HBox prefHeight="100.0" prefWidth="200.0">
                      <children>
-                        <Label text="Observatory Site:" />
-                        <ComboBox fx:id="cbSite" editable="true" minWidth="100.0" prefWidth="200.0" />
-                        <Label text="TZ Offset:">
+                        <Label fx:id="tfErrorMsg" text="ERROR: some form error exists" textFill="#eb1010">
                            <padding>
-                              <Insets left="8.0" />
+                              <Insets top="8.0" />
                            </padding>
+                           <font>
+                              <Font size="14.0" />
+                           </font>
                         </Label>
-                        <Spinner fx:id="spinnerTZOffset" minWidth="100.0" prefWidth="100.0" />
                      </children>
                   </HBox>
                </children>
                <padding>
-                  <Insets bottom="64.0" left="16.0" right="16.0" top="32.0" />
+                  <Insets bottom="16.0" left="16.0" right="16.0" top="32.0" />
                </padding>
             </VBox>
-            <HBox maxWidth="1.7976931348623157E308" spacing="16.0">
+            <HBox spacing="16.0">
                <children>
                   <Button mnemonicParsing="false" onAction="#handleButtonCancelAction" text="Cancel">
                      <padding>

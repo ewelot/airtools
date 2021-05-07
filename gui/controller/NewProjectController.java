@@ -31,16 +31,15 @@ import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.SimpleIntegerProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
-import javafx.collections.FXCollections;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.scene.Node;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
-import javafx.scene.control.ChoiceBox;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.DatePicker;
+import javafx.scene.control.Label;
 import javafx.scene.control.Spinner;
 import javafx.scene.control.SpinnerValueFactory;
 import javafx.scene.control.TextField;
@@ -74,13 +73,18 @@ public class NewProjectController implements Initializable {
     @FXML
     private ComboBox<String> cbSite;
     @FXML
+    private TextField tfObsID;
+    @FXML
     private Spinner<Integer> spinnerTZOffset;
+    @FXML
+    private Label tfErrorMsg;
 
     private SimpleLogger logger;
     private StringProperty projectDir = new SimpleStringProperty();
     private StringProperty rawDir = new SimpleStringProperty();
     private StringProperty tempDir = new SimpleStringProperty();
     private StringProperty site = new SimpleStringProperty();
+    private StringProperty obsID = new SimpleStringProperty();
     private IntegerProperty tzoff = new SimpleIntegerProperty();
     
     private final List<String> siteList = new ArrayList<>();
@@ -97,18 +101,21 @@ public class NewProjectController implements Initializable {
     
     
     public void setReferences (String airtoolsConfFileName, SimpleLogger logger, StringProperty projectDir, StringProperty rawDir,
-            StringProperty tempDir, StringProperty site, IntegerProperty  tzoff) {
+            StringProperty tempDir, StringProperty site, StringProperty obsID, IntegerProperty  tzoff) {
         this.airtoolsConfDir = new File(new File(airtoolsConfFileName).getParent()).getAbsolutePath();
         this.logger=logger;
         this.projectDir=projectDir;
         this.rawDir=rawDir;
         this.tempDir=tempDir;
         this.site=site;
+        this.obsID=obsID;
         this.tzoff=tzoff;
         
+        tfErrorMsg.setText("");
         tfProjectDir.setText(projectDir.getValue());
         tfRawDir.setText(rawDir.getValue());
         tfTempDir.setText(tempDir.getValue());
+        tfObsID.setText(obsID.getValue());
         handleDpDayAction(null);
         
         // TODO: initialize spinnerTZOffset
@@ -285,12 +292,28 @@ public class NewProjectController implements Initializable {
         }
     }
 
-    @FXML
-    private void handleButtonCancelAction(ActionEvent event) {
-        System.out.println("NewProjectController: Cancel");
-        closeStage(event);
+    
+    private boolean hasFormError () {
+        // check for new project directory
+        File pDir = new File(tfProjectDir.getText());
+        if (pDir.exists()) {
+            // TODO: show alert if directory exists and is not empty
+            tfErrorMsg.setText("ERROR: project directory already exists");
+            return true;
+        }
+        
+        // check for site entry
+        if (cbSite.getSelectionModel().getSelectedItem().isBlank()) {
+            tfErrorMsg.setText("ERROR: the site entry is missing");
+            return true;
+        }
+        
+        // no errors found
+        tfErrorMsg.setText("");
+        return false;
     }
-
+    
+    
     @FXML
     private void handleButtonApplyAction(ActionEvent event) {
         System.out.println("NewProjectController: Apply");
@@ -300,16 +323,35 @@ public class NewProjectController implements Initializable {
         DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyMMdd");
         String day = dpDay.getValue().format(fmt);
 
+        if (hasFormError()) {
+            return;
+        }
+        
         try {
             // create project directory
-            File pDir = new File(tfProjectDir.getText());
-            if (! pDir.exists()) {
-                pDir.mkdirs();
-            } else {
-                // TODO: show alert if directory exists and is not empty
-                logger.log("WARNING: project directory " + tfProjectDir.getText() + " already exists");
+            File newDir = new File(tfProjectDir.getText());
+            if (newDir.exists()) {
+                tfErrorMsg.setText("ERROR: the project directory already exists");
                 return;
+            } else {
+                if (! newDir.mkdirs()) {
+                    tfErrorMsg.setText("ERROR: cannot create the project directory");
+                    return;
+                }
             }
+            // create temp directory
+            newDir = new File(tfTempDir.getText());
+            if (newDir.exists()) {
+                logger.log("WARNING: the temp directory already exists");
+            } else {
+                if (! newDir.mkdirs()) {
+                    tfErrorMsg.setText("ERROR: cannot create the temp directory");
+                    return;
+                }
+            }
+            // check raw directory
+            newDir = new File(tfRawDir.getText());
+            if (! newDir.exists()) logger.log("WARNING: raw files directory does not yet exist");
 
             // create .airtoolsrc
             String rcFileName = tfProjectDir.getText() + "/.airtoolsrc";
@@ -321,30 +363,31 @@ public class NewProjectController implements Initializable {
                 printWriter.printf("export AI_RAWDIR=%s\n", tfRawDir.getText());
                 printWriter.printf("export AI_TMPDIR=%s\n", tfTempDir.getText());
                 printWriter.printf("export AI_SITE=%s\n", cbSite.getSelectionModel().getSelectedItem());
+                if (tfObsID.getText().isBlank()) {
+                    printWriter.printf("export AI_OBSERVER=%s\n", "OBSxx");
+                } else {
+                    printWriter.printf("export AI_OBSERVER=%s\n", tfObsID.getText());
+                }
                 printWriter.printf("export AI_TZOFF=%s\n", spinnerTZOffset.getValue());
                 printWriter.printf("export AI_EXCLUDE=\"\"\n");
                 printWriter.close();
                 
-                // create temp directory
-                File tDir = new File(tfTempDir.getText());
-                if (! tDir.exists()) tDir.mkdirs();
-
                 // update StringProperties
                 rawDir.setValue(tfRawDir.getText());
                 tempDir.setValue(tfTempDir.getText());
                 site.setValue(cbSite.getSelectionModel().getSelectedItem());
+                obsID.setValue(tfObsID.getText());
                 tzoff.setValue(spinnerTZOffset.getValue());
             }
             
-            // copy parameter files
+            // copy parameter files into project directory
+            String[] parameterFileNames = {"camera.dat", "sites.dat", "refcat.dat"};
             Path oldPath = null;
             Path newPath = null;
             Path distPath = null;
             File oldFile = null;
             File newFile = null;
             File distFile = null;
-            // copy parameter files into project directory
-            String[] parameterFileNames = {"camera.dat", "sites.dat", "refcat.dat"};
             for (String fileName : parameterFileNames) {
                 oldPath=Paths.get(airtoolsConfDir + "/" + fileName);
                 newPath=Paths.get(tfProjectDir.getText() + "/" + fileName);
@@ -415,5 +458,9 @@ public class NewProjectController implements Initializable {
         //alert.getDialogPane().getScene().getWindow().sizeToScene();
         alert.getDialogPane().setMinHeight(200);
         alert.showAndWait();
+    }
+
+    @FXML
+    private void handleButtonCancelAction(ActionEvent event) {
     }
 }

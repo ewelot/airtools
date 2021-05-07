@@ -167,6 +167,7 @@ public class MainController implements Initializable {
     private final StringProperty rawDir = new SimpleStringProperty();
     private final StringProperty tempDir = new SimpleStringProperty();
     private final StringProperty site = new SimpleStringProperty();
+    private final StringProperty obsID = new SimpleStringProperty();
     private final IntegerProperty tzoff = new SimpleIntegerProperty();
 
     
@@ -294,6 +295,7 @@ public class MainController implements Initializable {
         rawDir.setValue(projectProperties.getProperty("lastRawDir", "/tmp"));
         tempDir.setValue(projectProperties.getProperty("lastTempDir", "/tmp"));
         site.setValue(projectProperties.getProperty("lastSite", ""));
+        obsID.setValue(projectProperties.getProperty("lastObsID", ""));
         int i=0;
         String str = projectProperties.getProperty("lastTZOff", "0");
         if (str != null && ! str.isEmpty()) {
@@ -343,6 +345,7 @@ public class MainController implements Initializable {
         projectProperties.setProperty("lastRawDir", rawDir.getValue());
         projectProperties.setProperty("lastTempDir", tempDir.getValue());
         projectProperties.setProperty("lastSite", site.getValue());
+        projectProperties.setProperty("lastObsID", obsID.getValue());
         projectProperties.setProperty("lastTZOff", tzoff.getValue().toString());
         saveProperties(configFile);
     }
@@ -640,7 +643,7 @@ public class MainController implements Initializable {
             FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource("/tl/airtoolsgui/view/NewProject.fxml"));
             Parent parent = fxmlLoader.load();
             NewProjectController dialogController = fxmlLoader.<NewProjectController>getController();
-            dialogController.setReferences(configFile, logger, projectDir, rawDir, tempDir, site, tzoff);
+            dialogController.setReferences(configFile, logger, projectDir, rawDir, tempDir, site, obsID, tzoff);
             
             Scene scene = new Scene(parent);
             Stage stage = new Stage();
