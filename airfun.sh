@@ -14,9 +14,12 @@
 # - in order to use SAOImage DS9 analysis tasks (via AIexamine) you must
 #   have installed files airds9.ana and aircmd.sh
 ########################################################################
-AI_VERSION="5.0.3"
+AI_VERSION="5.0.4"
 : << '----'
 CHANGELOG
+    5.0.4 - 09 May 2021
+        * phot2icq: introduce new APASS catalog keys
+
     5.0.3 - 06 May 2021
         * reactivate use of pipes with pyvips functions as the issue has been
             fixed in libvips upstream
@@ -7628,9 +7631,14 @@ phot2icq () {
                 test "$catalog" && test "$pcat" != "$catalog" && continue
                 case "$pcat" in
                     tycho2) refcat="TK";;
-                    apass)  refcat="AQ";;
+                    apass)  refcat="AQ"
+                            test "$pcol" == "B" && refcat="AB"
+                            test "$pcol" == "V" && refcat="AV"
+                            test "$pcol" == "R" && refcat="AR"
+                            ;;
                     gaia*)  refcat="GG"
-                            test "$pcol" == "GB" && refcat="BG";;
+                            test "$pcol" == "GB" && refcat="BG"
+                            ;;
                     *)      refcat="--";;
                 esac
                 mag=$(get_header  $hdr AP_CMAG$x | awk '{printf("%4.1f", $1+$2)}')
@@ -24954,6 +24962,7 @@ AIcomet () {
         x=$(echo $bgfit10 | cut -d '.' -f2 | tr -d '[a-zA-Z]')
         is_integer $x && bgmult=$x
     fi
+    #test "$bgmult" && echo "# bgmult=$bgmult comult=$comult" >&2
     test -z "$bgmult" &&
         echo "WARNING: unable to determine bgmult, assuming bgmult=10" >&2 &&
         bgmult=10

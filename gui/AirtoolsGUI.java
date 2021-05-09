@@ -47,8 +47,8 @@ import tl.airtoolsgui.controller.SetupAirtoolsController;
  */
 public class AirtoolsGUI extends Application {
     
-    private final String progVersion = "4.0.3";
-    private final String progDate = "2021-05-07";
+    private final String progVersion = "4.0.4";
+    private final String progDate = "2021-05-09";
     private final String confFileName = "airtools.conf";
     private final String scriptFileName = "airtools-cli";
     
