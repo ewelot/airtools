@@ -23,6 +23,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.ResourceBundle;
+import java.util.Scanner;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
@@ -46,6 +47,8 @@ import javafx.scene.control.TextField;
 import javafx.scene.layout.AnchorPane;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
+import tl.airtoolsgui.model.Observer;
+import tl.airtoolsgui.model.SitesList;
 
 /**
  * FXML Controller class
@@ -73,9 +76,17 @@ public class NewProjectController implements Initializable {
     @FXML
     private ComboBox<String> cbSite;
     @FXML
-    private TextField tfObsID;
-    @FXML
     private Spinner<Integer> spinnerTZOffset;
+
+    @FXML
+    private TextField tfObsName;
+    @FXML
+    private TextField tfObsAddress;
+    @FXML
+    private TextField tfObsEmail;
+    @FXML
+    private TextField tfObsIcqID;
+
     @FXML
     private Label tfErrorMsg;
 
@@ -84,8 +95,8 @@ public class NewProjectController implements Initializable {
     private StringProperty rawDir = new SimpleStringProperty();
     private StringProperty tempDir = new SimpleStringProperty();
     private StringProperty site = new SimpleStringProperty();
-    private StringProperty obsID = new SimpleStringProperty();
     private IntegerProperty tzoff = new SimpleIntegerProperty();
+    private Observer observer;
     
     private final List<String> siteList = new ArrayList<>();
     private final File distDir = new File("/usr/share/airtools");
@@ -101,21 +112,24 @@ public class NewProjectController implements Initializable {
     
     
     public void setReferences (String airtoolsConfFileName, SimpleLogger logger, StringProperty projectDir, StringProperty rawDir,
-            StringProperty tempDir, StringProperty site, StringProperty obsID, IntegerProperty  tzoff) {
+            StringProperty tempDir, StringProperty site, IntegerProperty  tzoff, Observer observer) {
         this.airtoolsConfDir = new File(new File(airtoolsConfFileName).getParent()).getAbsolutePath();
         this.logger=logger;
         this.projectDir=projectDir;
         this.rawDir=rawDir;
         this.tempDir=tempDir;
         this.site=site;
-        this.obsID=obsID;
         this.tzoff=tzoff;
+        this.observer=observer;
         
         tfErrorMsg.setText("");
         tfProjectDir.setText(projectDir.getValue());
         tfRawDir.setText(rawDir.getValue());
         tfTempDir.setText(tempDir.getValue());
-        tfObsID.setText(obsID.getValue());
+        tfObsName.setText(observer.getName());
+        tfObsAddress.setText(observer.getAddress());
+        tfObsEmail.setText(observer.getEmail());
+        tfObsIcqID.setText(observer.getIcqID());
         handleDpDayAction(null);
         
         // TODO: initialize spinnerTZOffset
@@ -135,45 +149,33 @@ public class NewProjectController implements Initializable {
             cbSite.getItems().add(site.getValue());
         }
         
-        BufferedReader inFile = null;
+        File inFile = null;
         try {
-            inFile = new BufferedReader(new FileReader(airtoolsConfDir + "/sites.dat"));
-            System.out.println("Info: " + airtoolsConfDir + "/sites.dat found");
-        } catch (FileNotFoundException ex) {
-            // Logger.getLogger(CometPhotometryController.class.getName()).log(Level.SEVERE, null, ex);
-            try {
-                inFile = new BufferedReader(new FileReader(distDir.getPath() + "/sites.dat"));
-                System.out.println("Info: " + distDir.getPath() + "/sites.dat found");
-            } catch (FileNotFoundException ex2) {
-                logger.log("WARNING: file " + distDir.getPath() + "/sites.dat is missing.");
-                // Logger.getLogger(CometPhotometryController.class.getName()).log(Level.SEVERE, null, ex2);
-            }
-        }
-        if (inFile == null) return;
-        
-        String line;
-        Pattern regexp =   Pattern.compile("^[A-Z][a-zA-Z0-9]+[ ]+[a-zA-Z0-9]+[ ]+[+-]{0,1}[0-9.,]+[ ]+[+-]{0,1}[0-9.,]+[ ]+");
-        Matcher matcher = regexp.matcher("");
-        try {
-            while (( line = inFile.readLine()) != null){
-                matcher.reset(line);
-                if (matcher.find()) {
-                    String[] columns = line.split("[ ]+");
-                    if (columns.length >= 5) {
-                        // System.out.println(line);
-                        System.out.println("valid site: " + columns[1]);
-                        if (! columns[1].equals(site.getValue())) cbSite.getItems().add(columns[1]);
-                    }
+            inFile = new File (airtoolsConfDir + "/sites.dat");
+            if (inFile.exists()) {
+                System.out.println("Info: " + airtoolsConfDir + "/sites.dat found");
+            } else {
+                inFile = new File (distDir.getPath() + "/sites.dat");
+                if (inFile.exists()) {
+                    System.out.println("Info: " + distDir.getPath() + "/sites.dat found");
+                } else {
+                    logger.log("WARNING: file " + distDir.getPath() + "/sites.dat is missing.");
+                    return;
                 }
             }
-        } catch (IOException ex) {
-            Logger.getLogger(CometPhotometryController.class.getName()).log(Level.SEVERE, null, ex);
-        } finally {
-            try {
-                inFile.close();
-            } catch (IOException ex) {
-                Logger.getLogger(CometPhotometryController.class.getName()).log(Level.SEVERE, null, ex);
+            
+            SitesList sitesList = new SitesList (inFile, logger);
+            if (sitesList.isEmpty()) {
+                System.out.println("WARNING: no valid sites found");
+                logger.log("WARNING: no valid sites found");
+            } else {
+                for (String siteName : sitesList.getSiteNames()) {
+                    System.out.println("valid site: " + siteName);
+                    if (! siteName.equals(site.getValue())) cbSite.getItems().add(siteName);
+                }
             }
+        } catch (Exception ex) {
+            Logger.getLogger(NewProjectController.class.getName()).log(Level.SEVERE, null, ex);
         }
         
     }
@@ -356,29 +358,49 @@ public class NewProjectController implements Initializable {
             // create .airtoolsrc
             String rcFileName = tfProjectDir.getText() + "/.airtoolsrc";
             File rcFile = new File(rcFileName);
-            if (! rcFile.exists()) {
-                fileWriter = new FileWriter(rcFileName);
-                PrintWriter printWriter = new PrintWriter(fileWriter);
-                printWriter.printf("export day=%s\n", day);
-                printWriter.printf("export AI_RAWDIR=%s\n", tfRawDir.getText());
-                printWriter.printf("export AI_TMPDIR=%s\n", tfTempDir.getText());
-                printWriter.printf("export AI_SITE=%s\n", cbSite.getSelectionModel().getSelectedItem());
-                if (tfObsID.getText().isBlank()) {
-                    printWriter.printf("export AI_OBSERVER=%s\n", "OBSxx");
-                } else {
-                    printWriter.printf("export AI_OBSERVER=%s\n", tfObsID.getText());
-                }
-                printWriter.printf("export AI_TZOFF=%s\n", spinnerTZOffset.getValue());
-                printWriter.printf("export AI_EXCLUDE=\"\"\n");
-                printWriter.close();
-                
-                // update StringProperties
-                rawDir.setValue(tfRawDir.getText());
-                tempDir.setValue(tfTempDir.getText());
-                site.setValue(cbSite.getSelectionModel().getSelectedItem());
-                obsID.setValue(tfObsID.getText());
-                tzoff.setValue(spinnerTZOffset.getValue());
+            fileWriter = new FileWriter(rcFileName);
+            PrintWriter printWriter = new PrintWriter(fileWriter);
+            // mandatory settings
+            printWriter.printf("export day=%s\n", day);
+            printWriter.printf("export AI_RAWDIR=%s\n", tfRawDir.getText());
+            printWriter.printf("export AI_TMPDIR=%s\n", tfTempDir.getText());
+            printWriter.printf("export AI_SITE=%s\n", cbSite.getSelectionModel().getSelectedItem());
+            printWriter.printf("export AI_TZOFF=%s\n", spinnerTZOffset.getValue());
+            // optional settings
+            if (tfObsName.getText().isBlank()) {
+                printWriter.printf("export AI_OBSNAME=\"%s\"\n", "");
+            } else {
+                printWriter.printf("export AI_OBSNAME=\"%s\"\n", tfObsName.getText());
             }
+            if (tfObsAddress.getText().isBlank()) {
+                printWriter.printf("export AI_OBSADDRESS=\"%s\"\n", "");
+            } else {
+                printWriter.printf("export AI_OBSADDRESS=\"%s\"\n", tfObsAddress.getText());
+            }
+            if (tfObsEmail.getText().isBlank()) {
+                printWriter.printf("export AI_OBSEMAIL=%s\n", "");
+            } else {
+                printWriter.printf("export AI_OBSEMAIL=%s\n", tfObsEmail.getText());
+            }
+            if (tfObsIcqID.getText().isBlank()) {
+                printWriter.printf("export AI_OBSICQID=%s\n", "OBSxx");
+            } else {
+                printWriter.printf("export AI_OBSICQID=%s\n", tfObsIcqID.getText());
+            }
+            // placeholder for empty settings
+            printWriter.printf("export AI_EXCLUDE=\"\"\n");
+            printWriter.close();
+
+            // update StringProperties
+            rawDir.setValue(tfRawDir.getText());
+            tempDir.setValue(tfTempDir.getText());
+            site.setValue(cbSite.getSelectionModel().getSelectedItem());
+            tzoff.setValue(spinnerTZOffset.getValue());
+            // update observer
+            observer.setName(tfObsName.getText());
+            observer.setAddress(tfObsAddress.getText());
+            observer.setEmail(tfObsEmail.getText());
+            observer.setIcqID(tfObsIcqID.getText());
             
             // copy parameter files into project directory
             String[] parameterFileNames = {"camera.dat", "sites.dat", "refcat.dat"};
@@ -462,5 +484,6 @@ public class NewProjectController implements Initializable {
 
     @FXML
     private void handleButtonCancelAction(ActionEvent event) {
+        closeStage(event);
     }
 }

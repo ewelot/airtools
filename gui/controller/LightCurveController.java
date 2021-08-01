@@ -7,9 +7,15 @@ package tl.airtoolsgui.controller;
 
 import java.io.File;
 import java.net.URL;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.time.format.FormatStyle;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.ResourceBundle;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
@@ -131,9 +137,10 @@ public class LightCurveController implements Initializable {
     
     private enum KeyPosition {
         TOPLEFT("top left",         "-k top_left_reverse_Left_invert"),
-        TOPRIGHT("top right",       "-k top_right_reverse_Left_invert"),
+        TOPRIGHT("top right",       "-k top_right_Right_invert"),
         BOTTOMLEFT("bottom left",   "-k bottom_left_reverse_Left_invert"),
-        BOTTOMRIGHT("bottom right", "-k bottom_right_reverse_Left_invert");
+        BOTTOMRIGHT("bottom right", "-k bottom_right_Right_invert"),
+        OFF("off", "-k off");
         
         private final String label;
         private final String option;
@@ -171,6 +178,26 @@ public class LightCurveController implements Initializable {
         paneLightCurve.setOnMouseClicked(event -> {
             labelWarning.setText("");
         });
+        
+        // obtaining prompt text for date inputs does not work as expected
+        String pattern = ((SimpleDateFormat) DateFormat.getDateInstance(DateFormat.SHORT, Locale.getDefault())).toPattern();
+        System.out.println("default pattern: " + pattern + " (current locale: " + Locale.getDefault() + ")");
+        
+        // set prompt text for date picker
+        String lang = Locale.getDefault().getLanguage();
+        switch (lang) {
+            case "en":
+                pattern="mm/dd/yyyy";
+                break;
+            case "de":
+                pattern="dd.mm.yyyy";
+                break;
+            default:
+                pattern="";
+                break;
+        }
+        dpStart.setPromptText(pattern);
+        dpEnd.setPromptText(pattern);
     }
     
     
@@ -185,12 +212,37 @@ public class LightCurveController implements Initializable {
 
     private boolean isValidInputs() {
         String msg="";
+        LocalDate ld;
         if (tfCometName.getText().isBlank()) {
             msg="ERROR: comet name is missing.";
             labelWarning.setText(msg);
             logger.log(msg);
             return false;
         }
+        
+        // format datepicker text entries
+        if (! dpStart.getEditor().getText().isBlank()) {
+            try {
+                ld=dpStart.getConverter().fromString(dpStart.getEditor().getText());
+                dpStart.setValue(ld);
+            } catch (DateTimeParseException ex) {
+                msg="ERROR: entered string of start date does not match date format.";
+                labelWarning.setText(msg);
+                logger.log(msg);
+                return false;
+            }
+        } else dpStart.setValue(null);
+        if (! dpEnd.getEditor().getText().isBlank()) {
+            try {
+                ld=dpEnd.getConverter().fromString(dpEnd.getEditor().getText());
+                dpEnd.setValue(ld);
+            } catch (DateTimeParseException ex) {
+                msg="ERROR: entered string of end date does not match date format.";
+                labelWarning.setText(msg);
+                logger.log(msg);
+                return false;
+            }
+        } else dpEnd.setValue(null);
         if (dpStart.getValue() != null && dpEnd.getValue() != null &&
                 dpStart.getValue().isAfter(dpEnd.getValue())) {
             msg="ERROR: start date is after end date.";
@@ -256,7 +308,7 @@ public class LightCurveController implements Initializable {
         
         if (dpStart.getValue() != null || dpEnd.getValue() != null) {
             String str = "-x ";            
-            DateTimeFormatter fmt = DateTimeFormatter.ofPattern("YYYYMMdd");
+            DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyyMMdd");
             if (dpStart.getValue() != null) {
                 str += dpStart.getValue().format(fmt);
             }
@@ -289,7 +341,7 @@ public class LightCurveController implements Initializable {
         
         // run command
         System.out.println("cmd: " + aircliCmdOpts + " " + aircliTask + " " + aircliCmdArgs);
-        logger.log("# cmd: " + aircliCmdOpts + " " + aircliTask + " " + aircliCmdArgs);
+        //logger.log("# cmd: " + aircliCmdOpts + " " + aircliTask + " " + aircliCmdArgs);
         aircliCmd.setOpts(aircliCmdOpts.toArray(new String[0]));
         aircliCmd.setArgs(aircliCmdArgs.toArray(new String[0]));
         aircliCmd.run();

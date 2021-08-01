@@ -10,6 +10,7 @@ BINDIR  = $(DESTDIR)/$(prefix)/bin
 DATADIR = $(DESTDIR)/$(prefix)/share/$(PACKAGE)
 DOCDIR  = $(DESTDIR)/$(prefix)/share/doc/$(PACKAGE)
 APPDIR  = $(DESTDIR)/$(prefix)/share/applications
+PIXMAPSDIR = $(DESTDIR)/$(prefix)/share/pixmaps
 DATA	= data/*
 DOCS	= README* doc/manual-en.html
 IMAGESDIR	= $(DOCDIR)/images
@@ -21,6 +22,8 @@ BINPY	= airfun.py
 JAR	= airtools-gui.jar
 ANALYSIS = airds9.ana
 DESKTOP	= airtools.desktop
+ICON	= airtools.png
+ICONSVG = airtools.svg
 
 # compiler/linker definitions
 CC = gcc
@@ -54,9 +57,13 @@ pnmcombine: pnmcombine.o functions.o
 pnmrowsort: pnmrowsort.c
 	$(CC) $(CFLAGS) -o $@ pnmrowsort.c $(LIBPNM)
 
+icon: $(ICONSVG)
+	inkscape -o $(ICON) -C -w 64 -h 64 $(ICONSVG)
+
 clean:
 	-rm -f *.o
 	rm -f $(BIN)
+	#rm -f $(ICON)
 
 install: all
 	install -m 0755 -p $(BIN) $(BINSH) $(BINPY) $(BINDIR)
@@ -70,6 +77,9 @@ install: all
 	install -m 0644 -p $(DOCS) $(DOCDIR)
 	install -m 0755 -d $(IMAGESDIR)
 	install -m 0644 -p $(IMAGES) $(IMAGESDIR)
+	install -m 0755 -d $(PIXMAPSDIR)
+	install -m 0644 -p $(ICONSVG) $(PIXMAPSDIR)
+	install -m 0644 -p $(ICON) $(DATADIR)
 
 tarball:
 	make clean

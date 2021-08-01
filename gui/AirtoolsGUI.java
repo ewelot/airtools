@@ -35,6 +35,7 @@ import javafx.scene.control.ButtonType;
 import javafx.scene.control.Dialog;
 import javafx.scene.control.DialogPane;
 import javafx.scene.control.Label;
+import javafx.scene.image.Image;
 import javafx.scene.layout.Region;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
@@ -47,24 +48,27 @@ import tl.airtoolsgui.controller.SetupAirtoolsController;
  */
 public class AirtoolsGUI extends Application {
     
-    private final String progVersion = "4.0.4";
-    private final String progDate = "2021-05-09";
+    private final String progVersion = "4.1";
+    private final String progDate = "2021-08-01";
     private final String confFileName = "airtools.conf";
     private final String scriptFileName = "airtools-cli";
     
     private static String addPath = "";
     private final String shareDir = "/usr/share/airtools";
+    private final String appIconName = "airtools.png";
     
     @Override
     public void start(Stage stage) throws Exception {
         int majorVersion;
         String newConfDir;      // abs. path to new config dir
         String oldConfDir;      // abs. path to old config dir
+        String appIconFileName;
         boolean isFirstProject;
 
         majorVersion = getMajorVersion(progVersion);
         newConfDir = System.getenv("HOME") + "/.airtools/" + majorVersion;
         oldConfDir = System.getenv("HOME") + "/.airtools/" + (majorVersion-1);
+        appIconFileName = shareDir + "/" + appIconName;
         
         // check for config file from previous airtools version
         File file;
@@ -108,6 +112,9 @@ public class AirtoolsGUI extends Application {
             return pDir.substring(start);
         }, controller.getProjectDir()));
         stage.titleProperty().bind(Bindings.concat("AIRTOOLS - ").concat(projectDay));
+        
+        // Application icon
+        stage.getIcons().add(new Image("file:" + appIconFileName));
 
         stage.setOnHidden(e -> Platform.exit());
         stage.setResizable(true);
@@ -257,7 +264,6 @@ public class AirtoolsGUI extends Application {
         } catch (IOException ex) {
             Logger.getLogger(AirtoolsGUI.class.getName()).log(Level.SEVERE, null, ex);
         }
-        return;
     };
     
     private void updateParamFiles (String oldConfDir, String newConfDir, int newMajorVersion) {
@@ -311,6 +317,5 @@ public class AirtoolsGUI extends Application {
             alert.getDialogPane().setContent(info);
             alert.showAndWait();
         }
-        return;
     };
 }

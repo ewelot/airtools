@@ -60,10 +60,11 @@ public class CreateBadpixelMaskController implements Initializable {
      */
     @Override
     public void initialize(URL url, ResourceBundle rb) {
-        // TODO
+        System.out.println("CreateBadpixelMaskController: initialize()");
     }    
 
     public void setReferences (ShellScript sh, SimpleLogger logger, StringProperty projectDir) {
+        System.out.println("CreateBadpixelMaskController: setReferences()");
         this.logger = logger;
         this.projectDir = projectDir;
         this.aircliCmd = new AirtoolsCLICommand(aircliTask, buttonStart, logger, sh);

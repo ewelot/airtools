@@ -6,6 +6,7 @@
 package tl.airtoolsgui.model;
 
 import java.util.Optional;
+import javafx.application.Platform;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.control.Button;
 import javafx.scene.control.ButtonType;
@@ -22,6 +23,8 @@ public class CometPhotometryDialog {
     private Dialog dialog;
     private ImageSet imageSet;
     private Object controller;
+    private double window_pos_x=-1;
+    private double window_pos_y=-1;
     
     public CometPhotometryDialog(String fxml, String title) {
         if (dialog == null) try {
@@ -40,6 +43,29 @@ public class CometPhotometryDialog {
 
             ((Button) pane.lookupButton(ButtonType.APPLY)).setText("Apply");
             ((Button) pane.lookupButton(ButtonType.CANCEL)).setText("Cancel");
+            
+            dialog.setOnCloseRequest(ev -> {
+                window_pos_x = dialog.getX();
+                window_pos_y = dialog.getY();
+            });
+            
+            dialog.setOnShowing(ev -> {
+                if (window_pos_x >= 0 && window_pos_y >= 0) {
+                    Platform.runLater(new Runnable() {
+                        @Override
+                        public void run() {
+                            dialog.setX(window_pos_x);
+                            dialog.setY(window_pos_y);
+                        }
+                    });
+                }
+            });
+            
+            dialog.setOnShown(ev -> {
+                System.out.println("# dialog.setOnShown");
+                if (window_pos_x >= 0) dialog.setX(window_pos_x);
+                if (window_pos_y >= 0) dialog.setY(window_pos_y);
+            });
         } catch (Exception e) {
             e.printStackTrace();
         }

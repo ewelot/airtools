@@ -8,8 +8,6 @@ package tl.airtoolsgui.model;
 import java.io.File;
 import java.io.IOException;
 import java.util.Map;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javafx.concurrent.Task;
 
 /**
@@ -77,7 +75,7 @@ public class ShellScript {
         
         //logger.log("runFunction " + funcName);
         if (process != null && process.isAlive()) {
-            logger.log("WARNING: task not started, old process is stll running.");
+            logger.log("WARNING: task not started, another process is running.");
             return;
         }
         command=envVars + " " + getFileName() + " " + opts + " " + funcName + " " + args;

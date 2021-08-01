@@ -53,6 +53,9 @@ public class PSFExtractController implements Initializable {
         
         labelWarning.setText("");
         cbPsfSize.getItems().addAll("", "80", "128", "184", "256");        
+
+        tfRLim.setText("8");
+        setDefaultValues();
     }
     
     public void setImageSet(ImageSet imgSet) {
@@ -76,7 +79,7 @@ public class PSFExtractController implements Initializable {
 
     private void setDefaultValues() {
         /* initialize widgets with default values upon change of image set */
-        tfRLim.setText("10");
+        /* tfRLim is kept for all image sets */
         tfMerrLim.setText("0.2");
         cbPsfSize.setValue("");
         cbDelete.setSelected(false);

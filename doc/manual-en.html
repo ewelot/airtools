@@ -5,7 +5,7 @@
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <meta name="author" content="Thomas Lehmann" />
-  <title>Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v4.0)</title>
+  <title>Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v4.1)</title>
   <style>
     code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
@@ -20,9 +20,9 @@
 </head>
 <body>
 <header id="title-block-header">
-<h1 class="title">Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v4.0)</h1>
+<h1 class="title">Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v4.1)</h1>
 <p class="author">Thomas Lehmann</p>
-<p class="date">Draft, April 2021</p>
+<p class="date">Draft, August 2021</p>
 </header>
 <nav id="TOC" role="doc-toc">
 <ul>
@@ -57,9 +57,10 @@
 <li><a href="#large-aperture-comet-photometry"><span class="toc-section-number">6</span> Large Aperture Comet Photometry</a>
 <ul>
 <li><a href="#comet-observation"><span class="toc-section-number">6.1</span> Comet Observation</a></li>
-<li><a href="#psf-extraction-and-star-removal"><span class="toc-section-number">6.2</span> PSF Extraction and Star Removal</a></li>
-<li><a href="#measuring-the-comet"><span class="toc-section-number">6.3</span> Measuring the Comet</a></li>
-<li><a href="#photometric-calibration"><span class="toc-section-number">6.4</span> Photometric Calibration</a></li>
+<li><a href="#background-gradient-removal"><span class="toc-section-number">6.2</span> Background Gradient Removal</a></li>
+<li><a href="#psf-extraction-and-star-removal"><span class="toc-section-number">6.3</span> PSF Extraction and Star Removal</a></li>
+<li><a href="#comet-extraction-and-measuring-the-comet"><span class="toc-section-number">6.4</span> Comet Extraction and Measuring the Comet</a></li>
+<li><a href="#photometric-calibration"><span class="toc-section-number">6.5</span> Photometric Calibration</a></li>
 </ul></li>
 </ul>
 </nav>
@@ -76,7 +77,7 @@
 <li><a href="https://libvips.github.io/libvips/">libvips</a>: A fast and memory efficient image processing library with bindings to many programming languages</li>
 </ul>
 <p>The AIRTOOLS software is freely available. The project - including source code - is hosted at <a href="https://github.com/ewelot/airtools" class="uri">https://github.com/ewelot/airtools</a>. Pre-compiled binary packages are provided for several Linux distributions.</p>
-<p>The AIRTOOLS software has been developed in the hope to proove useful. Its development relies on your feedback, so please do not hesitate to ask any question at <a href="mailto:t.lehmann@mailbox.org" class="email">t.lehmann@mailbox.org</a>. Any suggestion or comment or call for help is welcome.</p>
+<p>The AIRTOOLS software has been developed in the hope to proove useful. Its development relies on your feedback, so please do not hesitate to ask any question, e.g. by writing to <a href="mailto:t.lehmann@mailbox.org" class="email">t.lehmann@mailbox.org</a>. Any suggestion or comment or call for help is welcome.</p>
 <p> </p>
 <p>Good luck and clear skies!</p>
 <p>Thomas Lehmann, Weimar (Germany)</p>
@@ -99,7 +100,7 @@
 <p>The full installation will take about half an hour to complete.</p>
 <section id="installing-oracle-virtualbox" data-number="2.1">
 <h2 data-number="2.1"><span class="header-section-number">2.1</span> Installing Oracle VirtualBox</h2>
-<p>VirtualBox (<a href="http://www.virtualbox.org" class="uri">http://www.virtualbox.org</a>) is a free and powerful virtualization software for enterprise and home users. Get the latest software package (version 6.1.18 at the time of writing) for your host operating system from the <a href="https://www.virtualbox.org/wiki/Downloads">Downloads</a> page and install it.</p>
+<p>VirtualBox (<a href="http://www.virtualbox.org" class="uri">http://www.virtualbox.org</a>) is a free and powerful virtualization software for enterprise and home users. Get the latest software package (version 6.1.26 at the time of writing) for your host operating system from the <a href="https://www.virtualbox.org/wiki/Downloads">Downloads</a> page and install it.</p>
 <p>Subsequently you should install the “Oracle VM VirtualBox Extension Pack” for improved performance and additional virtual hardware features. Get it from the appropriate section of the previously mentioned download page. Click on “All supported platforms” and open it using the Oracle VM VirtualBox software. You might be asked to provide credentials to allow installation.</p>
 </section>
 <section id="setup-of-a-virtual-machine-for-linux-os" data-number="2.2">
@@ -120,7 +121,7 @@
 </section>
 <section id="booting-install-medium-of-the-xubuntu-linux-distribution" data-number="2.3">
 <h2 data-number="2.3"><span class="header-section-number">2.3</span> Booting Install Medium of the Xubuntu Linux distribution</h2>
-<p>Download the ISO image file of the latest Xubuntu LTS release from <a href="http://xubuntu.org/" class="uri">http://xubuntu.org/</a>. Please note the imprtant <strong>LTS</strong> version label, which indicates a “Long Term Support” release. This Linux OS version is well supported by the AIRTOOLS software. Choose a mirror download close to your location and download the 64-bit desktop image. At the time of this writing it is named <code>xubuntu-20.04.2.0-desktop-amd64.iso</code>.</p>
+<p>Download the ISO image file of the latest Xubuntu LTS release from <a href="http://xubuntu.org/download" class="uri">http://xubuntu.org/download</a>. Please note the imprtant <strong>LTS</strong> version label, which indicates a “Long Term Support” release. This Linux OS version is well supported by the AIRTOOLS software. Choose a mirror download close to your location and download the 64-bit desktop image. At the time of this writing it is named <code>xubuntu-20.04.2.0-desktop-amd64.iso</code>.</p>
 <p>The ISO image file is used in place of a install medium for the virtual machine. To do so you have to start the VirtualBox software (if not running already) and press the “Settings” button of the selected virtual machine.</p>
 <p>Select the “Storage” tab. Within “Storage Devices” click on the CD symbol (labeled “Empty”) and from “Attributes” click the CD symbol near the right border of the window and select the previously downloaded ISO file. Pressing “OK” will save your modified settings and you are ready to start the virtual machine by pressing the green “Start” button.</p>
 <p>The following boot process is very similar to a regular boot process of a install CD/DVD on a real computer. In addition, the current virtual machine can be used to start a fully functional Linux live session to evaluate or experiment with the Xubuntu Linux OS (but this is not our goal).</p>
@@ -214,11 +215,27 @@ Used to store individual calibrated images of the project which are used by seve
 <p>Next, the setup for the first project must be configured. Select the date of observation. This will be used to make initial suggestions for names of the project directory, raw directory and temporary directory. It is allowed to modify those names, e.g. append a letter. E.g. you might want to repeat the image reduction of a given night using other parameters without interfering the original analysis. In that case you could use the same raw directory name but different names for the project and temporary directories.</p>
 <p>Further settings are:</p>
 <dl>
-<dt>Site:</dt>
+<dt>Observatory Site:</dt>
 <dd>Enter the name of your observatory site (must be single word) or choose one of the items from the combobox dropdown list (it holds items which are already defined in the parameter file <code>sites.dat</code>).
 </dd>
-<dt>TZoff:</dt>
-<dd>Enter the time zone offset of your camera time with respect to UT in hours. The camera time is found either in RAW images metadata of DSLR cameras or in the header of your FITS images (usually stored in keyword DATE-OBS).
+<dt>Offset of Camera Time:</dt>
+<dd>Enter the time offset of your camera time with respect to UT in hours. The camera time is found either in RAW images metadata of DSLR cameras or in the header of your FITS images (usually stored in keyword DATE-OBS).
+</dd>
+</dl>
+<p>Optional settings for observer details:</p>
+<p>Those entries are used by reports of photometric or astrometrc measurements generated for submission to MPC and COBS.</p>
+<dl>
+<dt>Full Name:</dt>
+<dd>Observers full name.
+</dd>
+<dt>Address:</dt>
+<dd>Full contact address.
+</dd>
+<dt>E-Mail:</dt>
+<dd>Contact e-mail address.
+</dd>
+<dt>ICQ Observer ID:</dt>
+<dd>ICQ report observer ID as assigned by MPC (or COBS)
 </dd>
 </dl>
 </section>
@@ -230,6 +247,9 @@ Used to store individual calibrated images of the project which are used by seve
 <dl>
 <dt>ID:</dt>
 <dd>This is a unique short identifier for your site (three letters)
+</dd>
+<dt>COD:</dt>
+<dd>Three digit observatory code (IAU code or MPC code) published by the MPC
 </dd>
 <dt>location:</dt>
 <dd>A unique single word for the name of your observatory location. The previously used entry of the observatory site during project setup must match one of these.
@@ -420,14 +440,17 @@ Used to store individual calibrated images of the project which are used by seve
 <section id="comet-observation" data-number="6.1">
 <h2 data-number="6.1"><span class="header-section-number">6.1</span> Comet Observation</h2>
 </section>
-<section id="psf-extraction-and-star-removal" data-number="6.2">
-<h2 data-number="6.2"><span class="header-section-number">6.2</span> PSF Extraction and Star Removal</h2>
+<section id="background-gradient-removal" data-number="6.2">
+<h2 data-number="6.2"><span class="header-section-number">6.2</span> Background Gradient Removal</h2>
 </section>
-<section id="measuring-the-comet" data-number="6.3">
-<h2 data-number="6.3"><span class="header-section-number">6.3</span> Measuring the Comet</h2>
+<section id="psf-extraction-and-star-removal" data-number="6.3">
+<h2 data-number="6.3"><span class="header-section-number">6.3</span> PSF Extraction and Star Removal</h2>
 </section>
-<section id="photometric-calibration" data-number="6.4">
-<h2 data-number="6.4"><span class="header-section-number">6.4</span> Photometric Calibration</h2>
+<section id="comet-extraction-and-measuring-the-comet" data-number="6.4">
+<h2 data-number="6.4"><span class="header-section-number">6.4</span> Comet Extraction and Measuring the Comet</h2>
+</section>
+<section id="photometric-calibration" data-number="6.5">
+<h2 data-number="6.5"><span class="header-section-number">6.5</span> Photometric Calibration</h2>
 </section>
 </section>
 </body>

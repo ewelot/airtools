@@ -29,9 +29,8 @@
                   </Label>
                   <GridPane hgap="4.0" vgap="8.0">
                     <columnConstraints>
-                      <ColumnConstraints hgrow="SOMETIMES" minWidth="10.0" prefWidth="100.0" />
-                      <ColumnConstraints hgrow="SOMETIMES" minWidth="10.0" prefWidth="100.0" />
-                        <ColumnConstraints hgrow="SOMETIMES" minWidth="10.0" prefWidth="100.0" />
+                      <ColumnConstraints maxWidth="150.0" minWidth="150.0" prefWidth="150.0" />
+                      <ColumnConstraints hgrow="ALWAYS" minWidth="200.0" />
                     </columnConstraints>
                     <rowConstraints>
                         <RowConstraints vgrow="SOMETIMES" />
@@ -42,27 +41,22 @@
                         <Label text="Comet Name:" />
                         <TextField fx:id="tfCometName" promptText="short comet designation" GridPane.columnIndex="1" GridPane.columnSpan="2147483647" />
                         <Label text="ICQ Data File:" GridPane.rowIndex="1" />
-                        <HBox prefWidth="200.0" GridPane.columnIndex="1" GridPane.columnSpan="2147483647" GridPane.rowIndex="1">
+                        <HBox GridPane.columnIndex="1" GridPane.columnSpan="2147483647" GridPane.rowIndex="1">
                            <children>
                               <TextField fx:id="tfICQFile" HBox.hgrow="ALWAYS" />
                               <Button fx:id="buttonBrowseICQFile" mnemonicParsing="false" onAction="#onButtonBrowseICQFile" text="Browse" />
                            </children>
                         </HBox>
-                        <CheckBox fx:id="cbUseCOBS" mnemonicParsing="false" selected="true" text="Use COBS Database" GridPane.rowIndex="2">
-                           <padding>
+                        <HBox spacing="16.0" GridPane.columnSpan="2147483647" GridPane.hgrow="ALWAYS" GridPane.rowIndex="2">
+                           <children>
+                              <CheckBox fx:id="cbUseCOBS" mnemonicParsing="false" selected="true" text="Query COBS Database" />
+                              <CheckBox fx:id="cbScanLocalProjects" mnemonicParsing="false" text="Scan Local Projects" />
+                              <CheckBox fx:id="cbForceUpdate" mnemonicParsing="false" text="Force Data Update" />
+                           </children>
+                           <GridPane.margin>
                               <Insets top="4.0" />
-                           </padding>
-                        </CheckBox>
-                        <CheckBox fx:id="cbScanLocalProjects" mnemonicParsing="false" text="Scan Local Projects" GridPane.columnIndex="1" GridPane.rowIndex="2">
-                           <padding>
-                              <Insets top="4.0" />
-                           </padding>
-                        </CheckBox>
-                        <CheckBox fx:id="cbForceUpdate" mnemonicParsing="false" text="Force Data Update" GridPane.columnIndex="2" GridPane.rowIndex="2">
-                           <padding>
-                              <Insets top="4.0" />
-                           </padding>
-                        </CheckBox>
+                           </GridPane.margin>
+                        </HBox>
                      </children>
                   </GridPane>
                   <Label text="Plot Settings">
@@ -75,8 +69,8 @@
                   </Label>
                   <GridPane hgap="4.0" vgap="8.0">
                      <columnConstraints>
-                        <ColumnConstraints hgrow="NEVER" maxWidth="194.0" minWidth="146.0" prefWidth="146.0" />
-                        <ColumnConstraints hgrow="ALWAYS" maxWidth="334.0" minWidth="150.0" prefWidth="334.0" />
+                        <ColumnConstraints hgrow="NEVER" maxWidth="150.0" minWidth="150.0" prefWidth="150.0" />
+                        <ColumnConstraints hgrow="ALWAYS" minWidth="200.0" />
                      </columnConstraints>
                      <rowConstraints>
                         <RowConstraints vgrow="SOMETIMES" />
@@ -92,17 +86,17 @@
                         <Label text="Key Label Position:" GridPane.rowIndex="1" />
                         <ChoiceBox fx:id="cbKeyPosition" maxWidth="1.7976931348623157E308" GridPane.columnIndex="1" GridPane.rowIndex="1" />
                         <Label text="Date Range:" GridPane.rowIndex="2" />
-                        <HBox alignment="CENTER_LEFT" fillHeight="false" spacing="2.0" GridPane.columnIndex="1" GridPane.rowIndex="2">
+                        <HBox alignment="CENTER_LEFT" fillHeight="false" spacing="2.0" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS" GridPane.rowIndex="2">
                            <children>
-                              <DatePicker fx:id="dpStart" onAction="#onDpStart" prefWidth="160.0" promptText="dd.mm.yyyy" />
-                              <Label text=" - " />
-                              <DatePicker fx:id="dpEnd" onAction="#onDpEnd" prefWidth="160.0" promptText="dd.mm.yyyy" />
+                              <DatePicker fx:id="dpStart" onAction="#onDpStart" prefWidth="160.0" promptText="dd.mm.yyyy" HBox.hgrow="SOMETIMES" />
+                              <Label alignment="CENTER" maxWidth="1.7976931348623157E308" text=" - " HBox.hgrow="ALWAYS" />
+                              <DatePicker fx:id="dpEnd" onAction="#onDpEnd" prefWidth="160.0" promptText="dd.mm.yyyy" HBox.hgrow="SOMETIMES" />
                            </children>
                         </HBox>
                         <Label text="Identify Observers:" GridPane.rowIndex="3" />
                         <TextField fx:id="tfObsList" promptText="OBSxx, OBSyy, ..." GridPane.columnIndex="1" GridPane.rowIndex="3" />
                         <Label text="Additional Options:" GridPane.rowIndex="4" />
-                        <TextField fx:id="tfAddOptions" promptText="-t title  -y bottom:top  -p points  ..." GridPane.columnIndex="1" GridPane.rowIndex="4" />
+                        <TextField fx:id="tfAddOptions" promptText="-wide -t title  -y bottom:top   ..." GridPane.columnIndex="1" GridPane.rowIndex="4" />
                      </children>
                   </GridPane>
                   <Label text="Magnitude Models">
@@ -115,8 +109,8 @@
                   </Label>
                   <GridPane hgap="4.0" vgap="8.0">
                     <columnConstraints>
-                      <ColumnConstraints hgrow="SOMETIMES" maxWidth="236.0" minWidth="10.0" prefWidth="147.0" />
-                      <ColumnConstraints hgrow="SOMETIMES" maxWidth="333.0" minWidth="10.0" prefWidth="333.0" />
+                      <ColumnConstraints hgrow="SOMETIMES" maxWidth="150.0" minWidth="150.0" prefWidth="150.0" />
+                      <ColumnConstraints hgrow="SOMETIMES" minWidth="200.0" />
                     </columnConstraints>
                     <rowConstraints>
                       <RowConstraints vgrow="SOMETIMES" />
@@ -156,20 +150,23 @@
                            <children>
                               <Label text="mag = ">
                                  <font>
-                                    <Font name="Monospaced Regular" size="11.0" />
+                                    <Font name="Monospaced Regular" size="12.0" />
                                  </font>
                               </Label>
                               <TextField fx:id="tfModelM" prefColumnCount="3" promptText="M" />
                               <Label text=" + 5*log(D) + 2.5*">
                                  <font>
-                                    <Font name="Monospaced Regular" size="11.0" />
+                                    <Font name="Monospaced Regular" size="12.0" />
                                  </font>
                               </Label>
                               <TextField fx:id="tfModelN" prefColumnCount="3" promptText="n" />
-                              <Label text=" *log(r)">
+                              <Label text="*log(r)">
                                  <font>
-                                    <Font name="Monospaced Regular" size="11.0" />
+                                    <Font name="Monospaced Regular" size="12.0" />
                                  </font>
+                                 <HBox.margin>
+                                    <Insets left="4.0" />
+                                 </HBox.margin>
                               </Label>
                            </children>
                            <padding>

@@ -10,7 +10,5 @@ sky2000 -       V/145   SKY2000_2006    Vmag    1   3   4   9   -   10  -   -   
 
 # notes:
 # entries are in order of decreasing priority
-# apass10 is fetched from AAVSO via web query
+# apass10 is fetched from AAVSO via web query, all others from Vizier/CDS
 # GAIA: GBP,G,GRP is associated with column names cv,cr,ci
-
-# version 4   (please leave this line untouched)

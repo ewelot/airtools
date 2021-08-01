@@ -43,8 +43,9 @@
                   <MenuItem fx:id="menuBadPixel" mnemonicParsing="false" text="Create BadPixel Mask" />
                   <SeparatorMenuItem mnemonicParsing="false" />
                 <MenuItem fx:id="menuList" mnemonicParsing="false" text="List Results" />
-                  <MenuItem fx:id="menuMapPhot" mnemonicParsing="false" text="Multi-Aperture Photometry" />
                   <MenuItem fx:id="menuLightCurve" mnemonicParsing="false" text="Plot Light Curve" />
+                  <MenuItem fx:id="menuMapPhot" mnemonicParsing="false" text="Multi-Aperture Photometry" />
+                  <MenuItem fx:id="menuAstrometry" mnemonicParsing="false" text="Astrometry" />
               </items>
             </Menu>
             <Menu fx:id="menuHelp" mnemonicParsing="false" text="Help">

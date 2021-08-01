@@ -30,12 +30,13 @@
                   </HBox>
                   <GridPane vgap="8.0">
                     <columnConstraints>
-                      <ColumnConstraints fillWidth="false" />
-                      <ColumnConstraints fillWidth="false" minWidth="150.0" />
-                        <ColumnConstraints hgrow="ALWAYS" minWidth="100.0" />
-                        <ColumnConstraints fillWidth="false" minWidth="30.0" />
+                      <ColumnConstraints fillWidth="false" maxWidth="214.0" minWidth="125.0" prefWidth="132.0" />
+                      <ColumnConstraints fillWidth="false" maxWidth="222.0" minWidth="143.0" prefWidth="215.0" />
+                        <ColumnConstraints hgrow="ALWAYS" maxWidth="97.0" minWidth="91.0" prefWidth="97.0" />
+                        <ColumnConstraints fillWidth="false" hgrow="ALWAYS" maxWidth="72.0" minWidth="66.0" prefWidth="66.0" />
                     </columnConstraints>
                     <rowConstraints>
+                        <RowConstraints vgrow="SOMETIMES" />
                       <RowConstraints vgrow="SOMETIMES" />
                       <RowConstraints vgrow="SOMETIMES" />
                         <RowConstraints vgrow="SOMETIMES" />
@@ -43,23 +44,53 @@
                         <RowConstraints vgrow="SOMETIMES" />
                         <RowConstraints vgrow="SOMETIMES" />
                         <RowConstraints vgrow="SOMETIMES" />
+                        <RowConstraints vgrow="SOMETIMES" />
+                        <RowConstraints vgrow="SOMETIMES" />
+                        <RowConstraints vgrow="SOMETIMES" />
+                        <RowConstraints vgrow="SOMETIMES" />
                     </rowConstraints>
                      <children>
-                        <Label text="Project Directory:  " />
-                        <TextField fx:id="tfProjectDir" prefHeight="26.0" prefWidth="327.0" GridPane.columnIndex="1" GridPane.columnSpan="2" GridPane.hgrow="ALWAYS" />
-                        <Button fx:id="buttonBrowseProjectDir" mnemonicParsing="false" onAction="#handleButtonBrowseProjectDirAction" text="Browse" GridPane.columnIndex="3" />
-                        <Label text="Raw Images Dir:  " GridPane.rowIndex="1" />
-                        <TextField fx:id="tfRawDir" prefHeight="26.0" prefWidth="328.0" GridPane.columnIndex="1" GridPane.columnSpan="2" GridPane.hgrow="ALWAYS" GridPane.rowIndex="1" />
-                        <Button fx:id="buttonBrowseRawDir" mnemonicParsing="false" onAction="#handleButtonBrowseRawDirAction" text="Browse" GridPane.columnIndex="3" GridPane.rowIndex="1" />
-                        <Label text="Temp. Directory:  " GridPane.rowIndex="2" />
-                        <TextField fx:id="tfTempDir" prefHeight="26.0" prefWidth="322.0" GridPane.columnIndex="1" GridPane.columnSpan="2" GridPane.hgrow="ALWAYS" GridPane.rowIndex="2" />
-                        <Button fx:id="buttonBrowseTempDir" mnemonicParsing="false" onAction="#handleButtonBrowseTempDirAction" text="Browse" GridPane.columnIndex="3" GridPane.rowIndex="2" />
-                        <Label text="Observatory Site:" GridPane.rowIndex="4" />
-                        <ComboBox fx:id="cbSite" editable="true" minWidth="120.0" GridPane.columnIndex="1" GridPane.rowIndex="4" />
-                        <Label text="ICQ Observer ID:" GridPane.rowIndex="5" />
-                        <TextField fx:id="tfObsID" minWidth="100.0" prefWidth="100.0" promptText="OBSxx" GridPane.columnIndex="1" GridPane.rowIndex="5" />
-                        <Label text="TZ Offset:" GridPane.rowIndex="6" />
-                        <Spinner fx:id="spinnerTZOffset" minWidth="100.0" prefWidth="100.0" GridPane.columnIndex="1" GridPane.rowIndex="6" />
+                        <Label text="Main Settings:">
+                           <font>
+                              <Font name="System Bold" size="13.0" />
+                           </font>
+                           <GridPane.margin>
+                              <Insets bottom="4.0" />
+                           </GridPane.margin>
+                        </Label>
+                        <Label text="Project Directory:  " GridPane.rowIndex="1" />
+                        <TextField fx:id="tfProjectDir" prefHeight="26.0" prefWidth="327.0" GridPane.columnIndex="1" GridPane.columnSpan="2" GridPane.hgrow="ALWAYS" GridPane.rowIndex="1" />
+                        <Button fx:id="buttonBrowseProjectDir" mnemonicParsing="false" onAction="#handleButtonBrowseProjectDirAction" text="Browse" GridPane.columnIndex="3" GridPane.rowIndex="1" />
+                        <Label text="Raw Images Dir:  " GridPane.rowIndex="2" />
+                        <TextField fx:id="tfRawDir" prefHeight="26.0" prefWidth="328.0" GridPane.columnIndex="1" GridPane.columnSpan="2" GridPane.hgrow="ALWAYS" GridPane.rowIndex="2" />
+                        <Button fx:id="buttonBrowseRawDir" mnemonicParsing="false" onAction="#handleButtonBrowseRawDirAction" text="Browse" GridPane.columnIndex="3" GridPane.rowIndex="2" />
+                        <Label text="Temp. Directory:  " GridPane.rowIndex="3" />
+                        <TextField fx:id="tfTempDir" prefHeight="26.0" prefWidth="322.0" GridPane.columnIndex="1" GridPane.columnSpan="2" GridPane.hgrow="ALWAYS" GridPane.rowIndex="3" />
+                        <Button fx:id="buttonBrowseTempDir" mnemonicParsing="false" onAction="#handleButtonBrowseTempDirAction" text="Browse" GridPane.columnIndex="3" GridPane.rowIndex="3" />
+                        <Label text="Observatory Site:" GridPane.rowIndex="5" />
+                        <ComboBox fx:id="cbSite" editable="true" maxWidth="1.7976931348623157E308" minWidth="120.0" prefWidth="300.0" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS" GridPane.rowIndex="5" />
+                        <HBox alignment="CENTER_LEFT" maxWidth="1.7976931348623157E308" prefWidth="500.0" spacing="16.0" GridPane.columnSpan="2" GridPane.rowIndex="6">
+                           <children>
+                              <Label text="Offset of Camera Time vs. UT:" />
+                              <Spinner fx:id="spinnerTZOffset" maxWidth="1.7976931348623157E308" prefWidth="120.0" HBox.hgrow="ALWAYS" />
+                           </children>
+                        </HBox>
+                        <Label text="Observer Details" GridPane.rowIndex="7">
+                           <GridPane.margin>
+                              <Insets bottom="4.0" top="20.0" />
+                           </GridPane.margin>
+                           <font>
+                              <Font name="System Bold" size="13.0" />
+                           </font>
+                        </Label>
+                        <Label text="Full Name:" GridPane.rowIndex="8" />
+                        <TextField fx:id="tfObsName" maxWidth="1.7976931348623157E308" prefHeight="26.0" prefWidth="500.0" promptText="first and last name" GridPane.columnIndex="1" GridPane.columnSpan="2147483647" GridPane.hgrow="ALWAYS" GridPane.rowIndex="8" />
+                        <Label text="Address:" GridPane.rowIndex="9" />
+                        <TextField fx:id="tfObsAddress" maxWidth="1.7976931348623157E308" prefHeight="26.0" prefWidth="500.0" GridPane.columnIndex="1" GridPane.columnSpan="2147483647" GridPane.hgrow="ALWAYS" GridPane.rowIndex="9" />
+                        <Label text="E-Mail:" GridPane.rowIndex="10" />
+                        <TextField fx:id="tfObsEmail" maxWidth="1.7976931348623157E308" prefHeight="26.0" prefWidth="500.0" GridPane.columnIndex="1" GridPane.columnSpan="2147483647" GridPane.hgrow="ALWAYS" GridPane.rowIndex="10" />
+                        <Label text="ICQ Observer ID:" GridPane.rowIndex="11" />
+                        <TextField fx:id="tfObsIcqID" prefHeight="26.0" prefWidth="101.0" promptText="OBSxx" GridPane.columnIndex="1" GridPane.rowIndex="11" />
                      </children>
                      <padding>
                         <Insets top="16.0" />

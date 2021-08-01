@@ -97,7 +97,7 @@ public class PhotCalibrationController implements Initializable {
             cbDelete.setSelected(false);
         });
 
-        /* TODO: recognize change of channel */
+        /* TODO: handle change of channel */
 
     }    
     
@@ -131,18 +131,16 @@ public class PhotCalibrationController implements Initializable {
         int plane       = 1;
         if (imgSet != null && imgSet.getStarStack().endsWith(".ppm")) plane=2;
         PhotCatalog refcat  = cbCatalog.getItems().get(0);
-        String doext    = "";
-        String skip     = "";
-        String opts     = "";
-        String dodel    = "";
         
         // update widgets
+        tfApRad.setText("");
         cbChannel.setValue(Integer.toString(plane));
         cbCatalog.setValue(refcat);
         updateFromHeader(refcat, plane);
-        cbExtinction.setSelected(!doext.isBlank());
-        tfSkip.setText(skip);
-        tfExpert.setText(opts);
+
+        cbExtinction.setSelected(false);
+        tfSkip.setText("");
+        tfExpert.setText("");
         cbDelete.setSelected(false);
     }
     
@@ -210,7 +208,7 @@ public class PhotCalibrationController implements Initializable {
         // update widgets
         cbColor.setValue(color);
         tfMaxStars.setText(Integer.toString(maxstars));
-        tfApRad.setText(aprad);
         tfMagLim.setText(maglim);
+        if (! aprad.isBlank()) tfApRad.setText(aprad);
     }
 }

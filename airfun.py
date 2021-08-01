@@ -119,8 +119,12 @@ def mkephem (param):
     #   position 1     2    3   4    5          6     7
     #   fields:  utime date mag hmag log(r_sun) r_sun d_earth
     # reading command line parameters
+    dateunit="yyyymmdd"
+    if (param[0] == "-s"):
+        dateunit="unixseconds"
+        del param[0]
     if (len(param) < 3):
-        print("usage: mkephem cephem start end [g] [k] [num]")
+        print("usage: mkephem [-s] cephem start end [g] [k] [num]")
         exit(-1)
     else:
         cephem=param[0]
@@ -132,12 +136,14 @@ def mkephem (param):
     if (len(param) > 5):
         num=int(param[5])
 
-    # convert start and end from yyyymmdd to JD
-    if (start > 10000000 and start < 30000000): start=ymd2jd(start)
-    if (end   > 10000000 and end   < 30000000): end=ymd2jd(end)
-    # convert start and end from unix time to JD
-    if (start > 30000000): start=2440587.5+start/86400.0
-    if (end   > 30000000): end=2440587.5+end/86400.0
+    # convert start and end from yyyymmdd or unix time to JD
+    if (dateunit == "yyyymmdd"):
+        start=ymd2jd(start)
+        end=ymd2jd(end)
+    else:
+        # convert start and end from unix time to JD
+        start=2440587.5+start/86400.0
+        end=2440587.5+end/86400.0
     
     # TODO: parse comet ephem database
     k2=ephem.readdb(cephem)
@@ -576,7 +582,7 @@ def pnmcombine(param):
         outimg.write_to_target(target, "." + outfmt, strip=outstrip)
     exit()
 
-# clean bad pixels according to mask
+# clean bad pixels in bayered image according to mask
 # usage: cleanbadpixel <image> <badmask> [outimage]
 # default: write result to stdout (pgm format)
 def cleanbadpixel(param):
@@ -602,6 +608,39 @@ def cleanbadpixel(param):
     median = index.case([p00, p10, p01, p11])
 
     outimg = (badmask > 0).ifthenelse(median, image)
+    # writing output image
+    if (outfilename and outfilename != '-'):
+        if (outfmt=='fits'):
+            outimg.fitssave(outfilename)
+        else:
+            outimg.ppmsave(outfilename, strip=1)
+    else:
+        target = pyvips.Target.new_to_descriptor(sys.stdout.fileno())
+        outimg.write_to_target(target, "." + outfmt, strip=outstrip)
+    exit()
+
+# merge 4 monochrome images into bayered image
+def bmerge(param):
+    outfilename="-"
+    outfmt="ppm"
+    outstrip=True
+    infilename00 = param[0]
+    infilename10 = param[1]
+    infilename01 = param[2]
+    infilename11 = param[3]
+    if(len(param)>4):
+        outfilename = param[4]
+
+    p00 = pyvips.Image.new_from_file(infilename00).zoom(2,2)
+    p10 = pyvips.Image.new_from_file(infilename10).zoom(2,2)
+    p01 = pyvips.Image.new_from_file(infilename01).zoom(2,2)
+    p11 = pyvips.Image.new_from_file(infilename11).zoom(2,2)
+    w = p00.width
+    h = p00.height
+
+    index = pyvips.Image.new_from_array([[0, 1], [2, 3]]).replicate(w/2, h/2)
+    outimg = index.case([p00, p10, p01, p11])
+
     # writing output image
     if (outfilename and outfilename != '-'):
         if (outfmt=='fits'):
@@ -671,6 +710,123 @@ def imbgsub(param):
 
     exit()
 
+# convert vips image into numpy array
+def v2np(vipsimage):
+    # map vips formats to np dtypes
+    format_to_dtype = {
+        'uchar': np.uint8,
+        'char': np.int8,
+        'ushort': np.uint16,
+        'short': np.int16,
+        'uint': np.uint32,
+        'int': np.int32,
+        'float': np.float32,
+        'double': np.float64,
+        'complex': np.complex64,
+        'dpcomplex': np.complex128,
+    }
+    return np.ndarray(buffer=vipsimage.write_to_memory(),
+        dtype=format_to_dtype[vipsimage.format],
+        shape=[vipsimage.height, vipsimage.width, vipsimage.bands])
+
+# convert vips image into numpy pixel array containing x y value(s)
+def v2pixarray(vipsimage):
+    size = vipsimage.width * vipsimage.height
+    #img = vipsimage.copy(width=1, height=size)
+    xy = pyvips.Image.xyz(vipsimage.width, vipsimage.height)
+    xyarr = v2np(xy)
+    #print('xyarr: ', xyarr.shape)
+    imgarr = v2np(vipsimage)
+    #print('imgarr: ', imgarr.shape)
+    pixarr = np.column_stack((xyarr.reshape(size, 2), imgarr.reshape(size, vipsimage.bands)))
+    return pixarr
+
+# list pixel values (optionally using thresholds)
+# syntax: listpixels [-c] [-0|-1] img x0 y0 w h [low] [high]
+# output: x y val1 <val2> <val3>
+# note: x0 y0 is left-top pixel (starting at 0 0)
+def listpixels(param):
+    low=0
+    high=2**16-1
+    coord=False
+    useminval=False
+    usemaxval=False
+    if(param[0]=='-c'):
+        coord=True
+        del param[0]
+    if(param[0]=='-0'):
+        useminval=True
+        del param[0]
+    if(param[0]=='-1'):
+        usemaxval=True
+        del param[0]
+    infilename = param[0]
+    x0 = int(param[1])
+    y0 = int(param[2])
+    w  = int(param[3])
+    h  = int(param[4])
+    if(len(param)>5):
+        low = int(param[5])
+    if(len(param)>6):
+        high = int(param[6])
+
+    # reading input images
+    if (infilename and infilename != '-'):
+        inimg = pyvips.Image.new_from_file(infilename)
+    else:
+        source = pyvips.Source.new_from_descriptor(sys.stdin.fileno())
+        inimg = pyvips.Image.new_from_source(source, "")
+    if (w<1): w=inimg.width
+    if (h<1): h=inimg.height
+    area = inimg.crop(x0, y0, w, h)
+
+    # converting to array
+    if (coord):
+        arr=v2pixarray(area)
+        arr[:, 0] += x0
+        arr[:, 1] += y0
+    else:
+        arr=v2np(area).reshape(area.width*area.height, area.bands)
+    #print('arr: ', arr.shape, file=sys.stderr)
+    #np.savetxt(sys.stdout, arr, '%d')
+    
+    # get minval and maxval from image data type
+    minval=0
+    maxval=-1
+    #print('format:', inimg.format, ' interpretation:', inimg.interpretation, file=sys.stderr)
+    if (inimg.format == 'uchar' or inimg.format == 'char'):
+        maxval=2**8-1
+    elif (inimg.format == 'ushort' or inimg.format == 'short'):
+        maxval=2**16-1
+    if (maxval < 0):
+        printf(sys.stderr, 'ERROR: listpixels: unsupported image format ', inimg.format)
+        exit(-1)
+    
+    # set limits
+    if (useminval):
+        low=minval
+        high=minval
+    if (usemaxval):
+        low=maxval
+        high=maxval
+
+    # create mask image
+    #print('minval=', minval, ' maxval=', maxval, file=sys.stderr)
+    #print('low=', low, ' high=', high, file=sys.stderr)
+    if (inimg.bands == 1):
+        imgmask = (area[0] >= low) & (area[0] <= high)
+    if (inimg.bands == 3):
+        imgmask = \
+            (area[0] >= low) & (area[0] <= high) & \
+            (area[1] >= low) & (area[1] <= high) & \
+            (area[2] >= low) & (area[2] <= high)
+    
+    # convert to boolean mask array
+    mask = v2np(imgmask > 0).flatten()
+
+    # apply mask and print results
+    np.savetxt(sys.stdout, arr[mask>0, :], '%d')
+    exit()
 
 
 

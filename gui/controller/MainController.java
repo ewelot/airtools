@@ -68,6 +68,8 @@ import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.stage.Modality;
+import tl.airtoolsgui.model.Observer;
+import tl.airtoolsgui.model.SitesList;
 
 /**
  * FXML Controller class
@@ -120,6 +122,8 @@ public class MainController implements Initializable {
     private MenuItem menuLightCurve;
     @FXML
     private MenuItem menuMapPhot;
+    @FXML
+    private MenuItem menuAstrometry;
 
     @FXML
     private Menu menuHelp;
@@ -153,8 +157,9 @@ public class MainController implements Initializable {
     private Stage windowArchive;
     private Stage windowCreateBadpixelMask;
     private Stage windowListResults;
-    private Stage windowMultiApPhotometry;
     private Stage windowLightCurve;
+    private Stage windowMultiApPhotometry;
+    private Stage windowAstrometry;
     
     private Properties projectProperties;
     private String configFile;
@@ -167,9 +172,8 @@ public class MainController implements Initializable {
     private final StringProperty rawDir = new SimpleStringProperty();
     private final StringProperty tempDir = new SimpleStringProperty();
     private final StringProperty site = new SimpleStringProperty();
-    private final StringProperty obsID = new SimpleStringProperty();
     private final IntegerProperty tzoff = new SimpleIntegerProperty();
-
+    private Observer observer;
     
     /**
      * Initializes the controller class.
@@ -224,6 +228,9 @@ public class MainController implements Initializable {
         });
         menuMapPhot.setOnAction((event) -> {
             showWindowMultiApPhotometry();
+        });
+        menuAstrometry.setOnAction((event) -> {
+            showWindowAstrometry();
         });
         
         // "Help" menu actions
@@ -295,7 +302,13 @@ public class MainController implements Initializable {
         rawDir.setValue(projectProperties.getProperty("lastRawDir", "/tmp"));
         tempDir.setValue(projectProperties.getProperty("lastTempDir", "/tmp"));
         site.setValue(projectProperties.getProperty("lastSite", ""));
-        obsID.setValue(projectProperties.getProperty("lastObsID", ""));
+        observer = new Observer(projectProperties.getProperty("lastObsName", ""),
+            projectProperties.getProperty("lastObsAddress", ""),
+            projectProperties.getProperty("lastObsEmail", ""),
+            projectProperties.getProperty("lastObsIcqID", ""));
+        if (observer.getIcqID().isBlank()) {
+            observer.setIcqID(projectProperties.getProperty("lastObserver", ""));
+        }
         int i=0;
         String str = projectProperties.getProperty("lastTZOff", "0");
         if (str != null && ! str.isEmpty()) {
@@ -306,7 +319,6 @@ public class MainController implements Initializable {
             }
         }
         tzoff.setValue(i);
-        System.out.println("rawDir=" + rawDir.getValue());
 
         paneImageReductionController.setReferences(sh, logger);
         paneCometPhotometryController.setReferences(sh, logger);        
@@ -342,11 +354,21 @@ public class MainController implements Initializable {
             tabPane.getSelectionModel().selectFirst();
 
         projectProperties.setProperty("lastProjectDir", projectDir.getValue());
-        projectProperties.setProperty("lastRawDir", rawDir.getValue());
-        projectProperties.setProperty("lastTempDir", tempDir.getValue());
+        //projectProperties.setProperty("lastRawDir", rawDir.getValue());
+        //projectProperties.setProperty("lastTempDir", tempDir.getValue());
         projectProperties.setProperty("lastSite", site.getValue());
-        projectProperties.setProperty("lastObsID", obsID.getValue());
         projectProperties.setProperty("lastTZOff", tzoff.getValue().toString());
+        projectProperties.setProperty("lastObsName", observer.getName());
+        projectProperties.setProperty("lastObsAddress", observer.getAddress());
+        projectProperties.setProperty("lastObsEmail", observer.getEmail());
+        projectProperties.setProperty("lastObsIcqID", observer.getIcqID());
+
+        // remove unused/old properties
+        if (projectProperties.containsKey("lastParamDir"))
+            projectProperties.remove("lastParamDir");
+        if (projectProperties.containsKey("lastObsID"))
+            projectProperties.remove("lastObsID");
+
         saveProperties(configFile);
     }
 
@@ -367,7 +389,7 @@ public class MainController implements Initializable {
     
     private void saveProperties(String fileName) {
         try {
-            /* TODO: create airtools config directory first */
+            // store global settings
             OutputStream outputStream = new FileOutputStream(fileName);
             projectProperties.store(outputStream, "global settings");
             outputStream.close();
@@ -557,39 +579,23 @@ public class MainController implements Initializable {
     
     
     private boolean isNewSite (String site) {
-        // check for sites.dat
-        BufferedReader inFile = null;
+        File inFile = null;
         try {
-            inFile = new BufferedReader(new FileReader(projectDir.getValue() + "/sites.dat"));
-        } catch (FileNotFoundException ex) {
-            // Logger.getLogger(CometPhotometryController.class.getName()).log(Level.SEVERE, null, ex);
-            logger.log("WARNING: file " + projectDir.getValue() + "/sites.dat is missing.");
-        }
-        if (inFile == null) return true;
-        
-        String line;
-        Pattern regexp =   Pattern.compile("^[A-Z][a-zA-Z0-9]+[ ]+[a-zA-Z0-9]+[ ]+[+-]{0,1}[0-9.,]+[ ]+[+-]{0,1}[0-9.,]+[ ]+");
-        Matcher matcher = regexp.matcher("");
-        try {
-            while (( line = inFile.readLine()) != null){
-                matcher.reset(line);
-                if (matcher.find()) {
-                    String[] columns = line.split("[ ]+");
-                    if (columns.length >= 5) {
-                        // System.out.println(line);
-                        System.out.println("valid site: " + columns[1]);
-                        if (columns[1].equals(site)) return false;
-                    }
-                }
+            inFile = new File (projectDir.getValue() + "/sites.dat");
+            if (! inFile.exists()) {
+                logger.log("WARNING: file " + projectDir.getValue() + "/sites.dat is missing.");
+                return true;
             }
-        } catch (IOException ex) {
-            Logger.getLogger(CometPhotometryController.class.getName()).log(Level.SEVERE, null, ex);
-        } finally {
-            try {
-                inFile.close();
-            } catch (IOException ex) {
-                Logger.getLogger(CometPhotometryController.class.getName()).log(Level.SEVERE, null, ex);
+            
+            SitesList sitesList = new SitesList (inFile, logger);
+            if (sitesList.isEmpty()) {
+                System.out.println("WARNING: no valid sites found in sites.dat");
+                return true;
+            } else {
+                return ! sitesList.contains(site);
             }
+        } catch (Exception ex) {
+            Logger.getLogger(NewProjectController.class.getName()).log(Level.SEVERE, null, ex);
         }
         return true;
     }
@@ -643,7 +649,7 @@ public class MainController implements Initializable {
             FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource("/tl/airtoolsgui/view/NewProject.fxml"));
             Parent parent = fxmlLoader.load();
             NewProjectController dialogController = fxmlLoader.<NewProjectController>getController();
-            dialogController.setReferences(configFile, logger, projectDir, rawDir, tempDir, site, obsID, tzoff);
+            dialogController.setReferences(configFile, logger, projectDir, rawDir, tempDir, site, tzoff, observer);
             
             Scene scene = new Scene(parent);
             Stage stage = new Stage();
@@ -730,6 +736,26 @@ public class MainController implements Initializable {
     }
     
     
+    public void showWindowLightCurve() {
+        System.out.println("showWindowLightCurve()");
+        if (windowLightCurve == null) try {
+            FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource("/tl/airtoolsgui/view/LightCurve.fxml"));
+            Parent parent = fxmlLoader.load();
+            LightCurveController controller = fxmlLoader.<LightCurveController>getController();
+            controller.setReferences(sh, logger, projectDir);
+
+            Scene scene = new Scene(parent);
+            windowLightCurve = new Stage();
+            //windowLightCurve.initModality(Modality.APPLICATION_MODAL);
+            windowLightCurve.setScene(scene);
+            windowLightCurve.setTitle("Plot Light Curve");
+        } catch (IOException ex) {
+            Logger.getLogger(MainController.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        windowLightCurve.showAndWait();
+    }
+    
+    
     public void showWindowMultiApPhotometry() {
         System.out.println("showWindowMultiApPhotometry()");
         if (windowMultiApPhotometry == null) try {
@@ -750,23 +776,23 @@ public class MainController implements Initializable {
     }
     
     
-    public void showWindowLightCurve() {
-        System.out.println("showWindowLightCurve()");
-        if (windowLightCurve == null) try {
-            FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource("/tl/airtoolsgui/view/LightCurve.fxml"));
+    public void showWindowAstrometry() {
+        System.out.println("showWindowAstrometry()");
+        if (windowAstrometry == null) try {
+            FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource("/tl/airtoolsgui/view/Astrometry.fxml"));
             Parent parent = fxmlLoader.load();
-            LightCurveController controller = fxmlLoader.<LightCurveController>getController();
+            AstrometryController controller = fxmlLoader.<AstrometryController>getController();
             controller.setReferences(sh, logger, projectDir);
 
             Scene scene = new Scene(parent);
-            windowLightCurve = new Stage();
-            //windowLightCurve.initModality(Modality.APPLICATION_MODAL);
-            windowLightCurve.setScene(scene);
-            windowLightCurve.setTitle("Plot Light Curve");
+            windowAstrometry = new Stage();
+            //windowAstrometry.initModality(Modality.APPLICATION_MODAL);
+            windowAstrometry.setScene(scene);
+            windowAstrometry.setTitle("Astrometry");
         } catch (IOException ex) {
             Logger.getLogger(MainController.class.getName()).log(Level.SEVERE, null, ex);
         }
-        windowLightCurve.showAndWait();
+        windowAstrometry.showAndWait();
     }
     
     

@@ -5,7 +5,11 @@
  */
 package tl.airtoolsgui.controller;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.IOException;
 import java.net.URL;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
@@ -16,8 +20,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.ResourceBundle;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
+import javafx.collections.FXCollections;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
@@ -27,11 +36,16 @@ import javafx.scene.control.CheckBox;
 import javafx.scene.control.ChoiceBox;
 import javafx.scene.control.DatePicker;
 import javafx.scene.control.Label;
+import javafx.scene.control.RadioButton;
 import javafx.scene.control.TextField;
+import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.AnchorPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
 import tl.airtoolsgui.model.AirtoolsCLICommand;
+import tl.airtoolsgui.model.ImageSet;
 import tl.airtoolsgui.model.ShellScript;
 import tl.airtoolsgui.model.SimpleLogger;
 
@@ -40,10 +54,18 @@ import tl.airtoolsgui.model.SimpleLogger;
  *
  * @author lehmann
  */
-public class MultiApPhotometryController implements Initializable {
+public class AstrometryController implements Initializable {
 
     @FXML
-    private AnchorPane paneMultiApPhotometry;
+    private AnchorPane paneAstrometry;
+    @FXML
+    private RadioButton rbCurrProject;
+    @FXML
+    private ToggleGroup objectsGroup;
+    @FXML
+    private ChoiceBox<ImageSet> choiceBoxImageSet;
+    @FXML
+    private RadioButton rbMultProject;
     @FXML
     private TextField tfCometName;
     @FXML
@@ -59,54 +81,36 @@ public class MultiApPhotometryController implements Initializable {
     @FXML
     private DatePicker dpEnd;
     @FXML
-    private TextField tfApertures;
-    @FXML
-    private ChoiceBox<ApertureUnit> cbApertureUnit;
-    @FXML
     private CheckBox cbShowCheckImages;
+    @FXML
+    private CheckBox cbCombineResults;
     @FXML
     private Label labelWarning;
     @FXML
     private Button buttonStart;
     @FXML
     private Button buttonCancel;
+    @FXML
+    private HBox hboxCurrProject;
+    @FXML
+    private VBox vboxMultProject;
 
     private SimpleLogger logger;
     private StringProperty projectDir = new SimpleStringProperty();
     private AirtoolsCLICommand aircliCmd;
     private final String aircliTask = "usercmd";
-    private final String airfunFunc = "AImapphot";
-
-    
-    private enum ApertureUnit {
-        TKM("10^3 kilometer"),
-        AMIN("arc minutes");
-
-        private final String label;
-
-        ApertureUnit(String label) {
-            this.label = label;
-        }
-
-        @Override
-        public String toString() {
-            return label;
-        }
-    }
+    private final String airfunFunc = "AIastrometry";
+    private final List<ImageSet> imageSetList = new ArrayList<>();
 
     /**
      * Initializes the controller class.
      */
     @Override
     public void initialize(URL url, ResourceBundle rb) {
-        // fill combo boxes
-        cbApertureUnit.getItems().setAll(ApertureUnit.values());
-        cbApertureUnit.getSelectionModel().selectFirst();
-        
-        paneMultiApPhotometry.setOnMouseClicked(event -> {
+        paneAstrometry.setOnMouseClicked(event -> {
             labelWarning.setText("");
         });
-
+        
         // obtaining prompt text for date inputs does not work as expected
         String pattern = ((SimpleDateFormat) DateFormat.getDateInstance(DateFormat.SHORT, Locale.getDefault())).toPattern();
         System.out.println("default pattern: " + pattern + " (current locale: " + Locale.getDefault() + ")");
@@ -126,29 +130,83 @@ public class MultiApPhotometryController implements Initializable {
         }
         dpStart.setPromptText(pattern);
         dpEnd.setPromptText(pattern);
+        
+        // show/hide widgets depending on choice of radiobutton
+        rbMultProject.selectedProperty().addListener((v, oldValue, newValue) -> {
+            hboxCurrProject.setDisable(newValue);
+            vboxMultProject.setDisable(! newValue);
+        });
+        rbMultProject.setSelected(false);
+        vboxMultProject.setDisable(true);
+        
     }    
 
     public void setReferences (ShellScript sh, SimpleLogger logger, StringProperty projectDir) {
         this.logger = logger;
         this.projectDir = projectDir;
         this.aircliCmd = new AirtoolsCLICommand(buttonStart, logger, sh);
-
+        
+        populateChoiceBoxImageSet();
         tfBaseDir1.setText(new File(projectDir.getValue()).getParent());
+
         labelWarning.setText("");
     }
+    
+
+    private void populateChoiceBoxImageSet() {
+        System.out.println("populateChoiceBoxImageSet()");
+        setImageSetList();
+        ImageSet allImages = new ImageSet(projectDir.getValue(), "all", "any object", 1);
+        imageSetList.add(0, allImages);
+        choiceBoxImageSet.setItems(FXCollections.observableArrayList(
+            imageSetList));
+        choiceBoxImageSet.getSelectionModel().selectFirst();
+    }
+
+    
+    private void setImageSetList () {
+        System.out.println("setImageSetList");
+        BufferedReader inFile = null;
+        try {
+            inFile = new BufferedReader(new FileReader(projectDir.getValue() + "/set.dat"));
+            String line;
+            // lights only: grep -E "^[0-9]{2}:[0-9]{2}[ ]+[a-zA-Z0-9]+[ ]+[a-zA-Z0-9-]+[ ]+[o][ ]+" set.dat
+            Pattern regexp = Pattern.compile("^[0-9]{2}:[0-9]{2}[ ]+[a-zA-Z0-9]+[ ]+[a-zA-Z0-9-]+[ ]+[o][ ]+");
+            Matcher matcher = regexp.matcher("");
+            imageSetList.clear();
+            try {
+                while (( line = inFile.readLine()) != null){
+                    matcher.reset(line);
+                    if (matcher.find()) {
+                        String[] columns = line.split("[ ]+");
+                        if (columns.length >= 11) {
+                            // Note: does require telid in field 11
+                            System.out.println(line);
+                            imageSetList.add(new ImageSet(projectDir.getValue(), columns[1], columns[2], 1));
+                        }
+                    }
+                }
+            } catch (IOException ex) {
+                Logger.getLogger(CometPhotometryController.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        } catch (FileNotFoundException ex) {
+            Logger.getLogger(CometPhotometryController.class.getName()).log(Level.SEVERE, null, ex);
+        } finally {
+            try {
+                inFile.close();
+            } catch (IOException ex) {
+                Logger.getLogger(CometPhotometryController.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
+    }
+    
     
     private boolean isValidInputs() {
         String msg="";
         LocalDate ld;
         
-        if (tfCometName.getText().isBlank()) {
+        if (rbMultProject.isSelected() && tfCometName.getText().isBlank()) {
             msg="ERROR: comet name is missing.";
-            labelWarning.setText(msg);
-            logger.log(msg);
-            return false;
-        }
-        if (tfApertures.getText().isBlank()) {
-            msg="ERROR: list of apertures is missing.";
             labelWarning.setText(msg);
             logger.log(msg);
             return false;
@@ -184,11 +242,10 @@ public class MultiApPhotometryController implements Initializable {
             logger.log(msg);
             return false;
         }
-        
         return true;
     }
     
-
+    
     @FXML
     private void onButtonBrowseBaseDir1(ActionEvent event) {
         DirectoryChooser dirChooser = new DirectoryChooser();
@@ -215,7 +272,7 @@ public class MultiApPhotometryController implements Initializable {
             }
         }
         dirChooser.setInitialDirectory(file);
-        Stage stage = (Stage) paneMultiApPhotometry.getScene().getWindow();
+        Stage stage = (Stage) paneAstrometry.getScene().getWindow();
         file = dirChooser.showDialog(stage);
         if (file != null) {
             // TODO: check if dir exists and is empty, else show a warning message
@@ -249,7 +306,7 @@ public class MultiApPhotometryController implements Initializable {
             }
         }
         dirChooser.setInitialDirectory(file);
-        Stage stage = (Stage) paneMultiApPhotometry.getScene().getWindow();
+        Stage stage = (Stage) paneAstrometry.getScene().getWindow();
         file = dirChooser.showDialog(stage);
         if (file != null) {
             // TODO: check if dir exists and is empty, else show a warning message
@@ -259,41 +316,41 @@ public class MultiApPhotometryController implements Initializable {
 
     @FXML
     private void onButtonStart(ActionEvent event) {
-        System.out.println("MultiApPhotometryController: onButtonStart()");
+        System.out.println("AstrometryController: onButtonStart()");
         labelWarning.setText("");
         List<String> aircliCmdOpts = new ArrayList<>();
         List<String> aircliCmdArgs = new ArrayList<>();
-
         DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyyMMdd");
-        ApertureUnit apertureUnit=cbApertureUnit.getSelectionModel().getSelectedItem();
-        
+
         if (! isValidInputs()) return;
-        
-        // add aircliCmd options
-        
-        // add airfunFunc options
+
         // airfun function to call
         aircliCmdArgs.add(airfunFunc);
         
-        
-        /* always create check images; TODO: allow user to set size */
-        aircliCmdArgs.add("-s 300");
-        if (apertureUnit == ApertureUnit.TKM) aircliCmdArgs.add("-k");
+        // add options
         if (cbShowCheckImages.isSelected()) aircliCmdArgs.add("-i");
+        if (cbCombineResults.isSelected())  aircliCmdArgs.add("-a");
         
-        if (! tfBaseDir1.getText().isBlank()) aircliCmdArgs.add("-d " + tfBaseDir1.getText());
-        if (! tfBaseDir2.getText().isBlank()) aircliCmdArgs.add("-dd " + tfBaseDir2.getText());
+        // add positional parameters
+        if (rbMultProject.isSelected()) {
+            if (! tfBaseDir1.getText().isBlank()) {
+                aircliCmdArgs.add("-d " + tfBaseDir1.getText());
+            }
+            if (! tfBaseDir2.getText().isBlank()) {
+                aircliCmdArgs.add("-d " + tfBaseDir2.getText());
+            }
         
-        // add parameters
-        aircliCmdArgs.add(tfCometName.getText());
-        aircliCmdArgs.add("\"" + tfApertures.getText() + "\"");
-        
-        if (dpStart.getValue() != null) {
-            aircliCmdArgs.add(dpStart.getValue().format(fmt));
-        }
-        if (dpEnd.getValue() != null) {
-            if (dpStart.getValue() == null) aircliCmdArgs.add("\"\"");
-            aircliCmdArgs.add(dpEnd.getValue().format(fmt));
+            aircliCmdArgs.add(tfCometName.getText());
+            if (dpStart.getValue() != null) {
+                aircliCmdArgs.add(dpStart.getValue().format(fmt));
+            } else {
+                aircliCmdArgs.add("\"\"");
+            }
+            if (dpEnd.getValue() != null) {
+                aircliCmdArgs.add(dpEnd.getValue().format(fmt));
+            }
+        } else {
+            aircliCmdArgs.add(choiceBoxImageSet.getSelectionModel().getSelectedItem().getSetname());
         }
         
         // run command
@@ -302,7 +359,6 @@ public class MultiApPhotometryController implements Initializable {
         aircliCmd.setOpts(aircliCmdOpts.toArray(new String[0]));
         aircliCmd.setArgs(aircliCmdArgs.toArray(new String[0]));
         aircliCmd.run();
-        // paneMultiApPhotometry.getScene().getWindow().hide();
     }
 
     @FXML

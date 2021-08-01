@@ -1,4 +1,4 @@
-Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v4.0)
+Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v4.1)
 ======================================================================
 
   - [<span class="toc-section-number">1</span>
@@ -51,11 +51,14 @@ Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v4.0)
     Photometry](#large-aperture-comet-photometry)
       - [<span class="toc-section-number">6.1</span> Comet
         Observation](#comet-observation)
-      - [<span class="toc-section-number">6.2</span> PSF Extraction and
+      - [<span class="toc-section-number">6.2</span> Background Gradient
+        Removal](#background-gradient-removal)
+      - [<span class="toc-section-number">6.3</span> PSF Extraction and
         Star Removal](#psf-extraction-and-star-removal)
-      - [<span class="toc-section-number">6.3</span> Measuring the
-        Comet](#measuring-the-comet)
-      - [<span class="toc-section-number">6.4</span> Photometric
+      - [<span class="toc-section-number">6.4</span> Comet Extraction
+        and Measuring the
+        Comet](#comet-extraction-and-measuring-the-comet)
+      - [<span class="toc-section-number">6.5</span> Photometric
         Calibration](#photometric-calibration)
 
 # Introduction
@@ -106,8 +109,8 @@ distributions.
 
 The AIRTOOLS software has been developed in the hope to proove useful.
 Its development relies on your feedback, so please do not hesitate to
-ask any question at <t.lehmann@mailbox.org>. Any suggestion or comment
-or call for help is welcome.
+ask any question, e.g. by writing to <t.lehmann@mailbox.org>. Any
+suggestion or comment or call for help is welcome.
 
  
 
@@ -144,7 +147,7 @@ The full installation will take about half an hour to complete.
 
 VirtualBox (<http://www.virtualbox.org>) is a free and powerful
 virtualization software for enterprise and home users. Get the latest
-software package (version 6.1.18 at the time of writing) for your host
+software package (version 6.1.26 at the time of writing) for your host
 operating system from the
 [Downloads](https://www.virtualbox.org/wiki/Downloads) page and install
 it.
@@ -195,11 +198,12 @@ Manager](images/virtualbox-manager.png "virtualbox manager")
 ## Booting Install Medium of the Xubuntu Linux distribution
 
 Download the ISO image file of the latest Xubuntu LTS release from
-<http://xubuntu.org/>. Please note the imprtant **LTS** version label,
-which indicates a “Long Term Support” release. This Linux OS version is
-well supported by the AIRTOOLS software. Choose a mirror download close
-to your location and download the 64-bit desktop image. At the time of
-this writing it is named `xubuntu-20.04.2.0-desktop-amd64.iso`.
+<http://xubuntu.org/download>. Please note the imprtant **LTS** version
+label, which indicates a “Long Term Support” release. This Linux OS
+version is well supported by the AIRTOOLS software. Choose a mirror
+download close to your location and download the 64-bit desktop image.
+At the time of this writing it is named
+`xubuntu-20.04.2.0-desktop-amd64.iso`.
 
 The ISO image file is used in place of a install medium for the virtual
 machine. To do so you have to start the VirtualBox software (if not
@@ -444,15 +448,29 @@ project and temporary directories.
 
 Further settings are:
 
-  - Site:  
+  - Observatory Site:  
     Enter the name of your observatory site (must be single word) or
     choose one of the items from the combobox dropdown list (it holds
     items which are already defined in the parameter file `sites.dat`).
-  - TZoff:  
-    Enter the time zone offset of your camera time with respect to UT in
+  - Offset of Camera Time:  
+    Enter the time offset of your camera time with respect to UT in
     hours. The camera time is found either in RAW images metadata of
     DSLR cameras or in the header of your FITS images (usually stored in
     keyword DATE-OBS).
+
+Optional settings for observer details:
+
+Those entries are used by reports of photometric or astrometrc
+measurements generated for submission to MPC and COBS.
+
+  - Full Name:  
+    Observers full name.
+  - Address:  
+    Full contact address.
+  - E-Mail:  
+    Contact e-mail address.
+  - ICQ Observer ID:  
+    ICQ report observer ID as assigned by MPC (or COBS)
 
 ## Parameter Files
 
@@ -479,6 +497,9 @@ line for your site. The column description is as follows:
 
   - ID:  
     This is a unique short identifier for your site (three letters)
+  - COD:  
+    Three digit observatory code (IAU code or MPC code) published by the
+    MPC
   - location:  
     A unique single word for the name of your observatory location. The
     previously used entry of the observatory site during project setup
@@ -872,8 +893,10 @@ associated ASCII header files using the file extension `.head`.
 
 ## Comet Observation
 
+## Background Gradient Removal
+
 ## PSF Extraction and Star Removal
 
-## Measuring the Comet
+## Comet Extraction and Measuring the Comet
 
 ## Photometric Calibration
