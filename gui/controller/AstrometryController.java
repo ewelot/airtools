@@ -153,6 +153,11 @@ public class AstrometryController implements Initializable {
     }
     
 
+    public void updateWidgets () {
+        populateChoiceBoxImageSet();
+    }
+    
+    
     private void populateChoiceBoxImageSet() {
         System.out.println("populateChoiceBoxImageSet()");
         setImageSetList();

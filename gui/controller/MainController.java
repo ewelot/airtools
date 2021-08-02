@@ -152,6 +152,8 @@ public class MainController implements Initializable {
     private CometPhotometryController paneCometPhotometryController;
     @FXML
     private MiscToolsController paneMiscToolsController;
+    @FXML
+    private AstrometryController astrometryController;
 
     // additional windows (stages)
     private Stage windowArchive;
@@ -781,8 +783,8 @@ public class MainController implements Initializable {
         if (windowAstrometry == null) try {
             FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource("/tl/airtoolsgui/view/Astrometry.fxml"));
             Parent parent = fxmlLoader.load();
-            AstrometryController controller = fxmlLoader.<AstrometryController>getController();
-            controller.setReferences(sh, logger, projectDir);
+            astrometryController = fxmlLoader.<AstrometryController>getController();
+            astrometryController.setReferences(sh, logger, projectDir);
 
             Scene scene = new Scene(parent);
             windowAstrometry = new Stage();
@@ -792,6 +794,7 @@ public class MainController implements Initializable {
         } catch (IOException ex) {
             Logger.getLogger(MainController.class.getName()).log(Level.SEVERE, null, ex);
         }
+        astrometryController.updateWidgets();
         windowAstrometry.showAndWait();
     }
     

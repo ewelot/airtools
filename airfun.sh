@@ -27,6 +27,7 @@ CHANGELOG
             center.dat
         * icqplot: always include measurements of current project
         * icqsort: fixed sorting of unnumbered comets
+        * get_cobs: work around buggy date program in Ubuntu 20.04
         * cometcenter: default dir for checkimages changed to chkctr
         * cometname: handle numbered asteroids
         * mpchecker: with setname as single argument search for all objects
@@ -7382,7 +7383,9 @@ get_cobs () {
         echo -e "usage: get_cobs <comet> [start_yyyy-mm-dd|$start]" >&2 &&
         return 1
 
-    test "$all" && start=$(date +"%F" -d 'now - 300 years')
+    # workaround for buggy date in Ubuntu 20.04
+    #test "$all" && start=$(date +"%F" -d 'now - 300 years')
+    test "$all" && start=$(date +"%F" | awk -F "-" '{printf("%d-%02d-%02d\n", $1-300, $2, $3)}')
     test -z "$start" && start=$(date +"%F" -d 'now - 3 years')
     
     # get comet names database
