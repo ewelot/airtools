@@ -720,7 +720,7 @@ public class MainController implements Initializable {
     
     public void showWindowCreateBadpixelMask() {
         System.out.println("showWindowCreateBadpixelMask()");
-        if (windowListResults == null) try {
+        if (windowCreateBadpixelMask == null) try {
             FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource("/tl/airtoolsgui/view/CreateBadpixelMask.fxml"));
             Parent parent = fxmlLoader.load();
             CreateBadpixelMaskController controller = fxmlLoader.<CreateBadpixelMaskController>getController();
