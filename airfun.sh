@@ -14,9 +14,25 @@
 # - in order to use SAOImage DS9 analysis tasks (via AIexamine) you must
 #   have installed files airds9.ana and aircmd.sh
 ########################################################################
-AI_VERSION="5.1"
+AI_VERSION="5.1.1"
 : << '----'
 CHANGELOG
+    5.1.1 - 07 Sep 2021
+        * AIlist: added option -cs to process splitted image sets of the
+            current project (under <splitdir> directory)
+        * AIastrometry: added option -cs to handle splitted image sets,
+            fallback to measure nuclear object magnitude if large aperture
+            photometry data are missing
+        * AIsetinfo: show alt/az (instead of ha) when using option -l
+        * cometname: handle un-numbered asteroids and deal with comets that
+            have kept provisional designation of asteroids
+        * mpcreport: handle numbered and un-numbered asteroids
+        * mpchecker: added option -o to create region file <set>.mpcast.reg
+            containing objects
+        * get_mpcephem, get_jplcoord: save reference of elements (e.g. MPEC)
+        * set_header: added option -s which forces value of string type
+        * new function: raw2obs AIsplitstack
+
     5.1 - 01 Aug 2021
         * new environment variables AI_OBSICQID AI_OBSNAME AI_OBSADDRESS
             AI_OBSEMAIL
@@ -3514,12 +3530,14 @@ set_header () {
     local showhelp
     local verbose
     local no_update     # if set then header keywords are not modified/added
+    local is_string     # if set the value is always meant to be a string
     local i
-    for i in 1 2 3
+    for i in 1 2 3 4
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-v" && verbose=1 && shift 1
         test "$1" == "-n" && no_update=1 && shift 1
+        test "$1" == "-s" && is_string=1 && shift 1
     done
 
     local img=$1    # either image or ahead file
@@ -3534,7 +3552,7 @@ set_header () {
     local oldcomm
 
     (test "$showhelp" || test $# -lt 2) &&
-        echo "usage: set_header [-n] <img|hdrfile> <keyword=value/description> [keyword2=value2/description2] ..." >&2 &&
+        echo "usage: set_header [-n] [-s] <img|hdrfile> <keyword=value/description> [keyword2=value2/description2] ..." >&2 &&
         return 1
     
     test ! -e $img &&
@@ -3596,12 +3614,17 @@ set_header () {
         fi
         
         # quote string value if necessary
-        ! is_number "$val" &&
-            ! is_number "$(echo $val | sed -e 's/E[+-]*[0-9][0-9]*$//')" &&
-            test "${val:0:1}" != "'" &&
-            test "$val" != "T" &&
-            test "$val" != "F" &&
+        if [ "$is_string" ]
+        then
             val="'${val}'"
+        else
+            ! is_number "$val" &&
+                ! is_number "$(echo $val | sed -e 's/E[+-]*[0-9][0-9]*$//')" &&
+                test "${val:0:1}" != "'" &&
+                test "$val" != "T" &&
+                test "$val" != "F" &&
+                val="'${val}'"
+        fi
         
         # pad spaces around value
         test "${val:0:1}" == "'" && val=$(printf "%-20s" "$val")
@@ -4084,11 +4107,13 @@ cometcenter () {
         echo "ERROR: missing header keyword MAGZERO." >&2 && return 255
     x=$(di2dmag $(echo "$texp / $nexp * $imult" | bc -l))
     mzero=$(echo "$mzero $x" | awk '{printf("%.2f", $1-$2)}')
+    false && (
     # get comet area in pixels
     area=$(get_header $hdr AC_AREA1)
     test -z "$area" &&
         echo "ERROR: missing comet area size (AC_AREA1)" >&2 && return 255
-
+    )
+    
     # determine croparea (fitting coreg extent)
     cropsize=480
     set - $(get_extent $coreg)
@@ -4473,19 +4498,33 @@ mpcreport () {
     # note: filter is not indicated if mtype is given
 
     # convert object name to MPC report compact name (12 chars)
+    # notes: not tested for NEO's and unnumbered asteroids
     mpcname=$(cometname $object | awk '{
         if ($0~/^[0-9]/) {
             sub("/P/","")
             printf("%04dP       ", $0)
         } else {
             type=substr($0,1,1)
-            x=substr($0,3,2)
-            if(x==18) Y="I"; if(x==19) Y="J"; if(x==20) Y="K"; if(x==21) Y="L"
-            yy=substr($0,5,2)
-            m=substr($0,8,1)
-            n=substr($0,9,1)
-            frag=0
-            printf("    %s%s%s%s%02d%s", type, Y, yy, m, n, frag)
+            if (type == "(") {
+                # numbered asteroid
+                num=$0; gsub(/[()]/,"",num)
+                num=1*num
+                if (num<100000) {
+                    printf("%05d       ", num)
+                } else {
+                    # note: max num is 359999 resulting in Z9999
+                    c=sprintf("%c", 55+substr(num,1,2))
+                    printf("%s%04d       ", c, substr(num,3))
+                }
+            } else {
+                x=substr($0,3,2)
+                if(x==18) Y="I"; if(x==19) Y="J"; if(x==20) Y="K"; if(x==21) Y="L"
+                yy=substr($0,5,2)
+                m=substr($0,8,1)
+                n=substr($0,9,1)
+                frag=0
+                printf("    %s%s%s%s%02d%s", type, Y, yy, m, n, frag)
+            }
         }}')
     test "$AI_DEBUG" && echo "# object=$object mpcname=_${mpcname}_" >&2
     
@@ -6414,6 +6453,98 @@ itel2obs () {
 }
 
 
+raw2obs () {
+    # create obs data file from rawfiles.dat
+    local showhelp
+    local tzoff=0   # LT-UT
+    local i
+    for i in 1 2
+    do
+        (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
+        test "$1" == "-t" && tzoff=$2 && shift 2
+    done
+    local telid=${1:-"TLSC"}
+    
+    test "$showhelp" &&
+        echo "usage: raw2obs [-t tzoff] [telid]" >&2 && return 255
+
+    test -s rawfiles.dat && cat rawfiles.dat | \
+        awk -v day="$day" -v toff=$tzoff -v tel="$telid" 'BEGIN{count=0}{
+        if ($1~/^#/) next
+        count++
+        if (count==1) {
+            # determine observatory provider
+            obs="local"
+            if (tolower($2)~/^[0-9][0-9][0-9]*-/ && tolower($2)~/.fts$/) {
+                obs="SkyGems"
+            } else if (tolower($2)~/^t[0-9]/ || tolower($2)~/^raw-/ || tolower($2)~/^calibrated-/) {
+                obs="iTelescope"
+            } else {
+                obs="local"
+            }
+            # print header lines
+            if (day) printf("# %s\n", day)
+            if (obs != "local") printf("# %s\n", obs)
+            printf("\n")
+            if (toff == 0) {
+                printf("# UT\n")
+            } else {
+                printf("# LT\n")
+            }
+            printf("# h:m set  target type texp n1 n2   nref dark flat tel\n")
+        }
+        # determine target
+        target=""
+        if(tolower($2)~/dark/ || tolower($2)~/bias/) {
+            target="dark"
+        }
+        if(tolower($2)~/flat/ || tolower($2)~/sky/ || tolower($2)~/poly/) {
+            target="flat"
+        }
+        if (target=="") {
+            if (obs=="local") {
+                split($2, a, /_/)
+            } else {
+                split($2, a, /-/)
+            }
+            if (obs=="local")      target=a[1]
+            if (obs=="SkyGems")   {target=a[3]; sub(/_.*/,"",target)}
+            if (obs=="iTelescope") target=a[4]
+        }
+        if (target != last || (target=="dark" && $4 != lasttexp)) {
+            if (last) {
+                printf("%s %s %-8s %s %3.0f %04d %04d %04d %-4s %-4s %s\n",
+                    utstart, sname, last, type, texp, n1, n2, (n1+n2)/2, dark, flat, tel)
+            }
+            n1=1*$1
+            h=1*substr($3,1,2)+toff; m=1*substr($3,4,2); s=1*substr($3,7,2)
+            if (s > 30) m=m+1
+            if (m == 60) {h=h+1; m=0}
+            if (h >= 24) h=h-24
+            utstart=sprintf("%02d:%02d", h, m)
+            texp=$4
+            sname="coxx"
+            type="o"
+            dark="dkxx"
+            flat="skxx"
+            # determine image type
+            if(tolower($2)~/dark/ || tolower($2)~/bias/) {
+                sname="dkxx"; target="dark"; type="d"; dark="-   "; flat="-   "
+            }
+            if(tolower($2)~/flat/ || tolower($2)~/sky/ || tolower($2)~/poly/) {
+                sname="skxx"; target="flat"; type="f"; flat="-   "
+            }
+        }
+        n2=1*$1
+        lasttexp=texp
+        last=target
+    }END{
+                printf("%s %s %-8s %s %3.0f %04d %04d %04d %-4s %-4s %s\n",
+                    utstart, sname, target, type, texp, n1, n2, (n1+n2)/2, dark, flat, tel)
+    }'
+}
+
+
 map_rawfiles () {
     # create mapping of image number to file name for new raw (FITS) images
     #   note: spaces in file name are converted to "_"
@@ -7087,13 +7218,15 @@ mpchecker () {
     local utdate    # yyyy-mm-dd.dd
     local mlim
     local rad       # search radius in arcmin
+    local do_outreg # if set than write objects to ds9 region file
     local i
-    for i in 1 2
+    for i in 1 2 3 4
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-d" && utdate=$2 && shift 2
         test "$1" == "-m" && mlim=$2 && shift 2
         test "$1" == "-r" && rad=$2 && shift 2
+        test "$1" == "-o" && do_outreg=1 && shift 1
     done
     
     local sname="$1"
@@ -7103,7 +7236,8 @@ mpchecker () {
     local cameradat="camera.dat"
     local reg
     local ext
-    local is_radec
+    local use_imgcenter
+    local physical
     local jd
     local date
     local name
@@ -7113,25 +7247,45 @@ mpchecker () {
     local str
     local args
     local args2
+    local outreg
     local tmp1=$(mktemp "/tmp/tmp_tmp1_$$.XXXXXX.html")
     local tmp2=$(mktemp "/tmp/tmp_tmp2_$$.XXXXXX.dat")
     local tmpreg=$(mktemp "/tmp/tmp_reg_$$.XXXXXX.reg")
+    local tmpxy=$(mktemp "/tmp/tmp_xy_$$.XXXXXX.dat")
+    local tmprade=$(mktemp "/tmp/tmp_rade_$$.XXXXXX.dat")
 
     (test "$showhelp" || test $# -lt 1) &&
-        echo -e "usage: mpchecker [-d yyyy-mm-dd.dd] [-m maglim] [-r rad_amin] <set> <reg | ra de>" >&2 &&
+        echo -e "usage: mpchecker [-o] [-d yyyy-mm-dd.dd] [-m maglim] [-r rad_amin] <set> [<reg | ra de>]" >&2 &&
         return 1
-    
-    # check for single argument (set name)
-    if is_setname $sname && [ -z "$ra" ]
+
+    ! is_setname $sname &&
+        echo "ERROR: $sname is not a valid set name" >&2 && return 255
+
+    test "$do_outreg" && outreg=$sname.mpcast.reg
+    if [ $# -lt 3 ]
     then
+        ext=ppm
+        test -s $sname.pgm && ext=pgm
+        for x in $sname.$ext $sname.wcs.head
+        do
+            test ! -s $x && echo "ERROR: missing file $x." >&2 && return 255
+        done
+    else
+        outreg=""
+    fi
+    
+    # check for single argument (only set name)
+    if [ -z "$ra" ]
+    then
+        use_imgcenter=1
         set - $(imcoord $sname)
         ra=$1; de=$2
     fi
      
-    # check for region file
+    # check for region file (second parameter)
     test -f "$ra" && reg="$ra"
     test -z "$reg" && test -z "$de" &&
-        echo -e "usage: mpchecker [-d yyyy-mm-dd.dd] [-m maglim] [-r rad_amin] <set> <reg | ra de>" >&2 &&
+        echo -e "usage: mpchecker [-o] [-d yyyy-mm-dd.dd] [-m maglim] [-r rad_amin] <set> <reg | ra de>" >&2 &&
         return 1
     
     # number ob objects
@@ -7143,7 +7297,7 @@ mpchecker () {
     then
         date=$(echo $utdate | awk -F '-' '{printf("year=%d&month=%02d&day=%06.3f", $1,$2,$3)}')
     else
-        jd=$(AIsetinfo -l $sname | awk '{printf("%s", $6)}')
+        jd=$(AIsetinfo -l $sname | awk '{printf("%s", $7)}')
         date=$(jd2ut $jd | awk -F '-' '{printf("year=%d&month=%02d&day=%06.3f", $1,$2,$3)}')
     fi
     
@@ -7152,18 +7306,9 @@ mpchecker () {
     then
         ra=$(dec2sexa $(sexa2dec $ra 1 7) 1 2 | tr -d "+-")
         de=$(dec2sexa $(sexa2dec $de 1 7) 1 1)
+        test "$AI_DEBUG" && echo "# circle($ra,$de,10) # text={X}" >&2
         echo "circle($ra,$de,10) # text={X}" > $tmpreg
         reg=$tmpreg
-        is_radec=1
-    fi
-    if [ -z "$is_radec" ]
-    then
-        ext=ppm
-        test -s $sname.pgm && ext=pgm
-        for x in $sname.$ext $sname.wcs.head
-        do
-            test ! -s $x && echo "ERROR: missing file $x." >&2 && return 255
-        done
     fi
     
     # determine maglim and search radius
@@ -7182,33 +7327,34 @@ mpchecker () {
     fi
     if [ -z "$rad" ]
     then
-        x=$(exp10 $(echo "$mlim/10" | bc -l))
-        rad=$(echo $x | awk '{
-            x=500/$1
-            if (x > 5) {
-                printf("%.0f", x)
-            } else {
-                x=int(2*x+0.5)/2
-                printf("%.1f", x)
-            }
-        }')
+        if [ "$use_imgcenter" ]
+        then
+            rad=$(imsize -d $sname | awk '{printf("%.0f", 30*sqrt($1*$1+$2*$2))}')
+        else
+            x=$(exp10 $(echo "$mlim/10" | bc -l))
+            rad=$(echo $x | awk '{
+                x=500/$1
+                if (x > 5) {
+                    printf("%.0f", x)
+                } else {
+                    x=int(2*x+0.5)/2
+                    printf("%.1f", x)
+                }
+            }')
+        fi
         str="$str rad=$rad"
     fi
     test "$str" && echo "# using" $str >&2
 
     i=0
+    grep -q "^physical" $reg && physical=1
     while read
     do
         #echo "# $REPLY"
         test "${REPLY:0:6}" != "circle" && continue
-        if [ "$is_radec" ]
+        if [ "$physical" ]
         then
-            # sexadecimal coords
-            set - $(echo $REPLY | tr '(,){}' ' ')
-            ra="$2"; de="$3"; name="$7"
-            ra=$(dec2sexa $(sexa2dec $ra 1 7) 1 2 | tr -d "+-")
-            de=$(dec2sexa $(sexa2dec $de 1 7) 1 1)
-        else
+            # image coordinates
             # convert from FITS coord to RA/DEC
             set - $(echo $REPLY | reg2xy $sname.$ext -)
             name="$1"
@@ -7217,6 +7363,12 @@ mpchecker () {
             ra="$1"; de="$2"
             ra=$(dec2sexa $ra 15 2 | tr -d "+-")
             de=$(dec2sexa $de 1 1)
+        else
+            # wcs coordinates
+            set - $(echo $REPLY | tr '(,){}' ' ')
+            ra="$2"; de="$3"; name="$7"
+            ra=$(dec2sexa $(sexa2dec $ra 1 7) 1 2 | tr -d "+-")
+            de=$(dec2sexa $(sexa2dec $de 1 7) 1 1)
         fi
         coord="ra=${ra//:/+}&decl=${de//:/+}"
         #coord="ra=${ra}&decl=${de}"
@@ -7238,28 +7390,54 @@ mpchecker () {
         grep -qi "Error" $tmp1 &&
             echo "ERROR: cgi error, see $tmp1" >&2 && return 255
 
-        cat $tmp1 | awk 'BEGIN{sectionnum=0; data=0; drow=0}{
-            if ($0~/<hr>/) {
-                sectionnum++
-                getline
-                gsub(/[ ]*<[\/]*b>[ ]*/,"")
-                if (sectionnum==1) print "# "$0
-            }
-            if ($0~/<pre>/) {data=1; getline}
-            if ($0~/<\/pre>/) {data=0; drow=0}
-            if (data == 1) {
-                drow+=1
-                if (drow==1 || drow>3) {gsub(/<a href.*/,""); print $0}
-            }
-            }' > $tmp2
-        test ! -s $tmp2 && continue
-        i=$((i+1))
-        test $i -eq 1 && echo "#  $(grep -i "Object designation" $tmp2)"
-        grep -vE "The following objects|Object designation" $tmp2 | lines $n | \
-            sed -e 's/[ ]*None needed.*//; s,^,'$name': ,'
-    done < $reg
-    test "$AI_DEBUG" && echo $tmpreg $tmp1 $tmp2
-    test ! "$AI_DEBUG" && rm -f $tmpreg $tmp1 $tmp2
+        w3m -dump $tmp1 | awk '{
+            if($0~/ Object designation /) {show=1; print "#" $0; next}
+            if($0~/Explanatory Notes/) show=0
+            if(show==1 && $0~/[0-9][0-9]/) {
+                mag=substr($0,48,4)
+                gsub(/^[ ]*/,"",mag)
+                if (mag=="") mag=0
+                print mag":"$0
+            }}'
+    done < $reg > $tmp2
+
+    # sort by mag
+    grep -v "^#" $tmp2 | LANG=C sort -n -t ':' -k1,1 -u | lines $n | \
+            cut -d ':' -f2- > $tmp1
+
+    if [ "$outreg" ]
+    then
+        cat $tmp1 | awk '{
+            id=substr($0,1,24)
+            ra=substr($0,26,10)
+            de=substr($0,37,9)
+            mag=substr($0,48,4) # not cmt
+            sub(/^[ ]*/,"",id); sub(/[ ]*$/,"",id)
+            if ($0~/ cmt /) sub(/[ ]*\(.*$/,"",id)
+            if (id~/^\([0-9]*\) /) sub(/ .*$/,"",id)
+            gsub(/ /,".",id)
+            gsub(/ /,":",ra)
+            gsub(/ /,":",de)
+            gsub(/^[ ]*/,"",mag)
+            printf("%s %s %s\n", id, ra, de)
+            }' > $tmprade
+        rade2xy $tmprade $sname.wcs.head > $tmpxy
+        xy2reg $sname.$ext $tmpxy "" "" 15 > $outreg
+        grep -i "Object designation" $tmp2 | lines 1
+        while read id x
+        do
+            grep "^[ ]*${id//./ } " $tmp1 | sed -e 's/[ ]*None needed.*//'
+        done < $tmpxy
+    else
+        # TODO: limit to frame size by using id from $tmpxy
+        grep -i "Object designation" $tmp2 | lines 1
+        cat $tmp1 | sed -e 's/[ ]*None needed.*//'        
+    fi
+
+    test "$outreg" && test -s "$outreg" &&
+        echo "#" $(grep "^circle" $outreg | wc -l) "objects written to $outreg" >&2
+    test "$AI_DEBUG" && echo $tmpreg $tmp1 $tmp2 $tmpxy $tmprade
+    test ! "$AI_DEBUG" && rm -f $tmpreg $tmp1 $tmp2 $tmpxy $tmprade
 }
 
 get_cobs_old () {
@@ -7319,6 +7497,7 @@ cometname () {
     # expand short comet name
     #   numbered (period.) comet: <num>P
     #   numbered asteroid: (<num>)
+    #   unnumbered asteroid: <year> <aa>...
     #   unnumbered and non-periodic comet: <pre>/<year> <a><n>
     # comet fragments should be referenced by suffix "-A" or similar
     local str="${1// /}"
@@ -7334,16 +7513,28 @@ cometname () {
     test "$s" != "$str" && echo $str && return
     s=$(echo $str | sed -e 's,^[0-9]\+$,,')
     test -z "$s" && echo "($str)" && return
-    
-    
+
+    # check for un-numbered asteroid YYYYAA...
+    s=$(echo $str | awk '{
+        if($0~/^[1-2][0-9][0-9][0-9][A-Z][A-Z]/) {
+            printf("%s %s", substr($0,1,4), substr($0,5))
+        }}')
+    if [ "$s" ]
+    then
+        # check if it is known as a comet
+        get_mpcephem -l "C/$s" > /dev/null 2>&1
+        test $? -eq 0 && echo "C/$s" && return
+        echo $s && return
+    fi
+
     # convert comet name [ACP]YYYYXX to [ACP]/YYYY XX
     cname=$(echo $str | awk '{
         if($0~/^[ACP][1-2][0-9][0-9][0-9][A-Z][A-Z]*[0-9]/) {
             printf("%s/%s %s", substr($0,1,1), substr($0,2,4), substr($0,6))
         }}')
-    # convert comet name YYYYXX to C/YYYY XX
+    # convert comet name YYYYAN to C/YYYY AN
     test -z "$cname" && cname=$(echo $str | awk '{
-        if($0~/^[1-2][0-9][0-9][0-9][A-Z][A-Z]*[0-9]/) {
+        if($0~/^[1-2][0-9][0-9][0-9][A-Z][0-9]/) {
             printf("C/%s %s", substr($0,1,4), substr($0,5))
         }}')
     test -z "$cname" && echo "WARNING: no name conversion applied" >&2 && cname=$str
@@ -7563,7 +7754,8 @@ get_jplcoord () {
     
     echo $1 $2
     test "$do_write_header" &&
-        set_header $hdr AI_CORA="$1" AI_CODEC="$2"
+        set_header AI_ELREF="JPL" $hdr AI_CORA="$1" AI_CODEC="$2"
+
 
     test "$AI_DEBUG" && echo $tmpdat >&2
     test -z "$AI_DEBUG" && rm -f $tmpdat
@@ -7574,14 +7766,16 @@ get_mpcephem () {
     local showhelp
     local do_write_header   # if set write some results to image header keywords
     local do_aladin_commands # if set show aladin commands for plotting positions
+    local has_long_name     # if set then do not convert object name
     local n=1   # number of ephemerides entries per object
     local dhr="120:00"   # interval in HH:MM:SS
     local i
-    for i in 1 2 3 4
+    for i in 1 2 3 4 5
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-w" && do_write_header=1 && shift 1
         test "$1" == "-a" && do_aladin_commands=1 && shift 1
+        test "$1" == "-l" && has_long_name=1 && shift 1
         test "$1" == "-n" && n=$2 && shift 2
         test "$1" == "-i" && dhr=$2 && shift 2
     done
@@ -7627,10 +7821,11 @@ get_mpcephem () {
     local ded
     local dem
     local des
+    local elref
     local x
     
     (test "$showhelp" || test $# -lt 1) &&
-        echo -e "usage: get_mpcephem [-w] [-n num] [-i interval_hh:mm] <set|objects> [utday_yyyy-mm-dd] [uttime_hh:mm]" >&2 &&
+        echo -e "usage: get_mpcephem [-w] [-l] [-n num] [-i interval_hh:mm] <set|objects> [utday_yyyy-mm-dd] [uttime_hh:mm]" >&2 &&
         return 1
 
     # set name or header file or objects
@@ -7660,12 +7855,7 @@ get_mpcephem () {
     fi
     test -z "$objects" &&
         echo "ERROR: missing object name(s)." >&2 && return 255
-    objects=$(cometname "$objects")
-    false && if is_integer ${objects:0:4} && [ ${#objects} -ge 6 ]
-    then
-        test "${objects:4:1}" != " " && objects="C/${objects:0:4} ${objects:4}"
-        test "${objects:4:1}" == " " && objects="C/$objects"
-    fi
+    test -z "$has_long_name" && objects=$(cometname "$objects")
 
     # get lat/long
     if [ "$AI_SITE" ]
@@ -7810,10 +8000,15 @@ get_mpcephem () {
         echo $tmp1 $tmp2 >&2 &&
         return 255
 
+    # reference of elements
+    elref=$(grep "^#" $tmp2 | lines 2 | tail -1 | tr -d '#')
+    
+    # save to header keywords
     if [ "$do_write_header" ] && grep -q -v "^#" $tmp2
     then
         shift 4
         ra="$1:$2:$3"; de="$4:$5:$6"
+        set_header $hdr AI_ELREF="$elref"
         set_header $hdr AI_CORA="$ra" AI_CODEC="$de"
         set_header $hdr AI_CODEL="$7/Distance from observer"
         set_header $hdr AI_COR="$8/Distance from Sun"
@@ -12502,13 +12697,13 @@ rade2altaz () {
     local showhelp
     local use_image_center  # if set then use image center instead of radedat
     local use_jd_now        # if set use current date/time
-    for i in 1 2 3
+    for i in 1 2 3 4
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-c" && use_image_center=1 && shift 1
         test "$1" == "-n" && use_jd_now=1 && shift 1
     done
-    local sname=$1
+    local sname=$1      # set name or JD
     local radedat=$2    # columns radeg dedeg
     local long
     local lat
@@ -12519,9 +12714,11 @@ rade2altaz () {
     local tmp1=$(mktemp /tmp/tmp_tmp1_XXXXXX.dat)
     
     (test "$showhelp" || test $# -lt 1) &&
-        echo -e "usage: rade2altaz [-c] <sname> <radedat>" >&2 &&
+        echo -e "usage: rade2altaz [-c] <sname | jd> <radedat>" >&2 &&
         return 1
 
+    is_number $sname && jd=$sname && sname=""
+    
     if [ ! "$use_image_center" ]
     then
         test -z "$radedat" &&
@@ -12530,14 +12727,14 @@ rade2altaz () {
             echo "ERROR: datafile $radedat not found." >&2 && return 255
         test "$radedat" == "-" && radedat=/dev/stdin
     fi
-    test ! -e $sname.head &&
+    test -z "$jd" && test ! -e $sname.head &&
         echo "ERROR: missing header file $sname.head" >&2 && return 255
     test "$use_image_center" && test ! -e $sname.wcs.head &&
         echo "ERROR: missing wcs header file $sname.wcs.head" >&2 && return 255
 
     long=$(get_param -k location sites.dat long $AI_SITE)
     lat=$(get_param -k location sites.dat lat $AI_SITE)
-    if [ "$use_jd_now" ]
+    test -z "$jd" && if [ "$use_jd_now" ]
     then
         jd=$(ut2jd $(date -u +"%H:%M:%S %y%m%d"))
     else
@@ -14908,6 +15105,9 @@ imcoord () {
                 test -z "$rad" && test -f $sname.head &&
                     rad=$(get_header -q $sname.head $kw) &&
                     fname=$sname.head && usedkw=$kw
+            done
+            for kw in $kwralist
+            do
                 test -z "$rad" && test -f measure/$nref.src.head &&
                     rad=$(get_header -q measure/$nref.src.head $kw) &&
                     fname=measure/$nref.src.head && usedkw=$kw
@@ -17029,6 +17229,7 @@ AIexamine () {
         test "$1" == "-r" && do_replace_image=1 && shift 1
     done
     local tdir=${AI_TMPDIR:-"/tmp"}
+    #test ! -d "$tdir" && echo "WARNING: $AI_TMPDIR does not exist." >&2 && tdir="/tmp"
     local sdat=${AI_SETS:-"set.dat"}
     local tmpconv=$(mktemp "$tdir/tmp_conv_XXXXXX.dat")
     local pardir=$(mktemp -d "$tdir/tmp_par_XXXXXX")
@@ -18142,7 +18343,7 @@ AIfpreview () {
             mkpgm 0 $w $h x.dk.pgm
             mkpgm 10000 $w $h x.sk.pgm
         fi
-        echo "20:00 zz01 xxx o 1 $range ${range%% *} x.dk x.sk $telid" > x.set.dat
+        echo "20:00 prev01 xxx o 1 $range ${range%% *} x.dk x.sk $telid" > x.set.dat
         AI_EXCLUDE=$xlist AI_SETS=x.set.dat AI_TMPDIR=$wdir \
             AIccd -q 0 3>&1 1>&2 2>&3 3>&- | grep -vwE "^excluding image|AI_SETS"
         test $? -ne 0 &&
@@ -22970,8 +23171,9 @@ AIaladin () {
     local apass             # if set then load APASS stars
     local mpclabel          # if set add MPES position label
     local jpllabel          # if set add JPL position label
+    local skip              # name of query to skip (mpc|jpl)
     local i
-    for i in $(seq 1 7)
+    for i in $(seq 1 8)
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-n" && north=$2 && shift 2
@@ -22980,9 +23182,11 @@ AIaladin () {
         test "$1" == "-a" && apass=1 && shift 1
         test "$1" == "-m" && mpclabel=1 && shift 1
         test "$1" == "-j" && jpllabel=1 && shift 1
+        test "$1" == "-s" && skip=$2 && shift 2
     done
     
-    local par1=${1:-""}     # image set or center RA  or comet                    or other object designation
+    local par1=${1:-""}     # image set or center RA  or comet or FITS file name
+                            # or common object designation (e.g. M42)
     local par2=${2:-""}     #              center DEC or uttime or utdate or "now"
     local par3=${3:-""}     #                                      uttime
     local sname
@@ -23003,6 +23207,7 @@ AIaladin () {
     local x
     local y
     local line
+    local imgcenter
     
     (test "$showhelp" || test $# -lt 1 || test $# -gt 3) &&
         echo "usage: AIaladin [-a] [-j] [-m] <setname |" \
@@ -23012,23 +23217,35 @@ AIaladin () {
     # single parameter: setname or object (not solar system)
     if [ $# -eq 1 ]
     then
-        if [ -s set.dat ] && is_setname "$par1"
+        if [ -f "$par1" ] && is_fits "$par1"
         then
-            sname=$par1
-            x=$(imcoord $sname)
-            test $? -ne 0 &&
-                echo "ERROR: unable to determine image coordinates." >&2 && return 255
-            set - $(echo $x)
-            ra=$1; dec=$2
-            # check for target coordinates and set a label
-            label=$(get_header -q $sname.head OBJECT)
-            labelpos=$(get_header -q -s $sname.head AI_CORA,AI_CODEC | tr '\n' ',')
-            # test -z "$labelpos" && labelpos="$ra,$dec"
+            # get ra dec object
+            ra=$(get_header $par1 RA)
+            dec=$(get_header $par1 DEC)
+            imgcenter="$ra $dec"
+            comet=$(get_header $par1 OBJECT)
+            set - $(jd2ut -t $(get_jd $par1))
+            utdate="$1"
+            uttime="$2"
         else
-            echo "# trying to search for object $par1"
-            ra=$par1
-            dec=""
-            label=$par1
+            if [ -s set.dat ] && is_setname "$par1"
+            then
+                sname=$par1
+                x=$(imcoord $sname)
+                test $? -ne 0 &&
+                    echo "ERROR: unable to determine image coordinates." >&2 && return 255
+                set - $(echo $x)
+                ra=$1; dec=$2
+                # check for target coordinates and set a label
+                label=$(get_header -q $sname.head OBJECT)
+                labelpos=$(get_header -q -s $sname.head AI_CORA,AI_CODEC | tr '\n' ',')
+                # test -z "$labelpos" && labelpos="$ra,$dec"
+            else
+                echo "# trying to search for object $par1"
+                ra=$par1
+                dec=""
+                label=$par1
+            fi
         fi
     fi
 
@@ -23059,22 +23276,34 @@ AIaladin () {
     # get comet ephemerides if required
     if [ "$comet" ]
     then
-        false && (get_mpcephem "$comet" $utdate $uttime | tee $tmpdat
-        test $? -ne 0 &&
-            echo "ERROR: failed command: get_mpcephem \"$comet\" $utdate $uttime" >&2 && return 255
-        set - $(tail -1 $tmpdat)
-        shift 4
-        ra=$1:$2:$3; dec=$4:$5:$6)
-        
-        get_mpcephem "$comet" $utdate $uttime # to display some info only
-        get_jplcoord -v "$comet" $utdate $uttime > $tmpdat
-        test $? -ne 0 &&
-            echo "ERROR: failed command: get_jplcoord \"$comet\" $utdate $uttime" >&2 && return 255
-        set - $(tail -1 $tmpdat)
-        ra=$1; dec=$2
+        if [ "$skip" != "mpc" ]
+        then
+            get_mpcephem "$comet" $utdate $uttime | tee $tmpdat
+            if [ $? -ne 0 ]
+            then
+                echo "WARNING: failed command: get_mpcephem \"$comet\" $utdate $uttime" >&2
+            else
+                set - $(tail -1 $tmpdat)
+                shift 4
+                ra=$1:$2:$3; dec=$4:$5:$6
+            fi
+        fi
+        if [ "$skip" != "jpl" ]
+        then
+            get_jplcoord -v "$comet" $utdate $uttime > $tmpdat
+            if [ $? -ne 0 ]
+            then
+                echo "WARNING: failed command: get_jplcoord \"$comet\" $utdate $uttime" >&2
+            else
+                set - $(tail -1 $tmpdat)
+                ra=$1; dec=$2
+                echo "# JPL coordinates: $comet  $ra $dec" >&2
+            fi
+        fi
         label="$comet"
         labelpos="$ra,$dec"
-        echo "# JPL coordinates: $label  $ra $dec" >&2
+        test -z "$labelpos" &&
+            echo "ERROR: unable to determine object coordinates" >&2 && return 255
     fi
     
     # additional labels
@@ -23121,6 +23350,7 @@ AIaladin () {
     then
         # use the full featured desktop version
         script="$ra $dec; reticle off"
+        test "$imgcenter" && script="$imgcenter; reticle off"
         catlayer=2
         if [ "$label" ]
         then
@@ -23166,6 +23396,7 @@ AIstack () {
     local showhelp
     local insuffix=""       # suffix added to base of input images
     local outsuffix=""      # suffix added to base of output file names
+    local cropgeom=""       # crop input images before stacking (wxh+x+y), NOT implemented!
     local imgsize=""        # use this image size for coadded image
     local xyscale=1         # scale up/down output image resolution
     local use_full_size     # if set use full coverage of input images
@@ -23175,7 +23406,7 @@ AIstack () {
                             #   move on sky in "/hr,deg and x,y is position of
                             #   object on image in image coords
     local sparam=""         # additional parameters passed over to swarp
-    local cref=""           # if set use center coordinates of this image
+    local cref=""           # reference image to get center coordinates from or cxfits,cyfits
     local verbose=0         # if >0 print some info about shifted image center
                             # if >1 print additional messages from scamp
     #local do_weight_combine # if set use combine_type weighted instead of average
@@ -23200,6 +23431,7 @@ AIstack () {
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-i" && insuffix="$2" && shift 2
         test "$1" == "-o" && outsuffix="$2" && shift 2
+        #test "$1" == "-g" && cropgeom="$2" && shift 2
         test "$1" == "-c" && cref="$2" && shift 2
         test "$1" == "-s" && imgsize="$2" && shift 2
         test "$1" == "-z" && xyscale="$2" && shift 2
@@ -23255,6 +23487,7 @@ AIstack () {
     local flat
     local x
     local has_image_args
+    local xycenter
     local inext
     local num
     local fname
@@ -23297,10 +23530,10 @@ AIstack () {
     fi
     
     test "$showhelp" &&
-        echo "usage: AIstack [-i <insuffix>] [-o <outsuffix>] [-2] [-f] [-b] [-bg]" \
+        echo "usage: AIstack [-i insuffix] [-o outsuffix] [-2] [-f] [-b] [-bg]" \
             "[-v] [-n] [-bz bgdiffzero|$bgdiffzero] [-mem memory|$mem]" \
-            "[-c combinetype] [-r resamptype] [-bad badpix] [-m dx,dy | -m dr@pa] [-c <centerrefimg>]" \
-            "[-z <xyscale>] [-s <w,h>] [-p <sparam>] [<setname>|<img1> <img2> ...]" >&2 &&
+            "[-r resamptype] [-bad badpix] [-m dx,dy | -m dr@pa] [-c centerrefimg | -c xfits,yfits]" \
+            "[-z xyscale] [-s w,h] [-p sparam] [setname | img1 img2 ...]" >&2 &&
         return 1
     
     test "$badpix" && test ! -f "$badpix" &&
@@ -23344,17 +23577,25 @@ AIstack () {
     
     if [ "$cref" ]
     then
-        test ! -f "${cref%.*}.head" &&
-            echo "ERROR: image header for $cref (cref) not found." >&2 && return 255
-        outcrval1=$(grep "^CRVAL1 " ${cref%.*}.head | awk '{print $3}')
-        outcrval2=$(grep "^CRVAL2 " ${cref%.*}.head | awk '{print $3}')
-        (test -z "$outcrval1" || test -z "$outcrval2") &&
-            echo "ERROR: missing CRVAL* in ${cref%.*}.head." >&2 && return 255
-        param="$param -center_type manual -center $outcrval1,$outcrval2"
-        
-        if [ "$use_full_size" ] && [ -z "$imgsize" ]
+        if [ "${cref/,/}" != "$cref" ]
         then
-            param="$param -image_size $(imsize $cref | tr ' ' ',')"
+            # cref contains FITS image pixel coordinates of new center
+            xycenter="${cref/,/ }"
+            cref=""
+        else
+            # cref contains file name of reference image from which center coordinates are taken
+            test ! -f "${cref%.*}.head" &&
+                echo "ERROR: image header for $cref (cref) not found." >&2 && return 255
+            outcrval1=$(grep "^CRVAL1 " ${cref%.*}.head | awk '{print $3}')
+            outcrval2=$(grep "^CRVAL2 " ${cref%.*}.head | awk '{print $3}')
+            (test -z "$outcrval1" || test -z "$outcrval2") &&
+                echo "ERROR: missing CRVAL* in ${cref%.*}.head." >&2 && return 255
+            param="$param -center_type manual -center $outcrval1,$outcrval2"
+            
+            if [ "$use_full_size" ] && [ -z "$imgsize" ]
+            then
+                param="$param -image_size $(imsize $cref | tr ' ' ',')"
+            fi
         fi
     fi
 
@@ -23404,7 +23645,7 @@ AIstack () {
             then
                 regpixscale=1
             else
-            # get regpixscale from measure/$nref.src.head
+                # get regpixscale from measure/$nref.src.head
                 if [ ! -f measure/$nref.src.head ]
                 then
                     echo "ERROR: measure/$nref.src.head is missing." >&2
@@ -23498,8 +23739,15 @@ AIstack () {
                     test ! -f "$wcs" &&
                         echo "WARNING: $nref.wcs.head not found, cannot set center." >&2 &&
                         break
-                    outcrval1=$(grep "^CRVAL1 " $wcs | awk '{print $3}')
-                    outcrval2=$(grep "^CRVAL2 " $wcs | awk '{print $3}')
+                    if [ "$xycenter" ]
+                    then
+                        set - $(echo "center" $xycenter | xy2rade -f -s - $wcs)
+                        outcrval1=$(sexa2dec $1 15)
+                        outcrval2=$(sexa2dec $2)
+                    else
+                        outcrval1=$(grep "^CRVAL1 " $wcs | awk '{print $3}')
+                        outcrval2=$(grep "^CRVAL2 " $wcs | awk '{print $3}')
+                    fi
                     (test -z "$outcrval1" || test -z "$outcrval2") &&
                         echo "ERROR: missing CRVAL* in $wcs." >&2 && return 255
                 fi
@@ -23525,8 +23773,15 @@ AIstack () {
         #   resamp.weight.fits: 3*2byte*npixout/image
         #   coadding:       2*ncolors*2byte*npixout / set
         img=$(head -1 $imlist | awk '{print $3}')
-        w=$(identify $img | cut -d " " -f3 | cut -d "x" -f1)
-        h=$(identify $img | cut -d " " -f3 | cut -d "x" -f2)
+        if [ -z "$cropgeom" ]
+        then
+            w=$(identify $img | cut -d " " -f3 | cut -d "x" -f1)
+            h=$(identify $img | cut -d " " -f3 | cut -d "x" -f2)
+        else
+            set - $(echo $cropgeom | tr 'x+-' ' ')
+            w=$1
+            h=$2
+        fi
         ncolors=3
         is_pgm $img && ncolors=1
         test "$do_bayer"     && ncolors=2   # ??
@@ -23988,6 +24243,242 @@ EOF
     test "$AI_DEBUG" || rmdir $wdir
     test "$has_image_args" && rm $sdat
     return $retval
+}
+
+
+AIsplitstack () {
+    # split image set and create cropped stacks around target
+    # for multiple objects provide a region file (circles) instead of target
+    # the base image set must have been processed (stacked) already
+    # splitted sets are named as <baseset><ochar><part> ochar=a,b,... part=1,2,...
+    local showhelp
+    local nparts=2
+    local osize
+    local odir="split"
+    local mode
+    local i
+    for i in $(seq 1 3)
+    do
+        (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
+        test "$1" == "-n" && nparts="$2" && shift 2
+        test "$1" == "-s" && osize="$2" && shift 2
+        test "$1" == "-d" && odir="$2" && shift 2
+        test "$1" == "-m" && mode="$2" && shift 2
+    done
+    local baseset=$1
+    local target=$2         # single object name or region file (circles)
+    local xycenter=${3:-""} # stack center in FITS image coordinates
+    
+    local xsetdat=$odir/set.dat
+    codir="comet"
+    local tdir=${AI_TMPDIR:-"/tmp"}
+    local imlist=$(mktemp $tdir/tmp_imlist_XXXXXX.dat)
+    local tmpreg=$(mktemp $tdir/tmp_targets_XXXXXX.reg)
+    local tmpcreg=$(mktemp $tdir/tmp_comet_XXXXXX.reg)
+    local reg
+    local ext
+    local f
+    local tstart
+    local texp
+    local onum
+    local ochar
+    local sname
+    local slist
+    local modlist
+    local n
+    local str
+    local n1
+    local n2
+    local nrefbase
+    local offbase
+    local nref
+    local off
+    local doff
+    local jdbase
+    local omove
+    local dhr
+    local line
+    
+    (test "$showhelp" || test $# -lt 2) &&
+        echo "usage: AIsplitstack [-d odir|$odir] [-n nparts|$nparts] [-s osize_w<,h>] <baseset> <regfile | target xcfits,ycfits>" >&2 &&
+        return 255
+
+    # check mode
+    test "$mode" && case "$mode" in
+        setdat) ;;
+        *)  echo "ERROR: unknown mode, allowed values: setdat" >&2
+            rm -f $imlist $tmpreg $tmpcreg
+            return 255;;
+    esac
+    # check if targets are provided via ds9 region file
+    if [ -f "$target" ]
+    then
+        reg=$target
+        target=""
+    else
+        test -z "$xycenter" &&
+            echo "ERROR: missing xycenter" >&2 && return 255
+        echo "center($xycenter,10) # text={$target}" > $tmpreg
+        reg=$tmpreg
+    fi
+
+    # get extension of the baseset stack
+    test -f $baseset.ppm && ext="pgm"
+    test -f $baseset.ppm && ext="ppm"
+
+    # prepare odir    
+    test -d $odir || mkdir $odir
+    for f in .airtoolsrc camera.dat rawfiles.dat sites.dat refcat.dat \
+        bgdiff.dat bgsfit.dat reg.dat \
+        $(get_header $baseset.head BADPIX)
+    do
+        (cd $odir && test ! -e $f && ln -s ../$f .)
+    done
+    #test -d $odir/bgvar || mkdir $odir/bgvar
+    test -d $odir/measure || mkdir $odir/measure
+    for n in $(AIimlist -n $baseset)
+    do
+        #(cd $odir/bgvar   && test ! -e $n.bad.reg  &&
+        #    test -e ../../bgvar/$n.bad.reg         && ln -s ../../bgvar/$n.bad.reg .)
+        (cd $odir/measure && test ! -e $n.src.head && ln -s ../../measure/$n.src.head .)
+    done
+    test -d $odir/$codir || mkdir $odir/$codir
+
+    # get some info about baseset
+    set - $(grep -v "^#" set.dat | awk -v s=$baseset '{if($2==s && $4=="o")print $0}') x
+    test $# -lt 11 &&
+        echo "ERROR: unknown base set $baseset" >&2 && return 255
+    tstart=$1
+    texp=$5
+    shift 5
+    str="$4 $5 $6"
+
+    # check if baseset has been processed already
+    test -s $xsetdat && slist=$(AI_SETS=$xsetdat AIsetinfo -b | awk -v s=$baseset '{
+        pat="^"s; if($2~pat && $4=="o") print $2}')
+    if [ "$slist" ]
+    then
+        # check for any stack
+        for f in $slist
+        do
+            test -e $f.head &&
+                echo "ERROR: base set $baseset has been splitted already" >&2 &&
+                return 255
+        done
+    fi
+
+    # create entries in $xsetdat
+    AIimlist -n $baseset > $imlist
+    n=$(cat $imlist | wc -l)
+    test $n -eq 0 && return 255
+    slist=""
+    onum=0
+    while read
+    do
+        test "${REPLY:0:7}" == "circle(" || continue
+        target=$(echo $REPLY | cut -d '=' -f2 | tr -d '{}' | awk '{
+            id=$1
+            gsub(/\(/,"",id)
+            gsub(/\)/,"",id)
+            gsub(/\./,"",id)
+            gsub(/\//,"",id)
+            printf("%s", id)}')
+        onum=$((onum+1))
+        ochar=$(echo $onum | awk '{printf("%s", sprintf("%c", 96+$1))}')
+        test -z "$target" && target=$ochar
+        for i in $(seq 0 $((nparts-1)))
+        do
+            sname=$baseset$ochar$((i+1))
+            slist=$(echo $slist $sname)
+            n1=$(lines $((1+i*n/nparts)) $imlist | tail -1)
+            n2=$(lines $(((i+1)*n/nparts)) $imlist | tail -1)
+            nref=$(lines $(((2*i+1)*n/nparts/2+1)) $imlist | tail -1)
+            test $i -eq $nparts && n2=$(tail -1 $imlist)
+            line="$tstart $sname $target o $texp $n1 $n2 $nref $str"
+            test -s $xsetdat && grep "^${line}$" -q $xsetdat && continue
+            if [ -s $xsetdat ] && grep " $sname $target o " -q $xsetdat
+            then
+                # TODO: check/remove already processed stacks and related files
+                # replace line
+                test ! -e $xsetdat.orig && cp -p $xsetdat $xsetdat.orig
+                sed -i "s,.* $sname $target o .*,$line," $xsetdat
+                modlist=$(echo $modlist $sname)
+            else
+                # add new line
+                echo $tstart $sname $target o $texp $n1 $n2 $nref $str >> $xsetdat
+            fi
+        done
+    done < $reg
+    cat $xsetdat
+    test "$mode" == "setdat" && rm -f $imlist $tmpreg $tmpcreg && return
+
+    test -e $xsetdat.orig &&
+    echo "ERROR: offending file $xsetdat.orig. This indicates that there might be
+    a mismatch of image set definitions and possibly already processed
+    stacks in directory $splitdir." >&2 && return 255
+
+    # stack, astrometry, costack
+    # note: stacks will have "unusual" CRVAL* (different from (10,0) because of xycenter
+    onum=0
+    if [ "$osize" ]
+    then
+        test "${osize/,/}" == "$osize" && osize="$osize,$osize"
+        while read
+        do
+            test "${REPLY:0:7}" == "circle(" || continue
+            xycenter=$(echo $REPLY | tr '(),' ' ' | awk '{printf("%.0f,%.0f", $2, $3)}')
+            onum=$((onum+1))
+            ochar=$(echo $onum | awk '{printf("%s", sprintf("%c", 96+$1))}')
+            for task in stack
+            do
+                for i in $(seq 0 $((nparts-1)))
+                do
+                    sname=$baseset$ochar$((i+1))
+                    (cd $odir && AO_STACK="-s $osize -c $xycenter" \
+                        airtools-cli -s $sname -x plot,image $task)
+                done
+            done
+        done < $reg
+    fi
+    (cd $odir
+    airtools-cli stack
+    airtools-cli astrometry
+    airtools-cli costack)
+    # add SPLITREF keyword
+    for sname in $(AI_SETS=$xsetdat AIsetinfo -b | awk '{if($4=="o"){print $2}}')
+    do
+        set_header $odir/$sname.head SPLITREF=$baseset
+        set_header $odir/${sname}_m.head SPLITREF=$baseset
+    done
+    
+    # create "comet" region files using ra/dec and wcs calibration
+    onum=0
+    jdbase=$(get_header $baseset.head MJD_REF)
+    while read
+    do
+        test "${REPLY:0:7}" == "circle(" || continue
+        xycenter=$(echo $REPLY | tr '(),' ' ' | awk '{printf("%.0f,%.0f", $2, $3)}')
+        crad=$(echo $REPLY | tr '(),' ' ' | awk '{printf("%s", $4)}')
+        rade=$(echo "x ${xycenter/,/ }" | xy2rade -f -s - $baseset.wcs.head)
+        onum=$((onum+1))
+        ochar=$(echo $onum | awk '{printf("%s", sprintf("%c", 96+$1))}')
+        for i in $(seq 0 $((nparts-1)))
+        do
+            sname=$baseset$ochar$((i+1))
+            echo "reg $rade" | rade2xy - $odir/$sname.wcs.head | \
+                xy2reg $odir/$sname.$ext - "" "" $crad > $tmpcreg
+            # TODO: apply object movement according to OMOVE and dhr
+            omove=$(get_header $odir/$sname.head AI_OMOVE)
+            dmin=$(get_header $odir/$sname.head MJD_REF | awk -v r=$jdbase '{printf("%.2f",24*60*($1-r))}')
+            off=$(cd $odir; omove2trail -d $dmin $sname $omove | awk -F "," '{
+                a=$2*3.1415926/180
+                printf("%.1f %.1f", $1*cos(a), $1*sin(a))}')
+            regshift $tmpcreg $off > $odir/$codir/$sname.comet.reg
+        done
+    done < $reg
+
+
+    rm -f $imlist $tmpreg $tmpcreg
 }
 
 
@@ -27590,6 +28081,7 @@ AIastrometry () {
     local showimages        # if set show check images
     local adirlist          # list of base directories containing
                             #   Airtools projects
+    local is_splitted       # process stacks in directory splitdir of current project
     local do_all_mpc        # if set combine all measurements in mpc report
     local obscode=${AI_OBSCODE:-""} # MPC observatory code
     local author=${AI_OBSNAME:-"My Full Name"}
@@ -27600,6 +28092,7 @@ AIastrometry () {
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-d" && adirlist="$adirlist $2" && shift 2
+        test "$1" == "-cs" && is_splitted=1 && shift 1
         test "$1" == "-m" && cmethod="$2" && shift 2
         test "$1" == "-s" && csize="$2" && shift 2
         test "$1" == "-i" && showimages=1 && shift 1
@@ -27617,8 +28110,12 @@ AIastrometry () {
     local sitesdat="sites.dat"
     local centerdat="center.dat"  # output file to store result from cometcenter
     local chkdir="chkctr"   # directory of checkimages (filled by cometcenter)
-    local odir="mpc"        # output directory of mpcreports
+    local mpcdir="mpc"        # output directory of mpcreports
     local mpcdat            # output mpcreport data file (one per set)
+    local splitdir="split"  # directory containing stacks of splitted image sets
+    local lopts
+    local odir
+    local nobs
     local adir
     local dir
     local set
@@ -27630,6 +28127,7 @@ AIastrometry () {
     local str
     local b
     local f
+    local flist
     local cosub
     local coreg
     local cobad
@@ -27663,22 +28161,29 @@ AIastrometry () {
             "<cometname_or_imageset> <firstdate> <lastdate>" >&2 &&
         return 1
 
-    # decide if operating on single set or multiple sets of a given comet
-    is_setname $comet && set=$comet && comet=""
-    
+    # test if operating on single image set
+    test -z "$is_splitted" && test -z "$adirlist" && lopts="-c" &&
+        is_setname $comet && set=$comet && comet=""
+    test "$is_splitted" && lopts="-cs" && adirlist="." &&
+        (cd $splitdir && is_setname $comet) && set=$comet && comet=""
+
     # determine list of observations
     if [ "$comet" ]
     then
         if [ "$comet" == "all" ]
         then
+            # all image sets in current project
             comet=""
-            test -z "$adirlist" && adirlist="."
+            AIlist $lopts > $tmpobs
+        else
+            # search by comet name
+            test -z "$adirlist" &&
+                echo "ERROR: empty base directory of projects" >&2 && return 255
+            AIlist $lopts -d $(echo $adirlist | sed 's, , -d ,g') "$comet" "$first" "$last" > $tmpobs
         fi
-        test -z "$adirlist" &&
-            echo "ERROR: empty base directory of projects" >&2 && return 255
-        AIlist -d $(echo $adirlist | sed 's, , -d ,g') "$comet" "$first" "$last" > $tmpobs
     else
-        AIlist -c | awk -v s=$set '{if($2==s) print $0}' > $tmpobs
+        # single image set of current project
+        AIlist $lopts | awk -v s=$set '{if($2==s) print $0}' > $tmpobs
     fi
     if ! grep -q -v "^#" $tmpobs
     then
@@ -27687,17 +28192,20 @@ AIastrometry () {
         #test ! -s $mpcdat && return 255
         #echo "WARNING: using previously processed data instead." >&2
     else
-        test "$comet" && echo "# $(grep -v "^#" $tmpobs | wc -l) observations"
+        nobs=$(grep -v "^#" $tmpobs | wc -l)
+        test -z "$set" && echo "# $nobs observations"
     fi
 
     # create output directory for individual mpc reports
-    test "$comet" && odir="$odir/$comet"
+    odir=$mpcdir
+    test "$comet" && odir="$mpcdir/$comet"
     test ! -d $odir && mkdir -p $odir
     test ! -d $odir && return 255
     
     while read dir set x ut mag x x x x tel x
     do
         test "${dir:0:1}" == "#" && continue
+        test "$is_splitted" && dir=$(basename $(pwd))/$splitdir
         test -z "$tel" && continue
         adir=""
         if [ "$comet" ]
@@ -27708,30 +28216,34 @@ AIastrometry () {
                 test "$adir" && break
             done
         else
-            test -f comet/$set.comet.reg && adir=".."
+            test -z "$is_splitted" && test -f comet/$set.comet.reg && adir=".."
+            test    "$is_splitted" && test -f $splitdir/comet/$set.comet.reg && adir=".."
         fi
-        test -z "$adir" &&
+        test -z "$adir" && test $nobs -eq 1 &&
             echo "ERROR: $dir/comet/$set.comet.reg not found" >&2 && return 255
+        test -z "$adir" &&
+            echo "WARNING: skipping $set, $dir/comet/$set.comet.reg not found" >&2 && continue
         
         # TODO: check already processed set
         #test -s $mpcdat && grep -q "^$dir [ ]*$set " $mpcdat &&
         #    echo "# WARNING: $dir  $set already processed" >&2 && continue
+        echo "" >&2
         echo "# $dir  $set" >&2
 
         hdr=$adir/$dir/$set.head
         test ! -f $hdr && echo "ERROR: missing $hdr." >&2 && return 255
 
-        mpcdat=$odir/$dir.$set.mpc.dat
+        mpcdat=$odir/${dir%%/*}.$set.mpc.dat
         cosub=""
 
         line=""
-        test -s $centerdat && line=$(grep -E "^$dir [ ]*$set " $centerdat)
+        test -s $centerdat && line=$(grep -E "^${dir%%/*} [ ]*$set " $centerdat)
         if [ "$line" ]
         then
             echo "# reusing center position from $centerdat"
             ext=""
-            test -z "$ext" && test -f $chkdir/$dir.${set}_m.c.ppm && ext="ppm"
-            test -z "$ext" && test -f $chkdir/$dir.${set}_m.c.pgm && ext="pgm"
+            test -z "$ext" && test -f $chkdir/${dir%%/*}.${set}_m.c.ppm && ext="ppm"
+            test -z "$ext" && test -f $chkdir/${dir%%/*}.${set}_m.c.pgm && ext="pgm"
         else
             # get cosub image and image extension
             for ext in ppm pgm
@@ -27743,6 +28255,16 @@ AIastrometry () {
                 f=$(dirname $hdr)/comet/$set.cosub.$ext
                 test -f $f && cosub=$f && mult=1 && break
             done
+            if [ -z "$cosub" ]
+            then
+                # get costack
+                for ext in ppm pgm
+                do
+                    f=$(dirname $hdr)/${set}_m.$ext
+                    test -f $f && cosub=$f && mult=1 && break
+                done
+                test "$cosub" && echo "WARNING: using costack instead of cosub image" >&2
+            fi
             test -z "$cosub" && echo "ERROR: no cosub image found." >&2 && return 255
             
             # determine aperture center using cosub image
@@ -27752,17 +28274,33 @@ AIastrometry () {
                 echo "# cometcenter $copts -m $cmethod $adir/$dir $set $cosub" >&2
             line=$(cometcenter $copts -m $cmethod $adir/$dir $set $cosub)
             test $? -ne 0 && echo "ERROR: cometcenter failed." >&2 && return 255
+            
+            # rename checkimages in case of splitted sets
+            if [ "$is_splitted" ] && [ "$csize" ]
+            then
+                # file names are starting with $splitdir instead of ${dir%%/*}
+                flist=$(ls $chkdir/$splitdir.${set}_m.c* 2>/dev/null)
+                test "$flist" && for f in $flist
+                do
+                    str=$(echo $f | sed -s 's,/'$splitdir'\.,/'${dir%%/*}'\.,')
+                    #echo "# mv $f \"$str\"" >&2
+                    mv $f "$str"
+                done
+            fi
+            
+            # output results to $centerdat
             str="# dir     set    object   xfits   yfits    met blu frad mag"
             #    210720    co01   2020V2   4013.99 2318.67  fit 0.6  2.7 14.8
             test -s $centerdat || echo "$str" > $centerdat
-            echo "$line" >> $centerdat
+            str=$(printf "%s" "${dir%%/*}")
+            echo "$line" | sed -s 's,^'"$splitdir "','"$str "',' >> $centerdat
         fi
         # get center FITS coordinates
         set - $line
         xfits=$4
         yfits=$5
-        test -s $chkdir/$dir.${set}_m.c.$ext && test -s $chkdir/$dir.${set}_m.c.reg &&
-            chklist="$chklist $chkdir/$dir.${set}_m.c.$ext $chkdir/$dir.${set}_m.c.reg"
+        x=$chkdir/${dir%%/*}.${set}_m.c
+        test -s $x.$ext && test -s $x.reg && chklist="$chklist $x.$ext $x.reg"
         
         # use total mag (from output of AIlist) or measure nuclear mag in cosub
         mopts=""
@@ -27770,47 +28308,83 @@ AIastrometry () {
         then
             mopts="-m1 $mag"
         else
-            # TODO: check for existing cosub image
+            if [ -z "$cosub" ]
+            then
+                # get cosub image and image extension
+                for ext in ppm pgm
+                do
+                    f=$(dirname $hdr)/comet/$set.cosub10.$ext
+                    test -f $f && cosub=$f && mult=10 && break
+                    f=$(dirname $hdr)/comet/$set.cosub1.$ext
+                    test -f $f && cosub=$f && mult=1 && break
+                    f=$(dirname $hdr)/comet/$set.cosub.$ext
+                    test -f $f && cosub=$f && mult=1 && break
+                done
+            fi
+            if [ -z "$cosub" ]
+            then
+                # get costack
+                for ext in ppm pgm
+                do
+                    f=$(dirname $hdr)/${set}_m.$ext
+                    test -f $f && cosub=$f && mult=1 && break
+                done
+                test "$cosub" && echo "WARNING: using costack instead of cosub image" >&2
+            fi
             test -z "$cosub" && echo "ERROR: no cosub image found." >&2 && return 255
             
             # using catalog with highest priority
             xlist=$(get_header $hdr all | grep "^AP_AIDX[1-9]=" | cut -c8 | sort -nu)
-            aidx=$(for x in $xlist
-            do
-                i=$(get_header $hdr AP_AIDX$x)
-                test "$(get_header $hdr AC_ICOL$i)" != "G" && continue
-                aidx=$(get_header -q $hdr AP_AIDX$x); test -z "$aidx" && aidx="-"
-                pcol=$(get_header -q $hdr AP_PCOL$x); test -z "$pcol" && pcol="-"
-                pcat=$(get_header -q $hdr AP_PCAT$x); test -z "$pcat" && pcat="-"
-                # choose priority from order in refcat.dat (first=highest)
-                prio=$(grep -nw "^$pcat" refcat.dat | cut -d ":" -f1)
-                echo $prio $x $pcat
-            done | sort -n -k1,1 | lines 1 | cut -d ' ' -f2)
-            test -z "$aidx" && echo "ERROR: missing measurements in G color band." >&2 && return 255
-
-            # TODO: get texp bgval magzero pscale
-            texp=120
-            bgval=2000
-            magzero=20
-            pscale=1
-            
-            # do m2 aperture photometry on cosub image
-            xycenter=$(echo "circle($xfits,$yfits,5)" | reg2xy $cosub - | \
-                awk '{printf("%.1f,%.1f", $2, $3)}')
-            dasec=11
-            rpix=$(echo $dasec $pscale | awk '{printf("%.2f", $1/2/$2)}')
-            #test "$AI_DEBUG" &&
-            echo "# aphot -b $bgval -t $texp -m $magzero $cosub $xycenter $rpix" >&2
-            line=$(aphot -z -b $bgval -t $texp -m $magzero $cosub $xycenter $rpix)
-            set - $line
-            if [ "${line:0:1}" == "#" ]
+            if [ "$xlist" ]
             then
-                echo "# WARNING: intensity is below background" >&2
-                mag=$5; npx=$7
+                aidx=$(for x in $xlist
+                do
+                    i=$(get_header $hdr AP_AIDX$x)
+                    test "$(get_header $hdr AC_ICOL$i)" != "G" && continue
+                    aidx=$(get_header -q $hdr AP_AIDX$x); test -z "$aidx" && aidx="-"
+                    pcol=$(get_header -q $hdr AP_PCOL$x); test -z "$pcol" && pcol="-"
+                    pcat=$(get_header -q $hdr AP_PCAT$x); test -z "$pcat" && pcat="-"
+                    # choose priority from order in refcat.dat (first=highest)
+                    prio=$(grep -nw "^$pcat" refcat.dat | cut -d ":" -f1)
+                    echo $prio $x $pcat
+                done | sort -n -k1,1 | lines 1 | cut -d ' ' -f2)
+                test -z "$aidx" && echo "ERROR: missing measurements in G color band." >&2 && return 255
             else
-                mag=$4; npx=$6
-                mopts="-m2 $mag"
-                echo "# nuclear mag m2=$mag (npx=$npx)" >&2
+                # get texp pscale magzero from image set
+                texp=$(get_header -s $hdr EXPTIME,NEXP | tr '\n' ' ' | \
+                    awk '{printf("%.1f", $1/$2)}')
+                #bgval=2000
+                pscale=$(get_wcspscale ${hdr/.head/.wcs.head})
+                # TODO: determine aperture photometry index
+                pidx=1
+                magzero=$(get_header -q -s $hdr AP_MZER$pidx)
+                if [ "$is_splitted" ]
+                then
+                    x=$(get_header -q -s $hdr SPLITREF)
+                    test "$x" && magzero=$(get_header -q -s $x.head AP_MZER$pidx)
+                fi
+                test -z "$magzero" &&
+                    magzero=20 &&
+                    echo "WARNING: unknown mag zeropoint, using magzero=20." >&1
+                
+                # do m2 aperture photometry on cosub image
+                xycenter=$(echo "circle($xfits,$yfits,5)" | reg2xy $cosub - | \
+                    awk '{printf("%.1f,%.1f", $2, $3)}')
+                dasec=11
+                rpix=$(echo $dasec $pscale | awk '{printf("%.2f", $1/2/$2)}')
+                #test "$AI_DEBUG" &&
+                echo "# aphot -t $texp -m $magzero $cosub $xycenter $rpix" >&2
+                line=$(aphot -z -t $texp -m $magzero $cosub $xycenter $rpix)
+                set - $line
+                if [ "${line:0:1}" == "#" ]
+                then
+                    echo "# WARNING: intensity is below background" >&2
+                    mag=$5; npx=$7
+                else
+                    mag=$4; npx=$6
+                    mopts="-m2 $mag"
+                    echo "# nuclear mag m2=$mag (npx=$npx)" >&2
+                fi
             fi
         fi
         
@@ -27835,14 +28409,16 @@ AIastrometry () {
     fi
     
     test "$do_all_mpc" &&
-        mpclist=$(ls $odir/*.mpc.dat $odir/*/*.mpc.dat 2>/dev/null)
+        mpclist=$(ls $mpcdir/*.mpc.dat $mpcdir/*/*.mpc.dat 2>/dev/null)
     if [ "$mpclist" ]
     then
         mpcsort $mpclist > mpcreport.txt
         echo ""
         echo "# results written to MPC report file:   mpcreport.txt" >&2
-        (test "$do_all_mpc" || test $(echo $mpclist | wc -w) -gt 1) &&
+        if [ "$do_all_mpc" ] || [ $(echo $mpclist | wc -w) -gt 1 ]
+        then
             test -s mpcreport.txt && mousepad mpcreport.txt 2>/dev/null &
+        fi
     fi
     if [ "$AI_DEBUG" ]
     then
@@ -29064,28 +29640,35 @@ ds9cmd () {
                     img=$(xpaget $ds9name fits header keyword AI_IMAGE)
                     test "$img" && test "$AI_DEBUG" && echo "# img=$img"
                 fi
-                test ! -e "$img" && echo "ERROR: missing image $img" >&2 &&
-                    echo >&2 && return 255
-                
-                # determine set name
-                set=$(basename ${img%%.*} | sed -e 's|_m.*||')
-                ! is_setname $set &&
-                    set=$(get_header -q $img AI_SNAME | sed -e 's|_m.*||')
-                ! is_setname $set &&
-                    set=$(get_header -q $img AI_COMST | sed -e 's|_m.*||')
-                ! is_setname $set &&
-                    echo "ERROR: unale to determine set name." >&2 && echo >&2 && return 255
-                test ! -e $set.head &&
-                    echo "ERROR: missing $set.head" >&2 && echo >&2 && return 255
 
-                # determine approx. fov
-                x=$(imsize $img | awk -v p=$pixscale '{
-                    w=$1*p/3600+0.02
-                    h=$2*p/3600+0.02
-                    printf("%.2fx%.2f", w, h)}')
-                #echo "$ra $dec $x"
-                
-                AIaladin -a $set &
+                if [ -z "$img" ]
+                then
+                    # try with fits image
+                    img=$(xpaget $ds9name file)
+                    test "$img" && test "$AI_DEBUG" && echo "# img=$img"
+                    AIaladin -a $img &
+                else
+                    # determine set name
+                    set=$(basename ${img%%.*} | sed -e 's|_m.*||')
+                    ! is_setname $set &&
+                        set=$(get_header -q $img AI_SNAME | sed -e 's|_m.*||')
+                    ! is_setname $set &&
+                        set=$(get_header -q $img AI_COMST | sed -e 's|_m.*||')
+                    ! is_setname $set &&
+                        echo "ERROR: unale to determine set name." >&2 && echo >&2 && return 255
+                    echo "### img=$img  set=$set"
+                    test ! -e $set.head &&
+                        echo "ERROR: missing $set.head" >&2 && echo >&2 && return 255
+
+                    # determine approx. fov
+                    x=$(imsize $img | awk -v p=$pixscale '{
+                        w=$1*p/3600+0.02
+                        h=$2*p/3600+0.02
+                        printf("%.2fx%.2f", w, h)}')
+                    #echo "$ra $dec $x"
+                    
+                    AIaladin -a $set &
+                fi
                 echo ""
                 ;;
         wcscalib) img=$1
@@ -30109,6 +30692,8 @@ AIsetinfo () {
     local ra
     local de
     local ha
+    local alt
+    local az
 
     test "$showhelp" &&
         echo "usage: AIsetinfo [-o|-c] [-b|-l] [-x] [setname]" >&2 &&
@@ -30136,8 +30721,10 @@ AIsetinfo () {
             then
                 echo "# LT  set  target type texp n1 n2   nref dark flat tel"
             else
-                echo "# date  set   object   ra+de     ha  jd_ref      texp n  rms   bg fwhm tel site"
-                #     200120  co01  2017T2   0234+572  1.8 2458869.319 120 14  0.0    0 0.0  GSOG Weimar
+                #echo "# date  set   object   ra+de     ha  jd_ref      texp n  rms   bg fwhm tel site"
+                ##     200120  co01  2017T2   0234+572  1.8 2458869.319 120 14  0.0    0 0.0  GSOG Weimar
+                echo "# date   set   object   ra+de    az alt jd_ref      texp n  rms   bg fwhm tel site"
+                #     210902   co01  2020V2   1216+345 303 18 2459460.319 120 15  0.0    0 0.0  RASA Weimar
             fi
         fi
     fi
@@ -30254,7 +30841,7 @@ AIsetinfo () {
         # TODO: convert jdref to UT date and time
         
         # try to get ra/de from wcs header file
-        ra=""; de=""; ha=" -  "
+        ra=""; de=""; ha=" -  "; alt=0; az=0
         if [ "$longinfo" ]
         then
 			if [ -f $sname.wcs.head ]
@@ -30316,6 +30903,11 @@ AIsetinfo () {
                         x=($1-$2)/15
                         if (x<-12) {x=x+24} else {if (x>12) x=x-24}
                         printf("%4.1f", x)}')
+                # determine alt and az
+                set - $(echo $(sexa2dec $ra 15) $(sexa2dec $de) | \
+                    rade2altaz $jdref - | awk '{printf("%.0f %.0f", $1, $2)}')
+                az=$1
+                alt=$2
 			fi
         fi
 
@@ -30364,8 +30956,10 @@ AIsetinfo () {
             test -z "$inst" && test "$flength" && test "$fratio" && inst="f=$flength,f/$fratio"
             test "$inst $AI_SITE" == "f=0.0,f/0 Weimar" && inst="GSO"
             test -z "$inst" && inst="-"
-            printf "%-7s %-5s %-8s %s %s %011.3f %3s %2s %4.1f %4d %3.1f  %s %s\n" \
-            $(basename $(pwd)) $sname $target $pos "$ha" $jdref $texp $nexp $rms $bg $fwhm $inst $AI_SITE
+            #printf "%-7s %-5s %-8s %s %s %011.3f %3s %2s %4.1f %4d %3.1f  %s %s\n" \
+            #$(basename $(pwd)) $sname $target $pos "$ha" $jdref $texp $nexp $rms $bg $fwhm $inst $AI_SITE
+            printf "%-7s %-5s %-8s %s %3d %2d %011.3f %3s %2s %4.1f %4d %3.1f  %s %s\n" \
+            $(basename $(pwd)) $sname $target $pos $az $alt $jdref $texp $nexp $rms $bg $fwhm $inst $AI_SITE
         else
             printf "%s %-8s %s  %-4s %4.0f %3.1f %4s %5.1f %2d %2s %4s  %s\n" \
                 $sname $target $type $nref "$flength" "$fratio" $iso $texp $nexp $tsens $black $telid
@@ -30453,6 +31047,7 @@ AIlist () {
     local ndays=180 # limit output to last $nday days
     local fields    # additional fields to print out
     local do_current # if set then list only results from current project
+    local do_currentsplit # if set then list results from splitdir in current project
     local do_all_obs # if set then do not skip on missing photometry
     local do_jd     # show julian date instead of UT date
     local do_icq    # output similar to ICQ format
@@ -30470,6 +31065,7 @@ AIlist () {
         test "$1" == "-n" && ndays="$2" && shift 2
         test "$1" == "-f" && fields="$2" && shift 2
         test "$1" == "-c" && do_current=1 && shift 1
+        test "$1" == "-cs" && do_currentsplit=1 && shift 1
         test "$1" == "-a" && do_all_obs=1 && shift 1
         test "$1" == "-j" && do_jd=1 && shift 1
         test "$1" == "-i" && do_icq=1 && shift 1
@@ -30481,11 +31077,13 @@ AIlist () {
     local last=${3:-""}     # last date YYMMDD
     
     local tdir=${AI_TMPDIR:-"/tmp"}
+    test ! -d "$tdir" && echo "WARNING: $AI_TMPDIR does not exist." >&2 && tdir="/tmp"
     local tstamp=$(mktemp "$tdir/tmp_stamp.XXXXXX.dat")
     local tmp1=$(mktemp "$tdir/tmp_dat1.XXXXXX.dat")
     local tmp2=$(mktemp "$tdir/tmp_dat2.XXXXXX.dat")
     local tmpout=$(mktemp "$tdir/tmp_ailist.XXXXXX.dat")
     local tmpsets=$(mktemp "$tdir/tmp_sets.XXXXXX.dat")
+    local splitdir="split"  # directory containing stacks of splitted image sets
     local adir
     local dlist
     local jdnow
@@ -30527,6 +31125,12 @@ AIlist () {
         do_all_obs=1
         test "$day" && first=$day && last=$day
     fi
+    if [ "$do_currentsplit" ]
+    then
+        adirlist="./$splitdir"
+        do_all_obs=1
+        test "$day" && first=$day && last=$day
+    fi
     if [ -z "$adirlist" ]
     then
         for adir in \
@@ -30558,13 +31162,14 @@ AIlist () {
             awk -F '/' -v f=$first -v l=$last '{
                 d=substr($NF,1,6)
                 if (d>=f && d<=l) print $0}')
-        test "$adir" == "." && dlist=$(realpath .)
+        (test "$do_current" || test "$do_currentsplit") && dlist=$(realpath $adir)
         test -z "$dlist" && continue
         
-        test -z "$do_current" && echo "# $adir: scanning $(echo $dlist | wc -w) subdirectories" >&2
+        test -z "$do_current" && test -z "$do_currentsplit" &&
+            echo "# $adir: scanning $(echo $dlist | wc -w) subdirectories" >&2
         for d in $dlist
         do
-            find $d -maxdepth 1 -type f -regextype posix-egrep -regex "$d/[a-z]{2}[0-9]{2}[a-z]{0,1}.head" \
+            find $d -maxdepth 1 -type f -regextype posix-egrep -regex "$d/[a-z]{2}[0-9]{2}[a-z]{0,1}[0-9]{0,1}.head" \
                 -exec grep -H -E "^OBJECT[ ]*|^JD[ ]*=|^AI_TELID[ ]*=" \{\} \; | \
                 tr ':=' ' ' | \
                 awk -v now=$jdnow -v o="$target" -v t="$telid" '{
@@ -30615,13 +31220,13 @@ AIlist () {
     (if [ "$do_jd" ]
     then
         printf "# dir    set   target   jd          mag   diam pcat   mlim m0    tel  alt  az  moon"
-        #     170915s  co01  2016R2   2458012.220 13.63  3.2 apass  20.5 20.77 T33   43  0.23,39,4
+        #       170915s  co01  2016R2   2458012.220 13.63  3.2 apass  20.5 20.77 T33   43  0.23,39,4
     else
         if [ "$do_icq" ]
         then
-            printf "#IIYYYYMnL YYYY MM DD.DDdeM[mm.m:rfAAA.ATF/VVVV >dd.ddnDC >t.ttmANG:ICQ XX*OBSxx\n"
+        printf "#IIYYYYMnL YYYY MM DD.DDdeM[mm.m:rfAAA.ATF/VVVV >dd.ddnDC >t.ttmANG:ICQ XX*OBSxx\n"
         else
-            printf "# dir    set   target   ut            mag   diam pcat   mlim m0    tel  alt  az  moon"
+        printf "# dir    set   target   ut            mag   diam pcat   mlim m0    tel  alt  az  moon"
         fi
     fi
     test "$fields" &&
@@ -30693,6 +31298,7 @@ EOF
         local outbase
         local outadd
         local outphot
+        local moonfmt
         local catlist=$(mktemp "$tdir/tmp_cat_XXXXXX.dat")
 
         test "$AI_DEBUG" && echo "#" $f >&2
@@ -30853,6 +31459,7 @@ EOF
                 fi
                 
                 # additional output fields
+                outadd=""
                 if [ "$fields" ]
                 then
                     outadd=$(for f in ${fields//,/ }
@@ -30867,12 +31474,14 @@ EOF
                 fi
 
                 # show data
+                moonfmt="%s"
+                test "$outadd" && moonfmt="%-11s"
                 if [ "$do_icq" ]
                 then
                     # TODO: deal with unknown cmag, diam
                     outphot=$(printf "%5.2fXX XXXXX XXXXX  %2.0f                        %s" $cmag $diam $icqid)
                 else
-                    outphot=$(printf " %5s %s %-6s %-4s %s %-5s %2s %3s  %-11s" \
+                    outphot=$(printf " %5s %s %-6s %-4s %s %-5s %2s %3s  $moonfmt" \
                         $cmag "$diam" $pcat $mlim $mzer ${tel//\'/} $alt $az $moon)
                 fi
                 echo "$outbase$outphot$outadd"
@@ -30880,10 +31489,9 @@ EOF
         else
             aidx="-"; pcol="-"; pcat="-"; nfit="-"; mzer="-"; mlim="-"
             cind="-"; ccoeff="-"; cter="-"; cmag="-"; diam="-"
-            outphot=$(printf "  -     -   -       -    -    %-5s %2d %3d  %-11s" \
-                ${tel//\'/} $alt $az $moon)
 
             # additional output fields
+            outadd=""
             if [ "$fields" ]
             then
                 outadd=$(for f in ${fields//,/ }
@@ -30891,6 +31499,11 @@ EOF
                     printf " ${!f}"
                 done)
             fi
+
+            moonfmt="%s"
+            test "$outadd" && moonfmt="%-11s"
+            outphot=$(printf "  -     -   -       -    -    %-5s %2s %3s  $moonfmt" \
+                ${tel//\'/} $alt $az $moon)
 
             echo "$outbase$outphot$outadd"
         fi

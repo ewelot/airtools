@@ -19,8 +19,8 @@
 ########################################################################
 AOVARS="AO_SKIP AO_FLATS AO_LIGHT AO_BGVAR AO_REGIS AO_STACK AO_AMASK AO_ACOOR AO_ABINN"
 
-VERSION="1.3.4"
-VINFO="T. Lehmann, Jul. 2021"
+VERSION="1.3.5"
+VINFO="T. Lehmann, Aug. 2021"
 PINFO="\
     options:
       -h            show this help text
@@ -34,6 +34,11 @@ PINFO="\
       task          run given task    
 "
 CHANGELOG="
+    1.3.5 - 31 Aug 2021
+        * costack: do not abort program if the object is not found by JPL
+        * astrometry: improve check of valid solution by solve-field
+        * stack, costack: force OBJECT keyword being of type string
+
     1.3.4 - 16 Jul 2021
         * check of sites.dat now depends on airfun.sh program version
         * imageinfo: recognize AO_SKIP (path in AI_RAWDIR to be ignored)
@@ -1516,7 +1521,7 @@ _stack () {
                 str=" # orig. OBJECT=$object"
                 test "$object" == "$target" && str=""
             fi
-            set_header $set.head OBJECT=$target
+            set_header -s $set.head OBJECT=$target
         else
             fwhm=$(grep -E "$filter" reg.dat | mean - 7)
         fi
@@ -1646,7 +1651,9 @@ _astrometry () {
     local catalog
     local maglim
     local thres
+    local maxoff
     local ncat
+    local aratio
     local x
     local msg
     local cpulim
@@ -1733,7 +1740,7 @@ _astrometry () {
             imcoord=""
 
         # run solve-field if necessary
-        errval=0
+        errval=""
         opts=""
         if [ "$do_solve_field" ]
         then
@@ -1751,10 +1758,10 @@ _astrometry () {
             else
                 cpulim=120
             fi
-            # range of pixel scales to check (+-20%)
-            opts="$opts "$(echo $pixscale | awk -v t=20 '{
+            # range of pixel scales to check (+-15%)
+            opts="$opts "$(echo $pixscale | awk -v t=15 '{
                 x=1+t/100
-                printf("-L %.1f -H %.1f -u app", $1/x-0.1, $1*x+0.1)}')
+                printf("-L %.2f -H %.2f -u app", $1/x-0.02, $1*x+0.02)}')
             # image dimension and source catalog columns to use
             set - $(imsize $ststack)
             opts="$opts -w $1 -e $2 -X XWIN_IMAGE -Y YWIN_IMAGE -s MAG_AUTO -a"
@@ -1782,9 +1789,11 @@ _astrometry () {
             errval=$?
             test $errval -ne 0 &&
                 echo "# solve-field returns with errval=$errval" >&2
+            # solve-field might fail (no solution) but not return an error
+            test ! -s $tdir/$tmpsolve.wcs && errval=255
             
             # cancel solve-field process if failed
-            (test ! $errval -eq 0 || test ! -s $tdir/$tmpsolve.wcs) &&
+            test $errval -ne 0 &&
                 echo "# first attempt failed" | tee -a $wcslog &&
                 touch $tmpcancel
             
@@ -1804,7 +1813,9 @@ _astrometry () {
                 rm -f $tmpcancel
                 solve-field -O -C $tmpcancel -o $tmpsolve -p -l $cpulim $opts $tmpxy >> $wcslog   
                 errval=$?
-                (test ! $errval -eq 0 || test ! -s $tdir/$tmpsolve.wcs) &&
+                # solve-field might fail (no solution) but not return an error
+                test ! -s $tdir/$tmpsolve.wcs && errval=255
+                test $errval -ne 0 &&
                     echo "# second attempt failed" | tee -a $wcslog
             fi
             
@@ -1825,7 +1836,7 @@ _astrometry () {
                 touch $tmpcancel
             fi
         fi
-        test $errval -ne 0 &&
+        test "$errval" && test $errval -ne 0 &&
             failed="$failed $set" &&
             echo "ERROR: solve-field failed for $set" >&2 &&
             retval=255 && continue
@@ -1869,8 +1880,9 @@ _astrometry () {
         test "$imcoord" && opts="$opts -c $imcoord"
         test "$north"   && opts="$opts -n $north"
         # set max position uncertainty (in deg)
-        test "$errval" == "0" && opts="$opts -o $(echo $fov | awk '{print 0.1+0.1*$1}')"
-        test "$errval" != "0" && opts="$opts -o $(echo $fov | awk '{print 1.0+1.0*$1}')"
+        test "$errval" == "0" && maxoff=$(echo $fov | awk '{print 0.1+0.1*$1}')
+        test "$errval" != "0" && maxoff=$(echo $fov | awk '{print 0.5+1.2*$1}')
+        opts="$opts -o $maxoff"
         if [ "$AO_AMASK" ]
         then
             if [ -e $AO_AMASK ] && is_reg $AO_AMASK
@@ -1903,9 +1915,12 @@ _astrometry () {
             x=wcs/$set.$catalog.dat
             test "$catalog" == "ucac4" && x=wcs/$set.ucac-4.dat
             ncat=$(listhead $x"[2]" | grep NAXIS2 | awk '{printf("%d", $3)}')
-            x=$(( (ncat-200)/(nsrc+100) ))
+            # ratio of areas
+            aratio=$(echo $fov $maxoff | awk '{x=$1+$2; printf("%.1f", x*x/$1/$1)}')  
+            # echo "#### aratio=$aratio fov=$fov maxoff=$maxoff" >&2          
+            x=$(echo $ncat $nsrc $aratio | awk '{printf("%.0f", 0.8*$1/($2+100)/$3)}')
             test $x -gt 2  &&
-                printf "# nsrc=$nsrc ncat=$ncat maglim=$maglim" &&
+                printf "# nsrc=$nsrc ncat=$ncat aratio=$aratio maglim=$maglim" &&
                 maglim=$(echo $maglim 16 | awk '{print $1-0.5}')
             test $x -gt 4  && maglim=$(echo $maglim 16 | awk '{print $1-0.5}')
             test $x -gt 7  && maglim=$(echo $maglim 16 | awk '{print $1-0.5}')
@@ -2049,10 +2064,11 @@ _costack () {
             get_mpcephem -w $set 2>/dev/null
             test $? -ne 0 &&
                 echo "WARNING: skipping $set: object $object is not a known comet." && continue
-            echo "# $set: get coordinates from JPL"
+            # try to obtain (potentially) more precise coordinates from JPL
+            echo "# $set: try to get coordinates from JPL"
             get_jplcoord -w $set 2>/dev/null
             test $? -ne 0 &&
-                echo "WARNING: skipping $set: object $object is not a known comet." && continue
+                echo "WARNING: object $object is not known by JPL."
         fi
         
         # check for astrometric calibration
@@ -2074,7 +2090,7 @@ _costack () {
         test $? -ne 0 && retval=255 && continue
         
         # setting some header keywords
-        set_header ${set}_m.head OBJECT=$(get_header -q $set.head OBJECT)
+        set_header -s ${set}_m.head OBJECT=$(get_header -q $set.head OBJECT)
         set_header $set.head AI_COMST=${set}_m.$ext
     done
 
