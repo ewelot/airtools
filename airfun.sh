@@ -14,9 +14,14 @@
 # - in order to use SAOImage DS9 analysis tasks (via AIexamine) you must
 #   have installed files airds9.ana and aircmd.sh
 ########################################################################
-AI_VERSION="5.1.1"
+AI_VERSION="5.1.2"
 : << '----'
 CHANGELOG
+    5.1.2 - 10 Sep 2021
+        * AIplot: added option -d to check for common date formats on x values
+        * kappasigma: added option -r to treat values as true residuals
+        * cometname: bugfix to correctly handle 2020PV6
+
     5.1.1 - 07 Sep 2021
         * AIlist: added option -cs to process splitted image sets of the
             current project (under <splitdir> directory)
@@ -6032,13 +6037,15 @@ kappasigma () {
     local showhelp
     local do_nonzero    # if set any data values <=0 are rejected
     local do_print_n    # if set append number of valid data points
+    local is_residual   # data points are residuals, mean is fixed at 0
     local i
-    for i in 1 2
+    for i in 1 2 3 4
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-v" && verbose=1 && shift 1
         test "$1" == "-p" && do_nonzero=1 && shift 1
         test "$1" == "-n" && do_print_n=1 && shift 1
+        test "$1" == "-r" && is_residual=1 && shift 1
     done
     local fname=${1:-"-"}
     local col=${2:-"1"}
@@ -6052,7 +6059,7 @@ kappasigma () {
     local tmp2=$(mktemp "/tmp/tmp_dat2_$$.XXXXXX")
 
     (test "$showhelp" || test $# -lt 1) &&
-        echo "usage: kappasigma [-p(ositiv)] [-n(umber)] <dat> [col|$col] [kappa|$kappa] [iter|$iter]" >&2 &&
+        echo "usage: kappasigma [-r] [-p(ositiv)] [-n(umber)] <dat> [col|$col] [kappa|$kappa] [iter|$iter]" >&2 &&
         return 1
     
     grep -v "^#" $fname | grep "[0-9]" | awk -v c=$col -v z=${do_nonzero:-0} '{
@@ -6065,10 +6072,16 @@ kappasigma () {
     cp $tmp1 $tmp2
     for i in $(seq 1 $iter)
     do
-        set - $(normstat $tmp2)
         n1=$(cat $tmp2 | wc -l)
-        md=$1
-        sd=$2
+        if [ "$is_residual" ]
+        then
+            md=0
+            sd=$(cat $tmp2 | awk '{x=x+$1^2} END {printf("%f", sqrt(x/(NR-1)))}')
+        else
+            set - $(normstat $tmp2)
+            md=$1
+            sd=$2
+        fi
         cat $tmp1 | awk -v md=$md -v sd=$sd -v k=$kappa 'BEGIN{low=md-k*sd; high=md+k*sd}{
             if (sd>0) {
                 if (($1>=low) && ($1<=high)) printf("%s\n", $1)
@@ -6087,7 +6100,13 @@ kappasigma () {
     then
         echo $(_stat -m $tmp2) $n2
     else
-        _stat -m $tmp2
+        if [ "$is_residual" ]
+        then
+            sd=$(cat $tmp2 | awk '{x=x+$1^2} END {printf("%f", sqrt(x/(NR-1)))}')
+            echo 0 $sd
+        else
+            _stat -m $tmp2
+        fi
     fi
     rm $tmp1 $tmp2
 }
@@ -7505,14 +7524,26 @@ cometname () {
     local cname
     
     # check for numbered periodic comet
-    s=$(echo $str | sed -e 's,^[0-9]\+P,,')
-    test "$s" != "$str" && echo $str && return
+    s=$(echo $str | sed -e 's,^[0-9]\+P$,,')
+    if [ "$s" != "$str" ]
+    then
+        test "$AI_DEBUG" && echo "# numbered periodic comet:" >&2
+        echo $str && return
+    fi
     
     # check for numbered asteroid
     s=$(echo $str | sed -e 's,^([0-9]\+)$,,')
-    test "$s" != "$str" && echo $str && return
+    if [ "$s" != "$str" ]
+    then
+        test "$AI_DEBUG" && echo "# numbered asteroid (a):" >&2
+        echo $str && return
+    fi
     s=$(echo $str | sed -e 's,^[0-9]\+$,,')
-    test -z "$s" && echo "($str)" && return
+    if [ -z "$s" ]
+    then
+        test "$AI_DEBUG" && echo "# numbered asteroid (b):" >&2
+        echo "($str)" && return
+    fi
 
     # check for un-numbered asteroid YYYYAA...
     s=$(echo $str | awk '{
@@ -7523,7 +7554,12 @@ cometname () {
     then
         # check if it is known as a comet
         get_mpcephem -l "C/$s" > /dev/null 2>&1
-        test $? -eq 0 && echo "C/$s" && return
+        if [ $? -eq 0 ]
+        then
+            test "$AI_DEBUG" && echo "# comet with previous asteroid designation:" >&2
+            echo "C/$s" && return
+        fi
+        test "$AI_DEBUG" && echo "# un-numbered asteroid:" >&2
         echo $s && return
     fi
 
@@ -7538,6 +7574,7 @@ cometname () {
             printf("C/%s %s", substr($0,1,4), substr($0,5))
         }}')
     test -z "$cname" && echo "WARNING: no name conversion applied" >&2 && cname=$str
+    test "$AI_DEBUG" && echo "# un-numbered comet:" >&2
     echo $cname
     return
 }
@@ -17738,11 +17775,12 @@ AIplot () {
     local printfile # if set the plot is saved to printfile
     local gpcmd     # gnuplot commands inserted before plotting
     local nodisplay # if set do not display resulting plot
+    local use_xdate # if set then check various date formats on x values
     local title
     local quiet
     local showhelp
     local i
-    for i in $(seq 1 12)
+    for i in $(seq 1 13)
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-a" && a10k=1 && shift 1
@@ -17754,6 +17792,7 @@ AIplot () {
         test "$1" == "-o" && printfile="$2" && shift 2
         test "$1" == "-t" && title="$2" && shift 2
         test "$1" == "-g" && gpcmd="$2" && shift 2
+        test "$1" == "-d" && use_xdate=1 && shift 1
         test "$1" == "-n" && nodisplay=1 && shift 1
         test "$1" == "-q" && quiet=1 && shift 1
     done
@@ -17887,14 +17926,19 @@ AIplot () {
     echo "set offsets graph 0.02, graph 0.02, graph 0.03, graph 0.03" >> $tmp2
     echo "set grid" >> $tmp2
     
-    # check for several date formats
-    # YYYY-MM-DD.HH:MM
-    head -1 $tmp1 | grep -qE "^[0-9]{4}-[0-9]{2}-[0-9]{2}" && timefmt="%Y-%m-%d"
-    head -1 $tmp1 | grep -qE "^[0-9]{4}-[0-9]{2}-[0-9]{2}.[0-9]{2}:[0-9]{2}" && timefmt="%Y-%m-%d.%H:%M"
-    # YYYYMMDD.HH:MM
-    head -1 $tmp1 | grep -qE "^[0-9]{8}" && timefmt="%Y%m%d"
-    head -1 $tmp1 | grep -qE "^[0-9]{8}.[0-9]{2}:[0-9]{2}" && timefmt="%Y%m%d.%H:%M"
-
+    if [ "$use_xdate" ]
+    then
+        # check for several date formats
+        # YYYY-MM-DD.HH:MM
+        head -1 $tmp1 | grep -qE "^[0-9]{4}-[0-9]{2}-[0-9]{2}" && timefmt="%Y-%m-%d"
+        head -1 $tmp1 | grep -qE "^[0-9]{4}-[0-9]{2}-[0-9]{2}.[0-9]{2}:[0-9]{2}" && timefmt="%Y-%m-%d.%H:%M"
+        # YYYYMMDD.HH:MM
+        head -1 $tmp1 | grep -qE "^[0-9]{8}" && timefmt="%Y%m%d"
+        head -1 $tmp1 | grep -qE "^[0-9]{8}.[0-9]{2}:[0-9]{2}" && timefmt="%Y%m%d.%H:%M"
+        # YYMMDD
+        head -1 $tmp1 | grep -qE "^[0-9]{6}" && timefmt="%y%m%d"
+    fi
+    
     # optionally set date/time data
     if [ "$timefmt" ]
     then
