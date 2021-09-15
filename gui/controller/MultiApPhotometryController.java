@@ -80,7 +80,7 @@ public class MultiApPhotometryController implements Initializable {
     
     private enum ApertureUnit {
         TKM("10^3 kilometer"),
-        AMIN("arc minutes");
+        AMIN("arc seconds");
 
         private final String label;
 

@@ -14,9 +14,17 @@
 # - in order to use SAOImage DS9 analysis tasks (via AIexamine) you must
 #   have installed files airds9.ana and aircmd.sh
 ########################################################################
-AI_VERSION="5.1.2"
+AI_VERSION="5.1.3"
 : << '----'
 CHANGELOG
+    5.1.3 - 15 Sep 2021
+        * AIlist: follow symlinks when browsing directories
+        * AImapphot: reuse previous measurements for matching apertures
+        * AIphotcal: match with optional photometry region before running
+            AIaphot to include fainter stars
+        * icqplot: bugfix when dealing with observer list
+        * regfilter: bugfix to avoid confusion by HISTORY keyword
+
     5.1.2 - 10 Sep 2021
         * AIplot: added option -d to check for common date formats on x values
         * kappasigma: added option -r to treat values as true residuals
@@ -10295,7 +10303,7 @@ icqplot () {
         fi
     else
         # parse results of current project
-        AIlist -i -c $comet > $tmplocalobs
+        test -z "$icqdat" && AIlist -i -c $comet > $tmplocalobs
     fi
     test "$do_cobsobs" &&
         if [ "$do_update" ] || [ ! -s $tmpcobsobs ] || [ $tmpobs -nt $tmpcobsobs ]
@@ -10703,7 +10711,7 @@ icqplot () {
     # set yrange if not provided and multiplot (heliozentric data)
     if [ -z "$yrange" ] && [ "$multiplot" ]
     then
-        cat $tmpdat1 | awk -v col=$ycol '{printf("%s\n", $col)}' | \
+        cat $tmpdat1 | awk -v col=$ycol '{if ($col>0) printf("%s\n", $col)}' | \
             sort -n > $tmpdat2
         min=$(head -1 $tmpdat2)
         max=$(tail -1 $tmpdat2)
@@ -10727,7 +10735,7 @@ icqplot () {
             min=$1
             max=$2
         else
-            cat $tmpdat1 | awk -v col=$ycol '{printf("%s\n", $col)}' | \
+            cat $tmpdat1 | awk -v col=$ycol '{if ($col>0) printf("%s\n", $col)}' | \
                 sort -n > $tmpdat2
             min=$(head -1 $tmpdat2)
             max=$(tail -1 $tmpdat2)
@@ -10801,10 +10809,15 @@ icqplot () {
             other|all) rmobslist=$obslist; x=1;;
         esac
         
-        cat $tmpdat1 | awk -v idlist="$rmobslist" -v x=$x '{
-            found=0
-            if (idlist~$4 || idlist~$11) found=1
-            if (found == x) print $0
+        cat $tmpdat1 | awk -v idlist="${rmobslist//,/ }" -v x=$x 'BEGIN{n=split(idlist, a, /[ ]+/)}{
+            for (i=1; i<=n; i++) {if ($4==a[i] || $11==a[i]) {if (x==1) print $0; next}}
+            if (x==0) print $0
+            }' > $obsdata
+
+        # TODO: do not remove record if $obslist is matched
+        false && cat $tmpdat1 | awk -v idlist="${rmobslist//,/ }" -v x=$x 'BEGIN{n=split(idlist, a, /[ ]+/)}{
+            for (i=1; i<=n; i++) {if ($4==a[i] || $11==a[i]) {if (x==1) print $0; next}}
+            if (x==0) print $0
             }' > $obsdata
     else
         cp $tmpdat1 $obsdata
@@ -11013,7 +11026,7 @@ set label 'P' at screen $multiplot, graph 0.95 center" >> $tmpgp
         do
             idcol=4 # column of observer id = 4, software = 11
             echo $softlist | grep -wq $str && idcol=11
-            cut -d ' ' -f$idcol $obsdata | grep -qw $str
+            cut -d ' ' -f$idcol $obsdata | grep -w $str >/dev/null
             if [ $? -eq 0 ]
             then
                 echo $str
@@ -11039,10 +11052,9 @@ set label 'P' at screen $multiplot, graph 0.95 center" >> $tmpgp
     test $n -gt 800 && ptsize=0.9
 
     # observations not matching obslist (both obs ID and software ID)
-    cat $obsdata | awk -v idlist="${obslist//,/ }" '{
-        found=0
-        if (idlist~$4 || idlist~$11) found=1
-        if (found == 0) print $0
+    cat $obsdata | awk -v idlist="${obslist//,/ }" 'BEGIN{n=split(idlist, a, /[ ]+/)}{
+        for (i=1; i<=n; i++) {if ($4==a[i] || $11==a[i]) next}
+        print $0
         }' > $tmpdat2
 
     n=1 # number of plots
@@ -12036,10 +12048,10 @@ regfilter () {
     for fext in $hlist
     do
         filter="${xycol%|*}"
-        xcol=$(listhead ${ftab}"[$((fext-1))]" | tr "'" '\n' | grep -wiE "$filter")
+        xcol=$(listhead ${ftab}"[$((fext-1))]" | grep -v "^HISTORY" | tr "'" '\n' | grep -wiE "$filter")
         filter="${xycol#*|}"
-        ycol=$(listhead ${ftab}"[$((fext-1))]" | tr "'" '\n' | grep -wiE "$filter")
-        test "$AI_DEBUG" && echo "# regfilter xcol=$xcol ycol=$ycol" >&2
+        ycol=$(listhead ${ftab}"[$((fext-1))]" | grep -v "^HISTORY" | tr "'" '\n' | grep -wiE "$filter")
+        test "$AI_DEBUG" && echo "# regfilter fext=$fext xcol=$xcol ycol=$ycol" >&2
         if [ "$maxfwhm" ]
         then
             fitscopy $tmp1"[$((fext-1))][regfilter('$reg', $xcol, $ycol); $fwhmcol < $maxfwhm]" - > $tmp2
@@ -25289,6 +25301,7 @@ AIphotcal () {
         echo "ERROR: unknown FWHM." >&2 && return 255
 
     # reuse existing aperture photometry if no critical parameters have changed
+    # TODO: deal with photreg
     paramchange=""
     x=$(get_header -q $head AP_ARAD$pidx)
     # determine aprad and gap
@@ -25377,11 +25390,22 @@ AIphotcal () {
             refxydat=phot/$setname.$catalog.xy.dat
             refxyreg=phot/$setname.$catalog.xy.reg
         fi
+        # match stars within photreg
+        # apply pre-selection of sources close to reference stars
         # TODO: limit fwhm to exclude galaxies
-        sexselect -f $scat "" $magerrlim "$matchrlim" "$cxy" | \
-            regfilter - $refxyreg | sexselect -r - | \
-            grep "^circ" | reg2xy $setname.$inext - > $tmp1
-
+        if [ -f $photreg ]
+        then
+            echo "# match sources within $photreg" >&2
+            sexselect -f $scat "" $magerrlim "$matchrlim" "$cxy" | \
+                regfilter - $photreg | regfilter - $refxyreg | sexselect -r - | \
+                grep "^circ" | reg2xy $setname.$inext - > $tmp1
+        else
+            sexselect -f $scat "" $magerrlim "$matchrlim" "$cxy" | \
+                regfilter - $refxyreg | sexselect -r - | \
+                grep "^circ" | reg2xy $setname.$inext - > $tmp1
+        fi
+        
+        
         # match stars in photometric reference catalog
         # not implemented yet: eliminate stars close to image border
         # co01: eliminate stars close to border -> $setname.$catalog.xy.reg
@@ -25592,7 +25616,7 @@ AIphotcal () {
     #echo $tmp1 >&2
     
     # if necessary limit stars to user defined region
-    if [ -s $photreg ]
+    false && if [ -s $photreg ]
     then
         echo "# using $photreg to select good stars" >&2
         idlist=$(xy2reg $setname.$inext $tmp1 | tr '(),{}' ' ' | \
@@ -27807,6 +27831,9 @@ AImapphot () {
     local dmag
     local dasec # aperture diameter in arcsec
     local rpix  # aperture radius in pix
+    local found
+    local xdasec
+    local xdkm
     local bgval
     local line
     local mag
@@ -27855,9 +27882,9 @@ AImapphot () {
         adir=""
         test -f $basedir/$dir/comet/$set.comet.reg && adir=$basedir
         test -z "$adir" && adir=$seconddir
-        if [ -s $mapdat ] && grep -q "^$dir [ ]*$set " $mapdat
+        false && if [ -s $mapdat ] && grep -q "^$dir [ ]*$set " $mapdat
         then
-            # TODO: check if all apertures have been measured already
+            # TODO: check if ALL apertures have been measured already
             #   dkm=$5, dasec=$6
             echo "# WARNING: $dir  $set already processed" >&2
             continue
@@ -27881,7 +27908,7 @@ AImapphot () {
             f=$(dirname $hdr)/comet/${b%.*}.cosub.$ext
             test -f $f && cosub=$f && mult=1 && break
         done
-        test -z "$cosub" && echo "ERROR: no cosub image found." >&2 && return 255
+        test -z "$cosub" && echo "ERROR: no cosub image found." >&2 && continue
         
         # get coregion file
         coreg=""
@@ -27949,20 +27976,20 @@ AImapphot () {
         done | sort -n -k1,1 > $catlist
         aidx=$(lines 1 $catlist | cut -d ' ' -f2)
         rm -f $catlist
-        test -z "$aidx" && echo "ERROR: missing measurements in G color band." >&2 && return 255
+        test -z "$aidx" && echo "ERROR: missing measurements in G color band." >&2 && continue
 
         # get comet aperture diameter (in pix)
         dia=$(get_header -q -s $hdr AC_DIAM$aidx)
-        test -z "$dia" && echo "ERROR: missing keyword(s) AC_DIAM$aidx." >&2 && return 255
+        test -z "$dia" && echo "ERROR: missing keyword AC_DIAM$aidx." >&2 && continue
         # get comet background (old: AI_CBG)
         bgval="$bgvalparam"
         test -z "$bgval" && bgval=$(get_header $hdr AC_BCKG$aidx)
-        test -z "$bgval" && echo "ERROR: missing keyword AC_BCKG$aidx." >&2 && return 255
+        test -z "$bgval" && echo "ERROR: missing keyword AC_BCKG$aidx." >&2 && continue
         texp=$(echo $texp $nexp | awk '{printf $1/$2}')
         echo "# $(basename $cosub) $(basename $coreg) d=$dia bg=$bgval texp=$texp pscale=$pscale" >&2
         # get magzero (1ADU,1s) corrected for large aperture
         magzero=$(get_header -s $hdr AP_MZER$aidx)
-        test -z "$magzero" && echo "ERROR: missing keyword." >&2 && return 255
+        test -z "$magzero" && echo "ERROR: missing keyword AP_MZER$aidx." >&2 && continue
 
         # correct magzero and background according to intensity multiplier
         magzero=$(echo $magzero $(di2dmag $mult) | awk '{printf("%.2f", $1-$2)}')
@@ -28016,10 +28043,10 @@ AImapphot () {
         test -e $apreg && rm $apreg
         xycenter=$(echo "circle($center,5)" | reg2xy $cosub - | \
             awk '{printf("%.1f,%.1f", $2, $3)}')
-        hline="# dir    set    jd          fcenter         d/km  d/\" mag   npx bg      mzero"
-        #      .        co01a  2457964.371 2762.0,1662.2 100000 1200 16.38  77 2006.80 23.76
-        
-        echo "$hline"
+        hline="# dir    set    jd          fcenter          d/km  d/\"   mag npx bg      mzero"
+        #      .        co01a  2457964.371 2762.02,1662.24 100000 1200 16.38  77 2006.80 23.76
+        #      210718   co04   2459414.489 4968.20,4258.79 160000   47 12.33 1111 1942.60 22.50
+
         # conversion to image pixel coordinates
         for val in ${aplist//,/ }
         do
@@ -28039,8 +28066,23 @@ AImapphot () {
                     x=$2*au*sin($1/3600*pi/180)
                     printf("%.0f", x)}')
             fi
-            # TODO: skip aperture photometry if it has been measured already
-
+            # skip aperture photometry if it has been measured already
+            found=""
+            test -s $mapdat &&
+                found=$(grep "^$dir [ ]*$set " $mapdat | while read x x x x xdkm xdasec x
+                do
+                    test "$apunit" == "arcsec" && test "$dasec" == "$xdasec" && echo 1 && break
+                    test "$apunit" == "tkm"    && test "$dkm"   == "$xdkm"   && echo 1 && break
+                done)
+            if [ "$found" ]
+            then
+                test "$apunit" == "arcsec" &&
+                    echo "# reusing photometry for d=$dasec arcsec" >&2 && continue
+                test "$apunit" == "tkm" &&
+                    echo "# reusing photometry for d=$dkm km" >&2 && continue
+            fi
+            test "$hline" && echo "$hline" && hline=""
+            
             rpix=$(echo $dasec $pscale | awk '{printf("%.2f", $1/2/$2)}')
             test "$AI_DEBUG" &&
                 echo "# aphot -b $bgval -t $texp -m $magzero $tmpim1 $xycenter $rpix" >&2
@@ -28088,7 +28130,8 @@ physical" > $apreg
         ut=$(jd2ut -p 2 $jd)
         x=$(echo $dasec | awk '{print $1/60}')
         LANG=C printf "%s%s  Z %5.2fAQ 99.9L 50999  %4.1f" "$(comet2icq $comet)" "${ut//-/ }" $mag $x
-        LANG=C printf "                      %s\n" $((dkm/1000))
+        test "$apunit" == "arcsec" && LANG=C printf "                      %s\n" $dasec
+        test "$apunit" == "tkm"    && LANG=C printf "                      %s\n" $((dkm/1000))
     done | LANG=C sort > $icqdat
     x=$(echo ${aplist//,/ } | wc -w)
     i=$(echo ${aplist//,/ } | tr ' ' '\n' | sort -n | awk -v x=$x 'BEGIN{y=1+int(x/2-0.1)}
@@ -28096,7 +28139,9 @@ physical" > $apreg
     x=$(echo ${aplist//,/ } | tr ' ' ',')
     t="$comet - MApPhot ($x arcsec)"
     test "$apunit" == "tkm" && t="$comet - MApPhot ($x x10^3km)"
-    icqplot -o $comet.mapphot.png -t "$t" -ff -i $i $comet $icqdat mag
+    test "$AI_DEBUG" &&
+        echo "icqplot -o $comet.mapphot.png -t \"$t\" -i \"$x\" $comet $icqdat mag" >&2
+    icqplot -o $comet.mapphot.png -t "$t" -i "$x" -r all $comet $icqdat mag
     echo "# AImapphot data file:   $mapdat"
     echo "# created ICQ data file: $icqdat"
     
@@ -28109,7 +28154,7 @@ physical" > $apreg
         rm -f $tmpobs $tmpim1 $tmpdat1
     fi
     rm -f $tmpim2
-    echo $apregdir >&2
+    #echo $apregdir >&2
     return
 }
 
@@ -31088,7 +31133,7 @@ AIlist () {
     local photcat   # select given photometric catalog only
     local telid     # telescope identifier
     local site      # if set then limit to data for this site (currently unused)
-    local ndays=180 # limit output to last $nday days
+    local ndays     # limit output to last $nday days
     local fields    # additional fields to print out
     local do_current # if set then list only results from current project
     local do_currentsplit # if set then list results from splitdir in current project
@@ -31159,6 +31204,10 @@ AIlist () {
     tail    AI_DLEN/AI_DANG" >&2 &&
         return 1
 
+    # if no target specified then limit to last 90 days
+    test $# -eq 0 && test -z "$ndays" && ndays=90 &&
+        echo "# limiting observations to last 90 days"
+
     # ICQ id of observer
     icqid=$AI_OBSICQID
     test -z "$icqid" && icqid=${AI_OBSERVER:-"OBSxx"}
@@ -31202,7 +31251,7 @@ AIlist () {
     do
         test ! -d "$adir" &&
             echo "WARNING: directory $adir does not exist" >&2 && continue
-        dlist=$(find $adir -maxdepth 1 -type d -regextype posix-egrep -regex "${adir%/}/[0-9]{6}[a-z]{0,4}" | \
+        dlist=$(find -L $adir -maxdepth 1 -type d -regextype posix-egrep -regex "${adir%/}/[0-9]{6}[a-z]{0,4}" | \
             awk -F '/' -v f=$first -v l=$last '{
                 d=substr($NF,1,6)
                 if (d>=f && d<=l) print $0}')
@@ -31213,7 +31262,7 @@ AIlist () {
             echo "# $adir: scanning $(echo $dlist | wc -w) subdirectories" >&2
         for d in $dlist
         do
-            find $d -maxdepth 1 -type f -regextype posix-egrep -regex "$d/[a-z]{2}[0-9]{2}[a-z]{0,1}[0-9]{0,1}.head" \
+            find -L $d -maxdepth 1 -type f -regextype posix-egrep -regex "$d/[a-z]{2}[0-9]{2}[a-z]{0,1}[0-9]{0,1}.head" \
                 -exec grep -H -E "^OBJECT[ ]*|^JD[ ]*=|^AI_TELID[ ]*=" \{\} \; | \
                 tr ':=' ' ' | \
                 awk -v now=$jdnow -v o="$target" -v t="$telid" '{
