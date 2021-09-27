@@ -431,7 +431,52 @@ def ppmtogray(param):
         target = pyvips.Target.new_to_descriptor(sys.stdout.fileno())
         outimg.write_to_target(target, "." + outfmt, strip=outstrip)
     exit()
-    
+
+# replace border by white (or black) pixels
+# syntax: pnmreplaceborder [-f] [-b] <in> <out> [bwidth|2]
+def pnmreplaceborder(param):
+    outfmt='ppm'
+    outstrip=True
+    bwidth=2
+    bcolor="white"
+    if(param[0]=='-f'):
+        outfmt='fits'
+        outstrip=False
+        del param[0]
+    if(param[0]=='-b'):
+        bcolor="black"
+        del param[0]
+    infilename = param[0]
+    outfilename = param[1]
+    np = len(param)
+    if (np > 2): bwidth = int(param[2])
+
+    # reading input image
+    if (infilename and infilename != '-'):
+        inimg = pyvips.Image.new_from_file(infilename)
+    else:
+        source = pyvips.Source.new_from_descriptor(sys.stdin.fileno())
+        inimg = pyvips.Image.new_from_source(source, "")
+
+    #vips extract_area $in $out $bwidth $bwidth $((w-2*bwidth)) $((h-2*bwidth))
+    #vips gravity $in $out "centre" $w $h extend="white"
+    w=inimg.width
+    h=inimg.height
+    outimg = inimg.crop(bwidth, bwidth, w-2*bwidth, h-2*bwidth).embed(bwidth, bwidth, w, h, extend=bcolor)
+
+    # writing output image
+    if (outfilename and outfilename != '-'):
+        if (outfmt=='fits'):
+            outimg.fitssave(outfilename)
+        else:
+            outimg.ppmsave(outfilename, strip=1)
+    else:
+        target = pyvips.Target.new_to_descriptor(sys.stdout.fileno())
+        outimg.write_to_target(target, "." + outfmt, strip=outstrip)
+
+    exit()
+
+
 # get statistics on image region defined by mask (svg image)
 # syntax: regstat [-m] image mask badmask
 def regstat(param):

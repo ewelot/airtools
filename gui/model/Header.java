@@ -52,6 +52,7 @@ public class Header {
         prop.load(new FileInputStream(path));
         
         // read entries of manual measurements from header (always 3, one for each channel)
+        // TODO: handle possible NumberFormatException in Integer.valueOf(str)
         for (i=1; i<=3; i++) {
             str=prop.getProperty("AI_ACOR" + i, undefNumber).replaceAll("/.*", "").strip().replaceAll("'", "");
             if (! str.isBlank()) acor=Integer.valueOf(str); else acor=Integer.valueOf(undefNumber);

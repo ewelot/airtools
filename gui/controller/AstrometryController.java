@@ -40,7 +40,6 @@ import javafx.scene.control.RadioButton;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.AnchorPane;
-import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
@@ -91,9 +90,13 @@ public class AstrometryController implements Initializable {
     @FXML
     private Button buttonCancel;
     @FXML
-    private HBox hboxCurrProject;
-    @FXML
     private VBox vboxMultProject;
+    @FXML
+    private VBox vboxCurrProject;
+    @FXML
+    private Label labelSplittedSets;
+    @FXML
+    private CheckBox cbSplittedSets;
 
     private SimpleLogger logger;
     private StringProperty projectDir = new SimpleStringProperty();
@@ -133,7 +136,7 @@ public class AstrometryController implements Initializable {
         
         // show/hide widgets depending on choice of radiobutton
         rbMultProject.selectedProperty().addListener((v, oldValue, newValue) -> {
-            hboxCurrProject.setDisable(newValue);
+            vboxCurrProject.setDisable(newValue);
             vboxMultProject.setDisable(! newValue);
         });
         rbMultProject.setSelected(false);
@@ -155,6 +158,7 @@ public class AstrometryController implements Initializable {
 
     public void updateWidgets () {
         populateChoiceBoxImageSet();
+        checkForSplittedSets();
     }
     
     
@@ -168,6 +172,17 @@ public class AstrometryController implements Initializable {
         choiceBoxImageSet.getSelectionModel().selectFirst();
     }
 
+    private void checkForSplittedSets() {
+        System.out.println("checkForSplittedSets()");
+        File splitSets = new File(projectDir.getValue() + "/split/set.dat");
+        if (splitSets.exists()) {
+            labelSplittedSets.setDisable(false);
+            cbSplittedSets.setDisable(false);
+        } else {
+            labelSplittedSets.setDisable(true);
+            cbSplittedSets.setDisable(true);            
+        }
+    }
     
     private void setImageSetList () {
         System.out.println("setImageSetList");
@@ -335,6 +350,7 @@ public class AstrometryController implements Initializable {
         // add options
         if (cbShowCheckImages.isSelected()) aircliCmdArgs.add("-i");
         if (cbCombineResults.isSelected())  aircliCmdArgs.add("-a");
+        if (! cbSplittedSets.isDisabled() && cbSplittedSets.isSelected()) aircliCmdArgs.add("-cs");
         
         // add positional parameters
         if (rbMultProject.isSelected()) {

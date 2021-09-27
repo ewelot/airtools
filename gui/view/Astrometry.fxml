@@ -26,16 +26,30 @@
                   <ToggleGroup fx:id="objectsGroup" />
                </toggleGroup>
             </RadioButton>
-            <HBox fx:id="hboxCurrProject" alignment="CENTER_LEFT" fillHeight="false">
+            <VBox fx:id="vboxCurrProject">
                <children>
-                  <Label text="Image Set / Object:">
-                     <padding>
-                        <Insets right="83.0" />
-                     </padding>
-                  </Label>
-                  <ChoiceBox fx:id="choiceBoxImageSet" maxWidth="1.7976931348623157E308" HBox.hgrow="SOMETIMES" />
+                  <GridPane hgap="8.0" vgap="8.0">
+                    <columnConstraints>
+                      <ColumnConstraints hgrow="NEVER" minWidth="200.0" />
+                      <ColumnConstraints hgrow="ALWAYS" minWidth="150.0" />
+                    </columnConstraints>
+                    <rowConstraints>
+                      <RowConstraints vgrow="SOMETIMES" />
+                      <RowConstraints vgrow="SOMETIMES" />
+                    </rowConstraints>
+                     <children>
+                        <Label text="Image Set / Object:" />
+                        <ChoiceBox fx:id="choiceBoxImageSet" maxWidth="1.7976931348623157E308" GridPane.columnIndex="1" />
+                        <Label fx:id="labelSplittedSets" text="Use Splitted Sets:" GridPane.rowIndex="1">
+                           <padding>
+                              <Insets right="83.0" />
+                           </padding>
+                        </Label>
+                        <CheckBox fx:id="cbSplittedSets" mnemonicParsing="false" GridPane.columnIndex="1" GridPane.rowIndex="1" />
+                     </children>
+                  </GridPane>
                </children>
-            </HBox>
+            </VBox>
             <RadioButton fx:id="rbMultProject" mnemonicParsing="false" text="Measure Selected Comet in Multiple Projects" toggleGroup="$objectsGroup">
                <padding>
                   <Insets top="24.0" />

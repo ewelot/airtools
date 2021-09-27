@@ -19,8 +19,8 @@
 ########################################################################
 AOVARS="AO_SKIP AO_FLATS AO_LIGHT AO_BGVAR AO_REGIS AO_STACK AO_AMASK AO_ACOOR AO_ABINN"
 
-VERSION="1.3.5"
-VINFO="T. Lehmann, Aug. 2021"
+VERSION="1.3.6"
+VINFO="T. Lehmann, Sep. 2021"
 PINFO="\
     options:
       -h            show this help text
@@ -34,6 +34,9 @@ PINFO="\
       task          run given task    
 "
 CHANGELOG="
+    1.3.6 - 20 Sep 2021
+        * imageinfo: bugfix to correctly handle AO_SKIP
+
     1.3.5 - 31 Aug 2021
         * costack: do not abort program if the object is not found by JPL
         * astrometry: improve check of valid solution by solve-field
@@ -463,14 +466,14 @@ _imageinfo () {
     local fitsdat="rawfiles.dat"    # all FITS raw images (CCD, DSLR, bayered CMOS)
     
     msg="# Collecting image information ..."
-    test "$AO_SKIP" && findopts="-not -path \"${AO_SKIP}\"" &&
+    test "$AO_SKIP" && findopts="-not -path \"${AO_SKIP}*\"" &&
         echo "# using expert option: AO_SKIP=$AO_SKIP"
     
     extlist=$(cd $AI_RAWDIR/ && eval find * -type f $findopts | sed -e 's,.*\.,,' | sort -u | \
             grep -iwE "pef|cr2|nef|raf")
     if ! match proc "$SKIPPARTS"
     then
-        test "$AO_SKIP" && findopts="-not -path \"$AI_RAWDIR/${AO_SKIP}\""
+        test "$AO_SKIP" && findopts="-not -path \"$AI_RAWDIR/${AO_SKIP}*\""
         echo $msg
 
         if [ "$OVERWRITE" ]
@@ -528,6 +531,7 @@ _imageinfo () {
             done
         else
             # scanning other FITS images
+            test "$AI_DEBUG" && eval echo find $AI_RAWDIR/ -type f $findopts -name "*.fts" >&2
             flist=$(eval find $AI_RAWDIR/ -type f $findopts \\\( \
                    -name "*.fit"  -o -name "*.FIT"  \
                 -o -name "*.fits" -o -name "*.FITS" \

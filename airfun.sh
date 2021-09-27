@@ -14,9 +14,22 @@
 # - in order to use SAOImage DS9 analysis tasks (via AIexamine) you must
 #   have installed files airds9.ana and aircmd.sh
 ########################################################################
-AI_VERSION="5.1.3"
+AI_VERSION="5.1.4"
 : << '----'
 CHANGELOG
+    5.1.4 - 27 Sep 2021
+        * AIflat: add option -a to compute average instead of median
+        * AIstack: use python function pnmreplaceborder to speed up the
+            function _fitsconv_parallel
+        * AIphotcal: added option -crad <catradius> to limit catalog query
+            to within the given radius (in degrees)
+        * icqplot: use software key AIT for observations in local projects
+        * cometname: for asteroids set return value to 1
+        * get_mpcephem: allow to use interval>10 days
+        * mpcreport: write mail address to new CON line, convert umlauts to
+            diphtongs, append empty spaces to fill up 80 character records,
+            use hard coded color band V for asteroids 
+
     5.1.3 - 15 Sep 2021
         * AIlist: follow symlinks when browsing directories
         * AImapphot: reuse previous measurements for matching apertures
@@ -4396,6 +4409,7 @@ mpcreport () {
     local long
     local alt
     local sitecoord
+    local cname     # object name as returned from cometname
     local mpcname   # object name used in MPC report (12 chars)
     local utmid     # UT date at middle of exposure
     local telinfo   # telescope/camera information
@@ -4512,7 +4526,13 @@ mpcreport () {
 
     # convert object name to MPC report compact name (12 chars)
     # notes: not tested for NEO's and unnumbered asteroids
-    mpcname=$(cometname $object | awk '{
+    cname=$(cometname $object)
+    if [ $? -eq 1 ]
+    then
+        # asteroid, TODO: use correct color band
+        mtype="V"
+    fi
+    mpcname=$(echo "$cname" | awk '{
         if ($0~/^[0-9]/) {
             sub("/P/","")
             printf("%04dP       ", $0)
@@ -4551,12 +4571,15 @@ mpcreport () {
     echo "COD $obscode"
     test "$sitecoord" && echo "COM $sitecoord"
     echo "\
-        CON ${author}, $address [$email]
+        CON ${author}, $address
+        CON [$email]
         OBS $x
         MEA $x
         TEL $telinfo
         NET $acat
-        " | sed -e 's,^[ ]*,,'
+        " | sed -e 's,^[ ]*,,' | \
+        iconv -c -f utf-8 -t us-ascii//TRANSLIT | \
+        awk '{printf("%-80s\n", $0)}'
     # convert coordinates (J2000)
     # TODO: for stacks use K in column 14
     #   photometric band or nuclear/total flag in column 71 (filter/mtype)
@@ -6520,6 +6543,7 @@ raw2obs () {
             }
             printf("# h:m set  target type texp n1 n2   nref dark flat tel\n")
         }
+
         # determine target
         target=""
         if(tolower($2)~/dark/ || tolower($2)~/bias/) {
@@ -6538,10 +6562,19 @@ raw2obs () {
             if (obs=="SkyGems")   {target=a[3]; sub(/_.*/,"",target)}
             if (obs=="iTelescope") target=a[4]
         }
-        if (target != last || (target=="dark" && $4 != lasttexp)) {
+
+        # write record for image set
+        if (target != last ||
+            (target=="dark" && $4 != lasttexp) ||
+            (target=="flat" && lastjd != "" && ($5-lastjd)*24*60 > 1.5)) {
             if (last) {
-                printf("%s %s %-8s %s %3.0f %04d %04d %04d %-4s %-4s %s\n",
-                    utstart, sname, last, type, texp, n1, n2, (n1+n2)/2, dark, flat, tel)
+                if (type == "o") {
+                    printf("%s %s %-8s %s %3.0f %04d %04d %04d %-4s %-4s %s\n",
+                        utstart, sname, last, type, texp, n1, n2, (n1+n2)/2, dark, flat, tel)
+                } else {
+                    printf("%s %s %-8s %s %3.0f %04d %04d %-4s %-4s %-4s %s\n",
+                        utstart, sname, last, type, texp, n1, n2, "-", dark, flat, tel)
+                }
             }
             n1=1*$1
             h=1*substr($3,1,2)+toff; m=1*substr($3,4,2); s=1*substr($3,7,2)
@@ -6564,10 +6597,16 @@ raw2obs () {
         }
         n2=1*$1
         lasttexp=texp
+        lastjd=$5
         last=target
     }END{
-                printf("%s %s %-8s %s %3.0f %04d %04d %04d %-4s %-4s %s\n",
-                    utstart, sname, target, type, texp, n1, n2, (n1+n2)/2, dark, flat, tel)
+                if (type == "o") {
+                    printf("%s %s %-8s %s %3.0f %04d %04d %04d %-4s %-4s %s\n",
+                        utstart, sname, last, type, texp, n1, n2, (n1+n2)/2, dark, flat, tel)
+                } else {
+                    printf("%s %s %-8s %s %3.0f %04d %04d %-4s %-4s %-4s %s\n",
+                        utstart, sname, last, type, texp, n1, n2, "-", dark, flat, tel)
+                }
     }'
 }
 
@@ -7527,15 +7566,17 @@ cometname () {
     #   unnumbered asteroid: <year> <aa>...
     #   unnumbered and non-periodic comet: <pre>/<year> <a><n>
     # comet fragments should be referenced by suffix "-A" or similar
+    # return value for asteroid is 1
     local str="${1// /}"
     local s
+    local type="C"
     local cname
     
     # check for numbered periodic comet
     s=$(echo $str | sed -e 's,^[0-9]\+P$,,')
     if [ "$s" != "$str" ]
     then
-        test "$AI_DEBUG" && echo "# numbered periodic comet:" >&2
+        test "$AI_DEBUG" && echo "# object is a numbered periodic comet" >&2
         echo $str && return
     fi
     
@@ -7543,14 +7584,16 @@ cometname () {
     s=$(echo $str | sed -e 's,^([0-9]\+)$,,')
     if [ "$s" != "$str" ]
     then
-        test "$AI_DEBUG" && echo "# numbered asteroid (a):" >&2
-        echo $str && return
+        type="A"
+        test "$AI_DEBUG" && echo "# object is a numbered asteroid (a)" >&2
+        echo $str && return 1
     fi
     s=$(echo $str | sed -e 's,^[0-9]\+$,,')
     if [ -z "$s" ]
     then
-        test "$AI_DEBUG" && echo "# numbered asteroid (b):" >&2
-        echo "($str)" && return
+        type="A"
+        test "$AI_DEBUG" && echo "# object is a numbered asteroid (b)" >&2
+        echo "($str)" && return 1
     fi
 
     # check for un-numbered asteroid YYYYAA...
@@ -7564,13 +7607,22 @@ cometname () {
         get_mpcephem -l "C/$s" > /dev/null 2>&1
         if [ $? -eq 0 ]
         then
-            test "$AI_DEBUG" && echo "# comet with previous asteroid designation:" >&2
+            test "$AI_DEBUG" && echo "# object is a comet with previous asteroid designation" >&2
             echo "C/$s" && return
         fi
-        test "$AI_DEBUG" && echo "# un-numbered asteroid:" >&2
-        echo $s && return
+        type="A"
+        test "$AI_DEBUG" && echo "# object is an un-numbered asteroid" >&2
+        echo $s && return 1
     fi
 
+    # check for named asteroid (without digits)
+    s=$(echo $str | tr -d '[0-9]')
+    if [ "$s" == "$str" ]
+    then
+        test "$AI_DEBUG" && echo "# object is a named asteroid" >&2
+        echo $s && return 1
+    fi
+    
     # convert comet name [ACP]YYYYXX to [ACP]/YYYY XX
     cname=$(echo $str | awk '{
         if($0~/^[ACP][1-2][0-9][0-9][0-9][A-Z][A-Z]*[0-9]/) {
@@ -7582,7 +7634,7 @@ cometname () {
             printf("C/%s %s", substr($0,1,4), substr($0,5))
         }}')
     test -z "$cname" && echo "WARNING: no name conversion applied" >&2 && cname=$str
-    test "$AI_DEBUG" && echo "# un-numbered comet:" >&2
+    test "$AI_DEBUG" && echo "# object is an un-numbered comet" >&2
     echo $cname
     return
 }
@@ -7931,6 +7983,7 @@ get_mpcephem () {
     # convert and check interval
     dmin=$(echo "$dhr" | awk -F ":" '{printf("%.0f", $1*60+$2)}')
     dhr=$(echo "$dhr" | awk -F ":" '{printf("%.0f", $1+$2/60)}')
+    test "$AI_DEBUG" && echo "# dmin=$dmin dhr=$dhr" >&2
     #test $dhr -gt 480 &&
     #    echo "ERROR: interval is bejond limit of 480 hours." >&2 && return 255
 
@@ -7983,6 +8036,11 @@ get_mpcephem () {
     test $n -eq 1 && interval="1&u=s"
     test -z "$interval" && test $dmin -le 240 && interval=$dmin"&u=m"
     test -z "$interval" && test $dhr  -le 240 && interval=$dhr"&u=h"
+    if [ -z "$interval" ]
+    then
+        # interval >10d
+        interval=$(echo $dhr | awk '{printf("%.0f", $1/24)}')"&u=d"
+    fi
     
 
     args="l=$n&i=$interval&uto=0&c=&long=$long&lat=$lat&alt=$alt"
@@ -8090,7 +8148,6 @@ mkrefcat () {
     # ref.: http://vizier.u-strasbg.fr/doc/asu-summary.htx
     local showhelp
     local server
-    local wcshdr
     local nmax=1000
     local catdef=refcat.dat   # catalog column description
     local outfmt="tsv"      # output table format, tsv - tab separated ASCII,
@@ -8102,7 +8159,6 @@ mkrefcat () {
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-s" && server="$2" && shift 2
-        test "$1" == "-w" && wcshdr="$2" && shift 2
         test "$1" == "-n" && nmax="$2" && shift 2
         test "$1" == "-f" && outfmt="fits" && shift 1
         test "$1" == "-a" && all_columns=1 && shift 1
@@ -8131,7 +8187,7 @@ mkrefcat () {
     local tmpldac=$(mktemp "/tmp/tmp_ldac_$$.XXXXXX.dat")
     
     (test "$showhelp" || test $# -lt 4) &&
-        echo -e "usage: mkrefcat [-h] [-f] [-a] [-s server] [-w wcshdr] [-n nmax|$nmax]" \
+        echo -e "usage: mkrefcat [-h] [-f] [-a] [-s server] [-n nmax|$nmax]" \
             "<catalog> <ra> <de> <radius>" >&2 &&
         return 1
 
@@ -10436,7 +10492,11 @@ icqplot () {
             if (substr($0,81,1) == "I" || method ~ /[CZ]/) {
                 soft=substr($0,102,3); gsub(/ /,"",soft); if (soft=="") {soft="?"}
             } else {
-                soft="V"
+                if (src=="local") {
+                    soft="AIT"
+                } else {
+                    soft="V"
+                }
             }
             
             # TODO: guess filter
@@ -19330,12 +19390,14 @@ AIflat () {
     local do_bayer      # if set then keep bayer matrix and create gray
                         # flat field instead of rgb
     local do_simple     # simple algorithm using single group of images
+    local do_average    # averaging all images (single group)
     local i
     for i in 1 2 3
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-b" && do_bayer=1 && shift 1
         test "$1" == "-s" && do_simple=1 && shift 1
+        test "$1" == "-a" && do_simple=1 && do_average=1 && shift 1
     done
     
     local setname=${1:-""}
@@ -19613,12 +19675,28 @@ EOF
                 im2=$(printf "%02d" $im)
                 if [ $n -gt 2 ]
                 then
-	                echo "median odd images in group $ig -> $tdir/$sname.m$im2.$ext"
-                	pnmcombine2 -d $iolist $tdir/$sname.m$im2.$ext
+                    if [ "$do_average" ]
+                    then
+                        echo "average images in group $ig -> $tdir/$sname.m$im2.$ext"
+                        pnmcombine2 $iolist $tdir/$sname.m$im2.$ext
+                    else
+                        if [ "$do_simple" ]
+                        then
+                            echo "median of images in group $ig -> $tdir/$sname.m$im2.$ext"
+                        else
+                            echo "median odd images in group $ig -> $tdir/$sname.m$im2.$ext"
+                        fi
+                        pnmcombine2 -d $iolist $tdir/$sname.m$im2.$ext
+                    fi
                 else
                 	if [ $n -eq 2 ]
                 	then
-		                echo "mean from odd images in group $ig -> $tdir/$sname.m$im2.$ext"
+                        if [ "$do_simple" ]
+                        then
+		                    echo "mean of images in group $ig -> $tdir/$sname.m$im2.$ext"
+                        else
+		                    echo "mean from odd images in group $ig -> $tdir/$sname.m$im2.$ext"
+                        fi
                 		pnmcombine2 $iolist $tdir/$sname.m$im2.$ext
                 	else
                 		cp $iolist $tdir/$sname.m$im2.$ext
@@ -23572,6 +23650,7 @@ AIstack () {
     local binning
     local popts
     local retval=0
+    local pyprog
     local tmpsh=$(mktemp "/tmp/tmp_script_XXXXXX.sh")
     chmod u+x $tmpsh
 
@@ -23592,6 +23671,12 @@ AIstack () {
             "[-z xyscale] [-s w,h] [-p sparam] [setname | img1 img2 ...]" >&2 &&
         return 1
     
+    # check for required python scripts
+    pyprog=$(which airfun.py)
+    test $? -ne 0 &&
+        echo "ERROR: missing python module airfun.py." >&2 && return 255
+
+    # check for badpix file
     test "$badpix" && test ! -f "$badpix" &&
         echo "ERROR: badpix file $badpix not found." >&2 && return 255
 
@@ -23911,6 +23996,7 @@ AIstack () {
 . airfun.sh > /dev/null
 tdir=$tdir
 wdir=$wdir
+pyprog=$pyprog
 
 verbose=$verbose
 omove="$omove"
@@ -24082,23 +24168,30 @@ CD2_2   =      0.0003   / Linear projection matrix
                     badimg="bgvar/"$(basename ${img%.*}.bad.png)
                 fi
             fi
+            # note: convert is taking 10x more IO and is much slower
             if [ "$badimg" ] && [ "$badpix" ]
             then
-                convert $badimg $badpix -evaluate-sequence max \
-                    -shave 2x2 -bordercolor white -border 2x2 $badtmp
+                #convert $badimg $badpix -evaluate-sequence max \
+                #    -shave 2x2 -bordercolor white -border 2x2 $badtmp
+                convert $badimg $badpix -evaluate-sequence max - | \
+                    python3 $pyprog pnmreplaceborder - $badtmp
             else
                 if [ "$badimg" ]
                 then
-                    convert $badimg -shave 2x2 -bordercolor white -border 2x2 $badtmp
+                    #convert $badimg -shave 2x2 -bordercolor white -border 2x2 $badtmp
+                    python3 $pyprog pnmreplaceborder $badimg $badtmp
                 else
                     if [ "$badpix" ]
                     then
                         test $verbose -gt 0 &&
                             echo "  using $badpix" >&2
-                        convert $badpix -shave 2x2 -bordercolor white -border 2x2 $badtmp
+                        #convert $badpix -shave 2x2 -bordercolor white -border 2x2 $badtmp
+                        python3 $pyprog pnmreplaceborder $badpix $badtmp
                     else
+                        #echo -e "P2\n1 1\n1\n0" | pnmtile $w $h | \
+                        #    convert - -shave 2x2 -bordercolor white -border 2x2 $badtmp
                         echo -e "P2\n1 1\n1\n0" | pnmtile $w $h | \
-                            convert - -shave 2x2 -bordercolor white -border 2x2 $badtmp
+                            python3 $pyprog pnmreplaceborder - $badtmp
                     fi
                 fi
             fi
@@ -24312,14 +24405,16 @@ AIsplitstack () {
     local osize
     local odir="split"
     local mode
+    local do_keep_setdat    # if set, then do not modify $odir/set.dat
     local i
-    for i in $(seq 1 3)
+    for i in $(seq 1 6)
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-n" && nparts="$2" && shift 2
         test "$1" == "-s" && osize="$2" && shift 2
         test "$1" == "-d" && odir="$2" && shift 2
         test "$1" == "-m" && mode="$2" && shift 2
+        test "$1" == "-k" && do_keep_setdat=1 && shift 1
     done
     local baseset=$1
     local target=$2         # single object name or region file (circles)
@@ -24429,7 +24524,7 @@ AIsplitstack () {
     test $n -eq 0 && return 255
     slist=""
     onum=0
-    while read
+    test -z "$do_keep_setdat" && while read
     do
         test "${REPLY:0:7}" == "circle(" || continue
         target=$(echo $REPLY | cut -d '=' -f2 | tr -d '{}' | awk '{
@@ -24483,6 +24578,7 @@ AIsplitstack () {
         do
             test "${REPLY:0:7}" == "circle(" || continue
             xycenter=$(echo $REPLY | tr '(),' ' ' | awk '{printf("%.0f,%.0f", $2, $3)}')
+            rade=$(echo "x ${xycenter/,/ }" | xy2rade -f -s - $baseset.wcs.head)
             onum=$((onum+1))
             ochar=$(echo $onum | awk '{printf("%s", sprintf("%c", 96+$1))}')
             for task in stack
@@ -24490,16 +24586,22 @@ AIsplitstack () {
                 for i in $(seq 0 $((nparts-1)))
                 do
                     sname=$baseset$ochar$((i+1))
-                    (cd $odir && AO_STACK="-s $osize -c $xycenter" \
-                        airtools-cli -s $sname -x plot,image $task)
+                    (cd $odir; is_setname $sname) || continue 
+                    (cd $odir
+                    AO_STACK="-s $osize -c $xycenter" \
+                        airtools-cli -s $sname -x plot,image $task
+                    # write RA, DEC to header of stack to hint astrometry
+                    set_header $sname.head RA=$(echo $rade | cut -d ' ' -f1)
+                    set_header $sname.head DEC=$(echo $rade | cut -d ' ' -f2)
+                    )
                 done
             done
         done < $reg
     fi
     (cd $odir
-    airtools-cli stack
-    airtools-cli astrometry
-    airtools-cli costack)
+        airtools-cli stack
+        airtools-cli astrometry
+        airtools-cli costack)
     # add SPLITREF keyword
     for sname in $(AI_SETS=$xsetdat AIsetinfo -b | awk '{if($4=="o"){print $2}}')
     do
@@ -24521,6 +24623,7 @@ AIsplitstack () {
         for i in $(seq 0 $((nparts-1)))
         do
             sname=$baseset$ochar$((i+1))
+            (cd $odir; is_setname $sname) || continue 
             echo "reg $rade" | rade2xy - $odir/$sname.wcs.head | \
                 xy2reg $odir/$sname.$ext - "" "" $crad > $tmpcreg
             # TODO: apply object movement according to OMOVE and dhr
@@ -24951,6 +25054,8 @@ AIphotcal () {
     local magerrlim=0.05
     local fittype=0     # 0-normal, 1-color, 2-ext, 3-color+ext
     local maxdist       # max distance for position matching in pixels
+    local catradius     # max distance of catalog star from object (in deg)
+                        # used to limit catalog query
     local no_update     # if set do not save results in header keywords
     local adr=10        # apass data release number (web query only)
     local do_all_ci     # use all catalog stars, even those having extreme colors
@@ -24973,6 +25078,7 @@ AIphotcal () {
         test "$1" == "-e"  && fittype=$((fittype+2)) && shift 1    # fit extinction
 
         test "$1" == "-s" && skip="$2" && shift 2
+        test "$1" == "-crad" && catradius="$2" && shift 2
         test "$1" == "-r" && rlim="$2" && shift 2
         test "$1" == "-n" && nlim="$2" && shift 2
         test "$1" == "-c" && cxy="$2" && shift 2
@@ -25021,7 +25127,6 @@ AIphotcal () {
     local amref
     local nstars
     local rmlim     # if mlim is not set estimate reasonable maglim
-    local catradius # max distance from object (deg) used to select catalog stars (catalog query)
     local matchrlim # max distance from object (pix) used to select match stars
     # local apmagmd
     local w
@@ -25061,7 +25166,7 @@ AIphotcal () {
     local no
 
     (test "$showhelp" || test $# -lt 3) &&
-        echo "usage: AIphotcal [-t] [-a] [-B|-V|-R|-VT|-GB|...] [-ci colorIndex] [-e] [-s skip] [-l maglim] [-d maxdist]" \
+        echo "usage: AIphotcal [-t] [-a] [-B|-V|-R|-VT|-GB|...] [-ci colorIndex] [-e] [-crad catradius] [-s skip] [-l maglim] [-d maxdist]" \
             "[-m magerrlim|$magerrlim] [-n nlim] [-r rlim] [-c xc,yc] <set> <plane> <refcat> [aprad]" >&2 &&
         return 1
 
@@ -25201,7 +25306,9 @@ AIphotcal () {
             }}')
     fi
     # search radius for catalog query (in degrees)
-    catradius=$(echo $size | awk -F "x" '{x=0.5*sqrt($1*$1+$2*$2); printf("%.1f", x+0.1)}')
+    test -z "$catradius" &&
+        catradius=$(echo $size | awk -F "x" '{
+            x=0.5*sqrt($1*$1+$2*$2); printf("%.1f", x+0.1)}')
     #catradius=$(echo $matchrlim $pixscale | awk '{x=$1*$2/3600; fmt="%.2f"
     #    if(x>2) {fmt="%.1f"}; if(x>20) {fmt="%.0f"}; printf(fmt, x)}')
 
@@ -28164,6 +28271,7 @@ AIastrometry () {
     # note: center positions in center.dat are reused
     #   per set mpc report files are overwritten
     #   always use sites.dat from current project
+    # TODO: photometric calibration should take brightness change into account
     local showhelp
     local cmethod=fit       # cometcenter method (object|maxval|fit)
     local csize=300         # if set then create small checkimages and -regions
@@ -31126,7 +31234,7 @@ AIsetkeys () {
 
 AIlist () {
     # list airtools results by examining data from image header files
-    # valid project directoriy names: YYMMDDxxxx where x is empty or a letter a-z
+    # valid project directory names: YYMMDDxxxx where x is empty or a letter a-z
     local showhelp
     local adirlist  # list of base directories of Airtools reductions
     local color="G" # color channel from multiband image (either R,G or B)
@@ -31205,7 +31313,7 @@ AIlist () {
         return 1
 
     # if no target specified then limit to last 90 days
-    test $# -eq 0 && test -z "$ndays" && ndays=90 &&
+    test $# -eq 0 && test -z "$ndays" && test -z "$do_current" && ndays=90 &&
         echo "# limiting observations to last 90 days"
 
     # ICQ id of observer

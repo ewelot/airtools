@@ -11,8 +11,12 @@ import java.net.URL;
 import java.util.ResourceBundle;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javafx.event.ActionEvent;
+import javafx.event.EventType;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
+import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.ComboBox;
 import javafx.scene.control.DialogPane;
 import javafx.scene.control.Label;
@@ -59,6 +63,13 @@ public class ManualDataController implements Initializable {
         labelWarning.setText("");
         cbChannel.getItems().addAll("1", "2", "3");
         /* TODO: changing channel must trigger updateFromHeader */
+        
+        // add event filter to validate inputs
+        ((Button) paramDialogPane.lookupButton(ButtonType.APPLY)).addEventFilter(
+                ActionEvent.ACTION, event -> {
+                    if(! isValidInputs()) event.consume();
+                }
+        );
     }    
     
     public void setImageSet(ImageSet imgSet) {
@@ -139,6 +150,36 @@ public class ManualDataController implements Initializable {
             Logger.getLogger(PhotCalibrationController.class.getName()).log(Level.SEVERE, null, exIO);
         }
     }
+    
+    
+    private boolean isValidInputs() {
+        // NOT yet in use !!
+        String msg="";
+        String str="";
+        int i;
+        // check if entries are valid integer numbers
+        try {
+            str=tfCCorr.getText();
+            if (! str.isBlank()) i=Integer.parseInt(str);
+            str=tfStLim.getText();
+            if (! str.isBlank()) i=Integer.parseInt(str);
+            str=tfDtLen.getText();
+            if (! str.isBlank()) i=Integer.parseInt(str);
+            str=tfDtAng.getText();
+            if (! str.isBlank()) i=Integer.parseInt(str);
+            str=tfPtLen.getText();
+            if (! str.isBlank()) i=Integer.parseInt(str);
+            str=tfPtAng.getText();
+            if (! str.isBlank()) i=Integer.parseInt(str);
+        } catch (NumberFormatException ex) {
+            msg="ERROR: value " + str + " is not a number.";
+            labelWarning.setText(msg);
+            //logger.log(msg);
+            return false;            
+        }
+        return true;
+    }
+    
     
     public String[] getValues() {
         String[] sarray;
