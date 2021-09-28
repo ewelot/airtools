@@ -171,6 +171,7 @@ public class ManualDataController implements Initializable {
             if (! str.isBlank()) i=Integer.parseInt(str);
             str=tfPtAng.getText();
             if (! str.isBlank()) i=Integer.parseInt(str);
+            labelWarning.setText("");
         } catch (NumberFormatException ex) {
             msg="ERROR: value " + str + " is not a number.";
             labelWarning.setText(msg);
