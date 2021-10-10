@@ -461,19 +461,18 @@ _imageinfo () {
     local tel
     local tellist
     local f
-    local findopts
+    local skippat=".__."
     local exifdat="exif.dat"        # DSLR RAW images
     local fitsdat="rawfiles.dat"    # all FITS raw images (CCD, DSLR, bayered CMOS)
     
     msg="# Collecting image information ..."
-    test "$AO_SKIP" && findopts="-not -path \"${AO_SKIP}*\"" &&
+    test "$AO_SKIP" && skippat="$AO_SKIP" &&
         echo "# using expert option: AO_SKIP=$AO_SKIP"
     
-    extlist=$(cd $AI_RAWDIR/ && eval find * -type f $findopts | sed -e 's,.*\.,,' | sort -u | \
+    extlist=$(cd $AI_RAWDIR/ && find * -type f -not -path "$skippat"\* | sed -e 's,.*\.,,' | sort -u | \
             grep -iwE "pef|cr2|nef|raf")
     if ! match proc "$SKIPPARTS"
     then
-        test "$AO_SKIP" && findopts="-not -path \"$AI_RAWDIR/${AO_SKIP}*\""
         echo $msg
 
         if [ "$OVERWRITE" ]
@@ -494,7 +493,7 @@ _imageinfo () {
         test "$extlist" && for ext in $extlist
         do
             echo "# scanning $ext files ..."
-            img_info $(eval find $AI_RAWDIR/ -type f $findopts -name "*.$ext" \
+            img_info $(find $AI_RAWDIR/ -type f -not -path "$AI_RAWDIR/$skippat"\* -name "*.$ext" \
                 -not -path "$AI_RAWDIR/unused/*") | sort -n -k 2,2 >> $infofile
             test $? -ne 0 && return 255
         done
@@ -521,7 +520,7 @@ _imageinfo () {
                 test $tel == "jbl08" && tel=T68
                 test $tel == "T2" && tel=T20
                 echo "# scanning fits files for $tel ..."
-                flist=$(eval find $AI_RAWDIR/ $findopts \\\( -name "*fit.zip" -or -name "*fits" \\\) \
+                flist=$(find $AI_RAWDIR/ -type f -not -path "$AI_RAWDIR/$skippat"\* \( -name "*fit.zip" -or -name "*fits" \) \
                     -not -name "calib*" \
                     -not -path "$AI_RAWDIR/unused/*" | grep -iw $tel)
                 # TODO: check JD in first file, if it is not plausible then use time
@@ -531,15 +530,16 @@ _imageinfo () {
             done
         else
             # scanning other FITS images
-            test "$AI_DEBUG" && eval echo find $AI_RAWDIR/ -type f $findopts -name "*.fts" >&2
-            flist=$(eval find $AI_RAWDIR/ -type f $findopts \\\( \
+            test "$AI_DEBUG" && echo find $AI_RAWDIR/ -type f -not -path "$AI_RAWDIR/$skippat"\* -name "*.fts" >&2
+            flist=$(find $AI_RAWDIR/ -type f -not -path "$AI_RAWDIR/$skippat"\* \( \
                    -name "*.fit"  -o -name "*.FIT"  \
                 -o -name "*.fits" -o -name "*.FITS" \
                 -o -name "*.fts"  -o -name "*.FTS"  \
                 -o -name "*.fit.gz"  -o -name "*.fit.zip" \
                 -o -name "*.fits.gz" -o -name "*.fits.zip" \
-                -o -name "*.fts.gz"  -o -name "*.fts.zip" \\\) \
-                -not -path "$AI_RAWDIR/unused/*")
+                -o -name "*.fts.gz"  -o -name "*.fts.zip" \) \
+                -not -path "$AI_RAWDIR/unused/*"
+                )
             if [ "$flist" ]
             then
                 echo "# scanning fits files ..."
