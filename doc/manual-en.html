@@ -148,17 +148,20 @@
 <p>After a restart of the Linux virtual machine you may adjust the guest window size and effectively the screen size of the Linux desktop as needed.</p>
 <p>Moreover, you can now configure the virtual machine to use a shared clipboard between host and guest and use drag-and-drop between both systems. Those settings are activated from the “Devices” menu of the VirtualBox guest menu bar on the top of the window.</p>
 <h2 data-number="2.7" id="installing-the-airtools-software"><span class="header-section-number">2.7</span> Installing the AIRTOOLS software</h2>
-<p>The AIRTOOLS project is hosted at <a href="https://github.com/ewelot/airtools" class="uri">https://github.com/ewelot/airtools</a> where you can find the latest source code and documentation. Pre-compiled binary packages are build for several Debian/Ubuntu based Linux distributions.</p>
+<p>The AIRTOOLS project is hosted at <a href="https://github.com/ewelot/airtools" class="uri">https://github.com/ewelot/airtools</a> where you can find the latest source code and documentation. Pre-compiled binary packages are build for several Debian/Ubuntu based Linux distributions: - Ubuntu 20.04 “Focal” - Debian 10 “Buster” - Debian 11 “Bullseye”</p>
 <p>Development is done using a recent Debian Linux distribution. Ubuntu packages are tested on Xubuntu LTS distributions and should work on any Ubuntu desktop flavour (e.g. native Ubuntu, Kubuntu, Lubuntu) or other derivatives like LinuxMint.</p>
-<p>To add the AIRTOOLS binary package repository you must add a new entry to the package managment sources list, e.g. by creating a file <code>/etc/apt/sources.list.d/airtools.list</code> containing a line:</p>
-<pre><code>deb [trusted=yes] http://fg-kometen.vdsastro.de/airtools/debian YOUR_DISTRIBUTION main</code></pre>
-<p>where <code>YOUR_DISTRIBUTION</code> has to be replaced by the codename of your distribution (e.g. focal).</p>
+<p>Adding the binary package repository of the AIRTOOLS software is done by adding an entry to the package managment sources. If e.g. your distribution is based on Ubuntu 20.04 “Focal” you should run the following commands in a terminal:</p>
+<pre><code>DIST=focal
+REPO=http://fg-kometen.vdsastro.de/airtools/debian
+SRCFILE=/etc/apt/sources.list.d/airtools.list
+sudo bash -c &quot;echo deb [trusted=yes] $REPO $DIST main &gt; $SRCFILE&quot;</code></pre>
+<p>If you are running a different distribution, you must replace the setting of DIST by using your distributions code name (e.g. bullseye) in the command sequence above.</p>
 <p>Installation is done by invoking the following commands:</p>
 <pre><code>sudo apt update
 sudo apt install airtools</code></pre>
 <p>Upon first installation of the AIRTOOLS software the script will download many other required software packages from the official distribution repository. This might take a few minutes depending on the bandwidth of your internet connection. At the end of the installation a new shortcut icon is showing up on your Linux desktop.</p>
 <h2 data-number="2.8" id="updating-the-airtools-software"><span class="header-section-number">2.8</span> Updating the AIRTOOLS software</h2>
-<p>The AIRTOOLS software is updated every couple of months. An update of your installation is issued by the following two commands:</p>
+<p>The AIRTOOLS software is updated every couple of months. If the binary package repository has been added already (see previous section) then you can install an update by issuing the following two commands:</p>
 <pre><code>sudo apt update
 sudo apt install airtools</code></pre>
 <h2 data-number="2.9" id="uninstalling-the-airtools-software"><span class="header-section-number">2.9</span> Uninstalling the AIRTOOLS software</h2>
