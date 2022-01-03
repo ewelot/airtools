@@ -341,8 +341,11 @@ VirtualBox guest menu bar on the top of the window.
 The AIRTOOLS project is hosted at <https://github.com/ewelot/airtools>
 where you can find the latest source code and documentation.
 Pre-compiled binary packages are build for several Debian/Ubuntu based
-Linux distributions: - Ubuntu 20.04 “Focal” - Debian 10 “Buster” -
-Debian 11 “Bullseye”
+Linux distributions:
+
+  - Ubuntu 20.04 “Focal”
+  - Debian 10 “Buster”
+  - Debian 11 “Bullseye”
 
 Development is done using a recent Debian Linux distribution. Ubuntu
 packages are tested on Xubuntu LTS distributions and should work on any

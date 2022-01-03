@@ -3,6 +3,7 @@
 ## Installation of binary packages
 
 Binary packages are provided for the following Linux distributions:
+
   - Ubuntu 20.04 "Focal" 
   - Debian 10 "Buster"
   - Debian 11 "Bullseye"
