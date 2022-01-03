@@ -664,6 +664,41 @@ def cleanbadpixel(param):
         outimg.write_to_target(target, "." + outfmt, strip=outstrip)
     exit()
 
+def cleanbadpixel_grey(param):
+    outfilename="-"
+    outfmt="ppm"
+    outstrip=True
+    infilename = param[0]
+    maskfilename = param[1]
+    if(len(param)>2):
+        outfilename = param[2]
+
+    image = pyvips.Image.new_from_file(infilename)
+    badmask = pyvips.Image.new_from_file(maskfilename)
+
+    w = image.width
+    h = image.height
+    p1 = image.embed(-1, 0, w, h)
+    p2 = image.embed(1, 0, w, h)
+    p3 = image.embed(0, -1, w, h)
+    p4 = image.embed(0, 1, w, h)
+    parray = [ p1, p2, p3, p4 ]
+    #pnew = pyvips.Image.bandrank(parray, 4)
+    pnew = parray[0].bandrank(parray[1:])
+    #pnew = pyvips.Image.bandrank(parray, len(parray))
+
+    outimg = (badmask > 0).ifthenelse(pnew, image)
+    # writing output image
+    if (outfilename and outfilename != '-'):
+        if (outfmt=='fits'):
+            outimg.fitssave(outfilename)
+        else:
+            outimg.ppmsave(outfilename, strip=1)
+    else:
+        target = pyvips.Target.new_to_descriptor(sys.stdout.fileno())
+        outimg.write_to_target(target, "." + outfmt, strip=outstrip)
+    exit()
+
 # merge 4 monochrome images into bayered image
 def bmerge(param):
     outfilename="-"

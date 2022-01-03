@@ -32,8 +32,6 @@
                      <children>
                         <Label text="Image Sets:" />
                         <TextField fx:id="tfImageSets" promptText="list of image sets" GridPane.columnIndex="1" />
-                        <Label text="Delete previous data:" GridPane.rowIndex="2" />
-                        <CheckBox fx:id="cbDelete" minHeight="26.0" mnemonicParsing="false" prefHeight="26.0" selected="false" GridPane.columnIndex="1" GridPane.rowIndex="2" />
                         <Label text="Thresholds (hot/cold):" GridPane.rowIndex="1" />
                         <HBox alignment="CENTER_LEFT" spacing="8.0" GridPane.columnIndex="1" GridPane.rowIndex="1">
                            <children>
@@ -45,6 +43,8 @@
                               <Insets />
                            </GridPane.margin>
                         </HBox>
+                        <Label text="Delete previous data:" GridPane.rowIndex="2" />
+                        <CheckBox fx:id="cbDelete" minHeight="26.0" mnemonicParsing="false" prefHeight="26.0" selected="false" GridPane.columnIndex="1" GridPane.rowIndex="2" />
                      </children>
                   </GridPane>
                   <Label fx:id="labelWarning" text="&lt;Warnings&gt;" textFill="#d00000" />

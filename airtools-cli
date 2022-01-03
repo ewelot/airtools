@@ -4,7 +4,7 @@
 # airtools-cli
 #   AIRTOOLS tasks command-line interface
 #
-# Copyright: Thomas Lehmann, 2018-2021
+# Copyright: Thomas Lehmann, 2018-2022
 # License: GPL v3
 #
 # note: the following environment variables may be used
@@ -19,8 +19,8 @@
 ########################################################################
 AOVARS="AO_SKIP AO_FLATS AO_LIGHT AO_BGVAR AO_REGIS AO_STACK AO_AMASK AO_ACOOR AO_ABINN"
 
-VERSION="1.3.6"
-VINFO="T. Lehmann, Sep. 2021"
+VERSION="1.3.7"
+VINFO="T. Lehmann, Nov. 2021"
 PINFO="\
     options:
       -h            show this help text
@@ -34,6 +34,10 @@ PINFO="\
       task          run given task    
 "
 CHANGELOG="
+    1.3.7 - 18 Nov 2021
+        * badpix: bugfix to correctly set bandrank index in case of sets
+            being rejected due to low number of images
+
     1.3.6 - 20 Sep 2021
         * imageinfo: bugfix to correctly handle AO_SKIP
 
@@ -453,6 +457,7 @@ _imageinfo () {
     # FITS images: placed in any subdir of $AI_RAWDIR, arbitrary file names
     # note: files in directory "unused" are ignored
     #       AO_SKIP: path within AI_RAWDIR which is to be ignored
+    # TODO: replace spaces in file names: for f in *; do mv -i "$f" "${f// /_}"; done
     local extlist
     local ext
     local msg
@@ -1178,7 +1183,7 @@ _register () {
         # TODO: check if all images have been processed
         # make first guess of fwhm
         num=$(AIsetinfo -b $set | head -1 | awk '{printf("%s", $8)}')
-        img=$(AIimlist $set | awk -v n=$num '{if($2==n)print $3}')
+        img=$(AIimlist -q | awk -v n=$num '{if($2==n)print $3}')
         test -z "$img" &&
             echo "ERROR: unable to find calibrated image for nref=$num." &&
             return 255
@@ -1346,7 +1351,7 @@ _badpix () {
         test -z "$highlist" && continue
 
         echo "#" $tel":" $highlist $lowlist
-        n=$(echo $telsetlist | wc -w)
+        n=$(echo $highlist | wc -w)
         #convert $highlist -evaluate-sequence max bad.high.${tel,,}.png
         #convert $lowlist  -evaluate-sequence max bad.low.${tel,,}.png
         vips bandrank "$highlist" bad.high.${tel,,}.png --index $((n-1))
@@ -1915,6 +1920,7 @@ _astrometry () {
         then
             # download reference catalog, determine star density, adjust maglim
             echo "# downloading reference catalog ..."
+            test "$AI_DEBUG" && echo "# AIwcs -z $opts $set $catalog \"$maglim\" $thres" >&2
             AIwcs -z $opts $set $catalog "$maglim" $thres >> $wcslog 2>&1
             x=wcs/$set.$catalog.dat
             test "$catalog" == "ucac4" && x=wcs/$set.ucac-4.dat

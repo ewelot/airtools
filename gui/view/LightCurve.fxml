@@ -79,24 +79,31 @@
                         <RowConstraints vgrow="SOMETIMES" />
                         <RowConstraints vgrow="SOMETIMES" />
                         <RowConstraints vgrow="SOMETIMES" />
+                        <RowConstraints vgrow="SOMETIMES" />
                      </rowConstraints>
                      <children>
                         <Label text="Plot Type:" />
                         <ChoiceBox fx:id="cbPlotType" maxWidth="1.7976931348623157E308" GridPane.columnIndex="1" />
                         <Label text="Key Label Position:" GridPane.rowIndex="1" />
                         <ChoiceBox fx:id="cbKeyPosition" maxWidth="1.7976931348623157E308" GridPane.columnIndex="1" GridPane.rowIndex="1" />
-                        <Label text="Date Range:" GridPane.rowIndex="2" />
-                        <HBox alignment="CENTER_LEFT" fillHeight="false" spacing="2.0" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS" GridPane.rowIndex="2">
+                        <Label text="Clip Data:" GridPane.rowIndex="2" />
+                        <CheckBox fx:id="cbCurrentApparition" mnemonicParsing="false" text="Current apparition only (periodic comets)" GridPane.columnIndex="1" GridPane.rowIndex="2">
+                           <padding>
+                              <Insets bottom="2.0" top="2.0" />
+                           </padding>
+                        </CheckBox>
+                        <Label text="Date Range:" GridPane.rowIndex="3" />
+                        <HBox alignment="CENTER_LEFT" fillHeight="false" spacing="2.0" GridPane.columnIndex="1" GridPane.hgrow="ALWAYS" GridPane.rowIndex="3">
                            <children>
                               <DatePicker fx:id="dpStart" onAction="#onDpStart" prefWidth="160.0" promptText="dd.mm.yyyy" HBox.hgrow="SOMETIMES" />
                               <Label alignment="CENTER" maxWidth="1.7976931348623157E308" text=" - " HBox.hgrow="ALWAYS" />
                               <DatePicker fx:id="dpEnd" onAction="#onDpEnd" prefWidth="160.0" promptText="dd.mm.yyyy" HBox.hgrow="SOMETIMES" />
                            </children>
                         </HBox>
-                        <Label text="Identify Observers:" GridPane.rowIndex="3" />
-                        <TextField fx:id="tfObsList" promptText="OBSxx, OBSyy, ..." GridPane.columnIndex="1" GridPane.rowIndex="3" />
-                        <Label text="Additional Options:" GridPane.rowIndex="4" />
-                        <TextField fx:id="tfAddOptions" promptText="-wide -t title  -y bottom:top   ..." GridPane.columnIndex="1" GridPane.rowIndex="4" />
+                        <Label text="Identify Observers:" GridPane.rowIndex="4" />
+                        <TextField fx:id="tfObsList" promptText="OBSxx, OBSyy, ..." GridPane.columnIndex="1" GridPane.rowIndex="4" />
+                        <Label text="Additional Options:" GridPane.rowIndex="5" />
+                        <TextField fx:id="tfAddOptions" promptText="-wide -t title  -y bottom:top   ..." GridPane.columnIndex="1" GridPane.rowIndex="5" />
                      </children>
                   </GridPane>
                   <Label text="Magnitude Models">

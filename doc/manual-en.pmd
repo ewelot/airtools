@@ -1,6 +1,6 @@
 % Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v4.1)
 % Thomas Lehmann
-% Draft, August 2021
+% Draft, December 2021
 
 
 \pagebreak
@@ -135,7 +135,7 @@ of the VirtualBox Manager, press the right mouse and select
 
 ## Booting Install Medium of the Xubuntu Linux distribution
 Download the ISO image file of the latest Xubuntu LTS release from
-<http://xubuntu.org/download>. Please note the imprtant **LTS** version label, which indicates a
+<http://xubuntu.org/download>. Please note the important **LTS** version label, which indicates a
 "Long Term Support" release. This Linux OS version is well
 supported by the AIRTOOLS software. Choose a mirror download close to your 
 location and download the 64-bit desktop image. At the time of
@@ -265,43 +265,48 @@ menu bar on the top of the window.
 ## Installing the AIRTOOLS software
 The AIRTOOLS project is hosted at <https://github.com/ewelot/airtools> where
 you can find the latest source code and documentation. Pre-compiled binary
-packages are build for several Debian based Linux distributions (e.g. Xubuntu)
-and can easily be installed by running an install script.
+packages are build for several Debian/Ubuntu based Linux distributions.
 
-The download of the installer requires a few more steps than usual, because
-you will fetch it from a GitHub source repository:
+Development is done using a recent Debian Linux distribution. Ubuntu packages
+are tested on Xubuntu LTS distributions and should work on any Ubuntu desktop
+flavour (e.g. native Ubuntu, Kubuntu, Lubuntu) or other derivatives like LinuxMint. 
 
-- From within the Linux virtual machine start the web browser and open the
-  project page at <https://github.com/ewelot/airtools>.
-- Locate the install script `install_deb.sh` within the source tree and click
-  on it.
-- On the top-right of the displayed script source locate the button labeled
-  "Raw", click it with right mouse button and select "Save Link As" which
-  will download the installer file.
+To add the AIRTOOLS binary package repository you must add a new entry to the
+package managment sources list, e.g. by creating a file
+`/etc/apt/sources.list.d/airtools.list` containing a line:
 
-You run the installer by following the next steps:
+    deb [trusted=yes] http://fg-kometen.vdsastro.de/airtools/debian YOUR_DISTRIBUTION main
 
-- Locate the directory which contains the previously downloaded file
-  `install_deb.sh`. E.g. double-click the "Home" icon on the desktop which
-  starts the file manager and open the "Downloads" folder.
-- Open the "File" menu of the file manager and choose "Open Terminal Here". A new
-  terminal window will pop up, ready to enter commands to be executed.
-- Enter the following command on a single line: `sudo bash install_deb.sh`
-- You must provide your password before the installation is started.
+where `YOUR_DISTRIBUTION` has to be replaced by the codename of your distribution
+(e.g. focal).
+
+Installation is done by invoking the following commands:
+
+    sudo apt update
+    sudo apt install airtools
 
 Upon first installation of the AIRTOOLS software the script will download many
-other required software packages from the official Xubuntu repository. This
+other required software packages from the official distribution repository. This
 might take a few minutes depending on the bandwidth of your internet
-connection. At the end of the installation you will receive some log messages
-about success (or failure) in the terminal window. A log file is created for
-later reference and a new icon is showing up on your Linux desktop.
+connection. At the end of the installation a new shortcut icon is showing up
+on your Linux desktop.
 
 
 ## Updating the AIRTOOLS software
-An update of the AIRTOOLS software is issued the same way as the initial
-installation, that is by downloading and executing the installer `install_deb.sh`.
-Though, it will complete much faster due to much smaller amount of required
-downloads.
+
+The AIRTOOLS software is updated every couple of months.
+An update of your installation is issued by the following two commands:
+
+    sudo apt update
+    sudo apt install airtools
+
+
+## Uninstalling the AIRTOOLS software
+
+The AIRTOOLS software can be uninstalled by running
+
+    sudo apt remove airtools*
+
 
 \pagebreak
 

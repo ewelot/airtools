@@ -72,6 +72,8 @@ public class LightCurveController implements Initializable {
     @FXML
     private ChoiceBox<FitType> cbFitType;
     @FXML
+    private CheckBox cbCurrentApparition;
+    @FXML
     private TextField tfModelM;
     @FXML
     private TextField tfModelN;
@@ -174,7 +176,9 @@ public class LightCurveController implements Initializable {
         
         cbKeyPosition.getItems().setAll(KeyPosition.values());
         cbKeyPosition.getSelectionModel().select(KeyPosition.TOPLEFT);
-        
+
+        cbCurrentApparition.setSelected(true);
+
         paneLightCurve.setOnMouseClicked(event -> {
             labelWarning.setText("");
         });
@@ -303,6 +307,7 @@ public class LightCurveController implements Initializable {
         if (cbForceUpdate.isSelected())       aircliCmdArgs.add("-u");
         if (cbMPCModel.isSelected())          aircliCmdArgs.add("-m");
         if (cbDistance.isSelected())          aircliCmdArgs.add("-d");
+        if (cbCurrentApparition.isSelected()) aircliCmdArgs.add("-ca");
         if (fitType != FitType.NONE)          aircliCmdArgs.add(fitType.getOption());
         if (keyPos  != KeyPosition.TOPLEFT)   aircliCmdArgs.add(keyPos.getOption());
         
