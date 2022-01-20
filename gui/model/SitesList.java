@@ -38,7 +38,7 @@ public class SitesList {
         // extract site names from column "location"
         String line;
         //Pattern regexp =   Pattern.compile("^[A-Z][a-zA-Z0-9]+[ ]+[a-zA-Z0-9]+[ ]+[+-]{0,1}[0-9.,]+[ ]+[+-]{0,1}[0-9.,]+[ ]+");
-        Pattern regexp =   Pattern.compile("^[A-Z][a-zA-Z0-9]+[ ]+");
+        Pattern regexp =   Pattern.compile("^[A-Z][a-zA-Z0-9]+[ \t]+");
         Matcher matcher = regexp.matcher("");
         try {
             boolean foundHeader = false;
@@ -63,7 +63,7 @@ public class SitesList {
                 if (colNum < 0 || line.startsWith("#")) continue;
                 matcher.reset(line);
                 if (matcher.find()) {
-                    String[] columns = line.split("[ ]+");
+                    String[] columns = line.split("[ \t]+");
                     if (columns.length >= 5) {
                         siteNames.add(columns[colNum]);
                     }

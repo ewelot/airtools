@@ -31,6 +31,7 @@ import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -40,6 +41,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.Optional;
 import java.util.Properties;
@@ -298,7 +300,8 @@ public class MainController implements Initializable {
         logger.setStatusLine(labelStatus);
         logger.statusLog("Ready");
         
-        /* read initial project settings from config file */
+        /* read initial project settings from global config file */
+        logger.log("Loading config from " + confFileName);
         projectProperties = new Properties();
         loadProperties(configFile);
         rawDir.setValue(projectProperties.getProperty("lastRawDir", "/tmp"));
@@ -343,9 +346,64 @@ public class MainController implements Initializable {
     }
     
     
+    private String executeShellCommand(String command[], boolean doLog) {
+        StringBuilder output = new StringBuilder();
+        Process p;
+
+        System.out.println("# executeCommand: " + Arrays.toString(command));
+        try {
+            p = Runtime.getRuntime().exec(command);
+            BufferedReader stdOutput = 
+                new BufferedReader(new InputStreamReader(p.getInputStream()));
+            BufferedReader stdError = 
+                new BufferedReader(new InputStreamReader(p.getErrorStream()));
+            String line;
+            while ((line = stdOutput.readLine())!= null) {
+                if (doLog) logger.log(line);
+                if (output.length() > 0) output.append("\n");
+                output.append(line);
+            }
+            while ((line = stdError.readLine())!= null) {
+                if (doLog) logger.log(line);
+                if (output.length() > 0) output.append("\n");
+                output.append(line);
+            }
+            //p.waitFor();
+        } catch (Exception e) {
+            logger.log("ERROR: shell command failed: " + Arrays.toString(command));
+            e.printStackTrace();
+        }
+
+        return output.toString();
+    }
+    
     private void onProjectDirChange() {
         System.out.println("onProjectDirChange()");
         logger.log("Project Directory = " + projectDir.getValue());
+        
+        // get rawDir and tempDir from local project config file
+        String [] shellCmd;
+        String strValue;
+        String localConfigFileName=projectDir.getValue() + "/.airtoolsrc";
+        shellCmd = new String[] {"bash", "-c", ". " + localConfigFileName + " && echo $AI_RAWDIR"};
+        strValue = executeShellCommand(shellCmd, false);
+        if (! strValue.isBlank()) {
+            System.out.println("AI_RAWDIR=" + strValue);
+            rawDir.setValue(strValue);
+        } else {
+            logger.log("WARNING: AI_RAWDIR is not set.");
+        }
+        shellCmd = new String[] {"bash", "-c", ". " + localConfigFileName + " && echo $AI_TMPDIR"};
+        strValue = executeShellCommand(shellCmd, false);
+        if (! strValue.isBlank()) {
+            System.out.println("AI_TMPDIR=" + strValue);
+            tempDir.setValue(strValue);
+        } else {
+            logger.log("WARNING: AI_TMPDIR is not set.");
+        }
+        logger.log("");
+                
+        
         sh.setWorkingDir(projectDir.getValue());
         paneImageReductionController.clearTabContent();
         paneCometPhotometryController.clearTabContent();
@@ -356,8 +414,8 @@ public class MainController implements Initializable {
             tabPane.getSelectionModel().selectFirst();
 
         projectProperties.setProperty("lastProjectDir", projectDir.getValue());
-        //projectProperties.setProperty("lastRawDir", rawDir.getValue());
-        //projectProperties.setProperty("lastTempDir", tempDir.getValue());
+        projectProperties.setProperty("lastRawDir", rawDir.getValue());
+        projectProperties.setProperty("lastTempDir", tempDir.getValue());
         projectProperties.setProperty("lastSite", site.getValue());
         projectProperties.setProperty("lastTZOff", tzoff.getValue().toString());
         projectProperties.setProperty("lastObsName", observer.getName());
@@ -744,7 +802,7 @@ public class MainController implements Initializable {
             FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource("/tl/airtoolsgui/view/LightCurve.fxml"));
             Parent parent = fxmlLoader.load();
             LightCurveController controller = fxmlLoader.<LightCurveController>getController();
-            controller.setReferences(sh, logger, projectDir);
+            controller.setReferences(sh, logger, projectDir, tempDir);
 
             Scene scene = new Scene(parent);
             windowLightCurve = new Stage();

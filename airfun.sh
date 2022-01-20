@@ -14,9 +14,38 @@
 # - in order to use SAOImage DS9 analysis tasks (via AIexamine) you must
 #   have installed files airds9.ana and aircmd.sh
 ########################################################################
-AI_VERSION="5.1.9"
+AI_VERSION="5.1.10"
 : << '----'
 CHANGELOG
+    TODO: AIsplitstack make sure it has at least 2 images per sub-set
+        AIsplitstack: apply bggradient
+        AIsplitstack: make sure field size of splitted stacks is large enough
+          for astrometry (check with installed data files)
+        icqplot:
+            -r AIT should also remove local observations
+            -r CCD should only leave visual data
+        stack: improve source detection in bright coma (e.g. 220113/co02) 
+    GUI:
+        GUI: New project / Cancel should not check site/new site (?)
+
+    5.1.10 - 20 Jan 2022
+        * AIregister: fixed regression introduced by 5.1.7 when parsing results
+            in case of 180 deg rotated images
+        * AIsplitstack: fixed regression introduced by 5.1.6 when determining
+            n1,n2,nref of splitted sets
+        * AIbgmap:
+            bugfix when dealing with single image in set
+            added option -odir <outdir> to set directory of output images
+            greatly improve quality of residual image if amplitude is small
+        * mpcreport: bugfix for astrometry from single image
+        * reg2pbm: using vips functionality to improve processing speed (10x)
+        * is_mask: rewrite to avoid imagemagicks identify resulting in some
+            speedup 
+        * AIlist: added bin and bgmult to list of optional fields
+        * AIbgmodel: major rewrite
+        * AIarchive: add some more files 
+        * AImapphot: store coma size in icq file to 1/100' precision
+
     5.1.9 - 01 Jan 2022
         * mpcname: better handling of minor planets (numbers up to 619999,
             provisional designations using numbers <100)
@@ -2129,6 +2158,10 @@ load_aliases () {
     alias imageviewer=feh
     alias textviewer=mousepad
     
+    # local overwrites
+    test "$AI_IMAGEVIEWER" && alias imageviewer=$AI_IMAGEVIEWER
+    test "$AI_TEXTVIEWER" && alias textviewer=$AI_TEXTVIEWER
+    
     # define aliases if binary names have changed
     shopt -s expand_aliases
     type -p sextractor > /dev/null 2>&1 &&
@@ -2645,34 +2678,49 @@ is_mask () {
     local val
     local npix
     local fgpercent
+    local tmphist=$(mktemp "/tmp/tmp_hist.XXXXXX.dat")
+
     
     (test $# -gt 3 || test $# -lt 1 || test "$1" == "-h") &&
         echo "usage: is_mask <img> [fgcolor] [max%|$limit]" >&2 && return 1
     test "$fgcolor" != "white" && test "$fgcolor" != "black" &&
         echo "ERROR: fgcolor must be either white or black." >&2 && return 255
 
-    ncol=$(identify -format "%k" $img)
-    case $ncol in
-        -1) # TODO: handle image of unique color
-            test $fgcolor == "white" && val=0
-            test $fgcolor == "black" && val=65535
-            ;;
-        2)  test $fgcolor == "white" && val=65535
-            test $fgcolor == "black" && val=0;;
-        *)  echo "ERROR: $img is not b/w image." >&2 &&
-            return 255;
-    esac
+    # allowed input image formats png, pgm, pbm
+    ! is_png $img && ! is_pgm $img && ! is_pbm $img &&
+        echo "ERROR: is_mask: unsupported image format of $img" >&2 &&
+        rm -f $tmphist &&
+        return 255
+
+    gm convert $img -depth 16 pgm:- | pgmhist | grep "^[0-9]" > $tmphist
+    ncol=$(cat $tmphist | wc -l)
+    test $ncol -ne 2 &&
+        echo "ERROR: $img is not b/w image." >&2 &&
+        rm -f $tmphist &&
+        return 255
+
+    if is_pbm $img
+    then
+        test $fgcolor == "white" && val=65535
+        test $fgcolor == "black" && val=0
+    else
+        test $fgcolor == "white" && val=0
+        test $fgcolor == "black" && val=65535
+    fi
     
-    npix=$(identify $img | cut -d ' ' -f3 | tr 'x' '*' | bc)
-    fgpercent=$(gm convert $img -depth 16 pgm:- | pgmhist - | grep "^$val" | \
+    npix=$(imsize $img | tr ' ' '*' | bc)
+    fgpercent=$(grep "^$val" $tmphist | \
         awk -v n=$npix '{if (NF>2) printf("%.0f", $2*100/n)}')
-    test "$AI_DEBUG" && echo "$img: $fgpercent% $fgcolor (ncol=$ncol)." >&2
+    test "$AI_DEBUG" && echo "$img: $fgpercent% $fgcolor." >&2
     test -z "$fgpercent" &&
         echo "ERROR: no foreground pixels." >&2 &&
+        rm -f $tmphist &&
         return 255
     test $fgpercent -gt $limit &&
         echo "ERROR: too many foreground pixels ($fgpercent% > $limit%)." >&2 &&
+        rm -f $tmphist &&
         return 255
+    rm -f $tmphist &&
     return 0
 }
 
@@ -4608,7 +4656,7 @@ mpcreport () {
     fi
     
     # indicate stacking
-    stacknote=""
+    stacknote=" "
     test $nexp -gt 1 && stacknote="K"
     
     # telescope information
@@ -5049,21 +5097,22 @@ rgbsmooth () {
 
 
 rgbscale () {
-    # scale intensity of 16bit rgb image to examine background
+    # scale intensity of 16bit rgb image to enhance background
+    # and write 8bit image to stdout
     local showhelp
     local thres="5,3"
     local verbose
     local i
-    for i in 1 2
+    for i in 1 2 3
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
-        test "$1" == "-v" && verbose=1 && shift 1
         test "$1" == "-t" && thres=$2 && shift 2
+        test "$1" == "-v" && verbose=1 && shift 1
     done
     
     local img=$1
     local sd=$2
-    local outsize=240   # output image size (only enlarge)
+    local outsize=240   # min. output image size (only enlarge)
     local high=${thres%,*}
     local low=${thres#*,}
     local rmult
@@ -5087,10 +5136,10 @@ rgbscale () {
     imcrop $tmpimg 90 | AIval -a - > $tmpdat
     
     # red channel
-    x=""; test "$sd" && x=$((sd*100/170))
+    #x=""; test "$sd" && x=$((sd*100/170))
     set -- $(kappasigma $tmpdat 1)
     test "$verbose" && echo -ne "sd=${2%%.*}" >&2
-    set -- $(echo $1 $2 $x | awk -v b=16 -v l=$low -v h=$high '{
+    set -- $(echo $1 $2 $sd | awk -v b=16 -v l=$low -v h=$high '{
             m=2^b/$NF/(l+h)
             a=2^b*l/(l+h)-$1*m
             printf("%.1f %.0f\n", m, a)
@@ -5110,20 +5159,20 @@ rgbscale () {
         gmult=$1; gadd=$2
         
         # blue channel
-        x=""; test "$sd" && x=$((sd*100/125))
+        #x=""; test "$sd" && x=$((sd*100/125))
         set -- $(kappasigma $tmpdat 3)
         test "$verbose" && echo ",${2%%.*}" >&2
-        set -- $(echo $1 $2 $x | awk -v b=16 -v l=$low -v h=$high '{
+        set -- $(echo $1 $2 $sd | awk -v b=16 -v l=$low -v h=$high '{
                 m=2^b/$NF/(l+h)
                 a=2^b*l/(l+h)-$1*m
                 printf("%.1f %.0f\n", m, a)
             }')
         bmult=$1; badd=$2
         
-        pnmccdred -m $rmult,$gmult,$bmult -a $radd,$gadd,$badd $tmpimg - | \
+        pnmccdred2 -m $rmult,$gmult,$bmult -a $radd,$gadd,$badd $tmpimg - | \
             convert - -depth 8 -scale $outsize\< -
     else
-        pnmccdred -m $rmult -a $radd $tmpimg - | \
+        pnmccdred2 -m $rmult -a $radd $tmpimg - | \
             convert - -depth 8 -scale $outsize\< -
     fi
     
@@ -6675,16 +6724,18 @@ raw2obs () {
 
         # write record for image set
         if (target != last || filter != lastfilter ||
+            (lastjd != "" && ($5-lastjd)*24*3600 > 900) ||
+            (type != lasttype) ||
             (type=="o" && $4 != lasttexp) ||
             (type=="d" && $4 != lasttexp) ||
             (type=="f" && lastjd != "" && ($5-lastjd)*24*3600 > fgap)) {
             if (last) {
-                if (type == "o") {
+                if (lasttype == "o") {
                     printf("%s %s %-8s %s %3.0f %04d %04d %04d %-4s %-4s %s",
-                        utstart, sname, last, type, texp, n1, n2, (n1+n2)/2, dark, flat, tel)
+                        utstart, sname, last, lasttype, lasttexp, n1, n2, (n1+n2)/2, dark, flat, tel)
                 } else {
                     printf("%s %s %-8s %s %3.0f %04d %04d %-4s %-4s %-4s %s",
-                        utstart, sname, last, type, texp, n1, n2, "-", dark, flat, tel)
+                        utstart, sname, last, lasttype, lasttexp, n1, n2, "-", dark, flat, tel)
                 }
                 if (lastfilter && lastfilter!="Green") {
                     printf(" # %s\n", lastfilter)
@@ -6710,6 +6761,7 @@ raw2obs () {
             }
         }
         n2=1*$1
+        lasttype=type
         lasttexp=texp
         lastjd=$5
         lastfilter=filter
@@ -10304,6 +10356,7 @@ icqplot () {
     local do_localobs   # if set include local observations (using AIlist)
     local do_update     # if set update ephemdb and cobsobs
     local do_curr_app   # if set limit data to last apparition
+    local do_keep_cobsobs # if set then keep a copy of cobs data (cobs_$comet.icq)
     local outfile       # if set the plot is saved to the given file name
     local outext="png"  # png|eps plot file extension (if outfile is not given) 
     local verbose       # if set print additional messages and keep gnuplot files
@@ -10331,6 +10384,7 @@ icqplot () {
         test "$1" == "-r" && rmobslist="$2"   && shift 2
         test "$1" == "-p" && npoints="$2"   && shift 2
         test "$1" == "-c" && do_cobsobs=1   && shift 1
+        test "$1" == "-cc" && do_keep_cobsobs=1 && shift 1
         test "$1" == "-l" && do_localobs=1  && shift 1
         test "$1" == "-u" && do_update=1    && shift 1
         test "$1" == "-ca" && do_curr_app=1 && shift 1
@@ -10507,6 +10561,8 @@ icqplot () {
             echo "# get data from COBS" >&2
             get_cobs -a $comet > $tmpcobsobs
         fi
+        test "$do_keep_cobsobs" && test -s $tmpcobsobs &&
+            cp -p $tmpcobsobs cobs.$comet.icq
     
     # get comet ephemerides, orbital period, perihel time (xp is utdate,
     #   up is unix time) and distance
@@ -10649,7 +10705,7 @@ icqplot () {
             if (obsid=="") obsid="unknown"
             
             # software (use flag V to indicate visual observation)
-            if (substr($0,81,1) == "I" || method ~ /[CZ]/) {
+            if (substr($0,81,1) == "I" || method ~ /[CZacdDgGHjJkKI]/) {
                 soft=substr($0,102,3); gsub(/ /,"",soft); if (soft=="") {soft="?"}
             } else {
                 if (src=="local") {
@@ -11524,7 +11580,7 @@ reg2svg () {
     return
 }
 
-reg2pbm () {
+reg2pbm_old () {
     # convert ds9 region file (circle/polygon/box) to pbm
     # regions are interpreted as good pixel regions (white, value=0)
     # output is directed to stdout
@@ -11533,7 +11589,7 @@ reg2pbm () {
     #    pnminvert mask.pbm | pnmarith -mul image.ppm - > objects_outside_reg.ppm
     # TODO: deal with object rotation (e.g. for a box, rotation is 5th parameter)
     local showhelp
-    opts=""
+    local opts=""
     local i
     for i in $(seq 1 2)
     do
@@ -11564,6 +11620,52 @@ reg2pbm () {
 		return 255
     test "$AI_DEBUG" && echo $tmpsvg >&2
     test -z "$AI_DEBUG" && rm -f $tmpsvg
+    return 0
+}
+
+reg2pbm () {
+    # convert ds9 region file (circle/polygon/box) to pbm
+    # regions are interpreted as good pixel regions (white, value=0)
+    # output is directed to stdout
+    # notes for applying mask:
+    #    pnmarith -mul image.ppm mask.pbm > objects_in_reg.ppm
+    #    pnminvert mask.pbm | pnmarith -mul image.ppm - > objects_outside_reg.ppm
+    # TODO: deal with object rotation (e.g. for a box, rotation is 5th parameter)
+    local showhelp
+    local opts=""
+    local i
+    for i in $(seq 1 2)
+    do
+        test "$1" == "-n" && opts="-negate" && shift 1
+        (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
+    done
+    local img=$1
+    local reg=$2
+    local id=${3:-""}
+    local w
+    local h
+    local pyprog
+    local tmpsvg=$(mktemp "/tmp/tmp1_$$_XXXXXX.svg")
+    local tmppgm=$(mktemp "/tmp/tmp1_$$_XXXXXX.pgm")
+
+    (test "$showhelp" || test $# -lt 2) &&
+        echo "usage: reg2pbm [-n] <img> <reg> <text_id>" >&2 &&
+        return 1
+
+    # check for required python scripts
+    pyprog=$(which airfun.py)
+    test $? -ne 0 &&
+        echo "ERROR: missing python module airfun.py." >&2 && return 255
+
+    test ! -f "$img" &&
+        echo "ERROR: image $img not found." >&2 && return 255
+    
+    reg2svg $img $reg $id > $tmpsvg
+
+    python3 $pyprog svgtopbm $tmpsvg $tmppgm
+    pgmtopbm -thres $tmppgm
+    test "$AI_DEBUG" && echo $tmpsvg $tmppgm >&2
+    test -z "$AI_DEBUG" && rm -f $tmpsvg $tmppgm
     return 0
 }
 
@@ -13687,6 +13789,7 @@ sexselect () {
     rmin=${rrange%,*}
     rmax=${rrange#*,}
     rmin=$(echo $rmin $rmax | awk '{if($1>=$2) {print 0} else {print $1}}')
+    test "$verbose" && echo "# rmin=$rmin rmax=$rmax" >&2
     
     # get X,Y column names
     # determine hdu of LDAC_OBJECTS table matching color (start counting from 0)
@@ -13722,7 +13825,6 @@ sexselect () {
     then
         echo 'stats name q.4 mean stdev minimum maximum ngood' >> $cmds
     fi
-    # cat $cmds >&2
     
     if [ "$outfits" ]
     then
@@ -18316,7 +18418,7 @@ AIdisplay () {
             feh)
                 xdotool search --name "^$viewer .* $image$" key r windowactivate
                 ;;
-            *)  echo "WARNING: viewer $viewer is untested" >&2
+            *)  test "$verbose" && echo "WARNING: viewer $viewer is untested" >&2
                 kill $pid
                 $viewer $imglist 2>/dev/null &
                 ;;
@@ -20747,6 +20849,7 @@ EOF
 # notes:
 #   - if no images are found in $AI_TMPDIR and $AI_RAWDIR then use n1 and n2
 #     to guess relevant source cataloges
+#   - raw images must be present to parse header data
 #   - if header files are not found ($AI_RAWDIR) some header data
 #     might not be propagated to measure/<num>.src.head (e.g. ra, de)
 AIregister () {
@@ -21173,6 +21276,7 @@ EOF
                 sed -e 's/^CD1_1 /CDX_1 /; s/^CD2_2 /CD1_1 /; s/^CDX_1 /CD2_2 /' \
                 > ${inldac/.fits/.ahead}
                 
+                test "$AI_DEBUG" && echo $cmd
                 eval "$cmd" 2>/dev/null
                 test $? -ne 0 &&
                     echo "ERROR: scamp terminated with error (num=$num)." >&2 &&
@@ -21183,18 +21287,22 @@ EOF
                     return 255
 
                 # extract scamp fitting data from scamp.xml
-                line=$(stilts tpipe ofmt=text $xmldat cmd=transpose | \
-                awk 'BEGIN{nsrc=0;nmatch=0;nhigh=0;dm=0}{
-                        if($2=="NDetect")               nsrc=$4
-                        if($2=="NDeg_Reference")        nmatch=$4
-                        if($2=="NDeg_Reference_HighSN") nhigh=$4
-                        if($2=="ZeroPoint_Corr")        dm=$4
+                line=$(stilts tpipe ifmt=votable ofmt=csv $xmldat cmd=transpose | \
+                awk -F ',' 'BEGIN{nsrc=0;nmatch=0;nhigh=0;dm=0}{
+                        if($1=="NDetect")               nsrc=$2
+                        if($1=="NDeg_Reference")        nmatch=$2
+                        if($1=="NDeg_Reference_HighSN") nhigh=$2
+                        if($1=="ZeroPoint_Corr")        dm=$2
                     }END{
                         printf("%d %d %d %.3f", nsrc, nmatch, nhigh, dm)
                     }')
+                test $(echo $line | wc -w) -lt 3 &&
+                    echo "ERROR: unable to read scamp results in $xmldat" >&2 &&
+                    return 255
+
                 nsrc=$(echo $line | awk '{print $1}')
                 nmatch=$(echo $line | awk '{print $2}')
-                nhigh=$(echo $line | awk '{print $3}')                    
+                nhigh=$(echo $line | awk '{print $3}')
             fi
             
             # propagate some header keywords
@@ -21347,7 +21455,7 @@ EOF
 		then
 			export -f _airegister_parallel
             popts=""; test "$AI_MAXPROCS" && popts="-P $AI_MAXPROCS"
-			parallel $popts -k $tmpsh ::: $nlist
+			echo $nlist | tr ' ' '\n' | parallel $popts -k $tmpsh
 			unset -f _airegister_parallel
 		fi
 
@@ -21802,7 +21910,7 @@ AIbgdiff () {
         while read x num fname ref x
         do
             test -f $diffdir/$num.bgdiff.$inext && has_bgdiff=1 && continue
-            n=$(($n + 1)) && nlist="$nlist $num"
+            n=$((n + 1)) && nlist="$nlist $num"
         done < $imlist
         test "$has_bgdiff" && echo "WARNING: some bgdiff images do already exist." >&2
         test $n -eq 0 && echo "WARNING: skipping set $sname" >&2 && continue
@@ -21865,9 +21973,9 @@ AIbgdiff () {
             echo "ERROR: imcrop -1 $b.bgm1.$inext 80 failed" >&2 && return 255
         rm $b.bgm1.$inext
         echo "bgref = $bgrgb" >&2
-        test $n -eq 1 &&
+        test $n -eq 1 && num=$(echo $nlist) &&
             echo "WARNING: single image, no diffs" >&2 &&
-            echo "$nref.$inext $nref $bgzero $bgzero $bgzero (0.0) ${bgrgb//,/ }" &&
+            echo "$num.$inext $num $bgzero $bgzero $bgzero (0.0) ${bgrgb//,/ }" &&
             continue
 
         
@@ -22024,6 +22132,7 @@ AIbgmap () {
                     # are assumed to be scaled by mult
     local maxbad=60 # max. percent of bad pixel to exclude from bg
     local bgoff=0   # offset (-1*pedestal) which was added to img
+    local outdir    # if set then write outsmall image to this directory
     local show_bg_stddev
     for i in $(seq 1 10)
     do
@@ -22038,6 +22147,7 @@ AIbgmap () {
         test "$1" == "-o" && bgoff=$2 && shift 2
         test "$1" == "-sd" && show_bg_stddev=1 && shift 1
         test "$1" == "-x" && maxbad=$2 && shift 2
+        test "$1" == "-odir" && outdir=$2 && shift 2
         test "$1" == "-stats" && do_stats_only=1 && shift 1
     done
     local img=${1:-""}
@@ -22057,11 +22167,13 @@ AIbgmap () {
 
     local out
     local outsmall
+    local outnorm
+    local outres
     local f
     local b
     local c
     local clist
-    local inext="ppm"
+    local inext
     local param="-filter N -detect_thresh 100 -write_xml Y"
     local fields=$tdir/sex.$$.fields
     local wfits=$tdir/weight.$$.fits
@@ -22084,25 +22196,29 @@ AIbgmap () {
     do
         test ! -f $f && echo "ERROR: file $f does not exist." >&2 && return 255
     done
+    test "$outdir" && test ! -d $outdir &&
+        echo "ERROR: dir $outdir does not exist." && return 255
+    test "$AI_DEBUG" && quiet=""
 
-    # TODO: check img is either ppm or pgm
-    
-    # TODO: improve performance (takes 40%)
+    # check img is either ppm or pgm
+    is_pgm $img && inext="pgm"
+    test -z "$inext" && is_ppm $img && inext="ppm"
+    test -z "$inext" &&
+        echo "ERROR: $img has unsupported format" >&2 && return 255
+
     if [ "$weightmap" ]
     then
         # convert bad bg region to mask
         if is_reg $weightmap
         then
-            reg2pbm $img $weightmap | gm convert - -negate $tmpmask
-            test $(identify -format "%k" $tmpmask) -eq 1 &&
-                echo "WARNING: empty regions file $weightmap." >&2 &&
+            if grep -q -vE "^#|^global" $weightmap
+            then
+                reg2pbm $img $weightmap | gm convert - -negate $tmpmask
+                weightmap=$tmpmask
+            else
+                echo "WARNING: no regions found" >&2
                 weightmap=""
-            test "$weightmap" && weightmap=$tmpmask
-        else
-            # ignore bgmask if it is of uniform color
-            test $(identify -format "%k" $weightmap) -eq 1 &&
-                echo "WARNING: weightmap $weightmap has constant value." >&2 &&
-                weightmap=""
+            fi
         fi
 
         # check if mask is black/white only
@@ -22119,9 +22235,17 @@ AIbgmap () {
     
     # abbreviations
     b=$(basename ${img%\.*})
-    is_pgm $img && inext="pgm"
     out="$b.bg.$inext"
     outsmall="$b.bgm$mult.$inext"
+    outnorm="$b.bgm${mult}n.$inext"
+    outres="$b.bgm${mult}res.$inext"
+    if [ "$outdir" ]
+    then
+        out="$outdir/$out"
+        outsmall="$outdir/$outsmall"
+        outnorm="$outdir/$outnorm"
+        outres="$outdir/$outres"
+    fi
     #day=$(basename $(dirname $img))
     #test "$day" && test "$day" != "." && out="$day.$b.bg$bsize.ppm"
 
@@ -22132,7 +22256,7 @@ AIbgmap () {
         #   the residual image will show staircase structure, independant of $mult
         #   maybe we should add some random noise proportional to $mult
         # TODO: begin run parallel (takes 45% of time)
-        case $inext in
+        false && case $inext in
             ppm)    clist="red grn blu"
                     pnmccdred2 -f -m $mult $img $tmpfits
                     imslice $tmpfits 1 > $tdir/$b.red.fits
@@ -22142,6 +22266,17 @@ AIbgmap () {
             pgm)    clist="gray"
                     pnmccdred2 -f -m $mult $img $tmpfits
                     imslice $tmpfits 1 > $tdir/$b.$clist.fits
+                    ;;
+        esac
+        pnmccdred2 -m $mult $img - | pnmsmooth -size 3 3 > $tmp1
+        case $inext in
+            ppm)    clist="red grn blu"
+                    gm convert $tmp1 -channel Red   - | ppmtopgm | pnmtomef - > $tdir/$b.red.fits
+                    gm convert $tmp1 -channel Green - | ppmtopgm | pnmtomef - > $tdir/$b.grn.fits
+                    gm convert $tmp1 -channel Blue  - | ppmtopgm | pnmtomef - > $tdir/$b.blu.fits
+                    ;;
+            pgm)    clist="gray"
+                    pnmtomef $tmp1 > $tdir/$b.$clist.fits
                     ;;
         esac
         
@@ -22231,7 +22366,7 @@ AIbgmap () {
                 gm convert $outsmall -resize $(gm identify $img | cut -d ' ' -f3)\! $out
             # optionally create residual image
             test "$do_diag" &&
-                pnmccdred -a 1000 -d $outsmall $tmpnofit $b.bgm${mult}res.$inext
+                pnmccdred -a 1000 -d $outsmall $tmpnofit $outres
         fi
     fi
 
@@ -22299,43 +22434,42 @@ AIbgmap () {
         mrgb=$(echo $rgb | awk -F ',' '{x=10000; if(NF>1) {
             printf("%f,%f,%f", x/$1, x/$2, x/$3)} else {printf("%f", x/$1)}}')
         pnmccdred -a $((-1*bgoff*mult)) $outsmall - | \
-            pnmccdred -m $mrgb - $b.bgm${mult}n.$inext
+            pnmccdred -m $mrgb - $outnorm
     fi
     
     test "$show_bg_stddev" && echo "$bgsd"
-    test !"$AI_DEBUG" && rm -f $tmp1 $wfits $tmpnofit $tmpbg $tmpmask $tmpfits
+    test ! "$AI_DEBUG" && rm -f $tmp1 $wfits $tmpnofit $tmpbg $tmpmask $tmpfits
     return 0
 }
 
 
 # apply bg model using reference images or straight gradient pattern
+# TODO: replace hardcoded pdirlist
 AIbgmodel () {
     local showhelp
+    local adirlist  # list of base directories of AIRTOOLS projects
     local mode="refsets"  # either "refsets" or "bgpattern"
     local do_median # if set apply 3x3 median filter before bluring
-    local blur=1.0  # bluring in pixels
+    local blur=1.0  # bluring of model image in 1/2 pixels
     local scale=1.0 # amplitude scaling of model image
-    local sd        # if set use it for a fixed amplitude scaling
-    local bgmult    # bgmult which has been used for creating residual images
-    local bgval     # bgval of target (default: measure in $target.$ext)
-    local dcontrast=1.0 # modify display contrast
+    #local sd=100        # if set use it for a fixed amplitude scaling
+    local dcontrast=1.0 # scaling of display contrast
     local testonly  # if set do not apply model
-    local allsets   # create model using bgval=1000 from all sets
+    #local allsets   # create model using bgval=1000 from all sets
     local xlist     # list of sets to be excluded from model computing
+    local newres    # if set compute new residual image using current AIbgmap
     local verbose
     local i
-    for i in $(seq 1 10)
+    for i in $(seq 1 9)
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
-        test "$1" == "-m" && bgmult=$2 && shift 2
-        test "$1" == "-bg" && bgval=$2 && shift 2
+        test "$1" == "-a" && adirlist="$adirlist $2" && shift 2
         test "$1" == "-3" && do_median=1 && shift 1
         test "$1" == "-b" && blur=$2 && shift 2
         test "$1" == "-s" && scale=$2 && shift 2
-        test "$1" == "-sd" && sd=$2 && shift 2
-        test "$1" == "-c" && dcontrast=$2 && shift 2
+        test "$1" == "-d" && dcontrast=$2 && shift 2
         test "$1" == "-t" && testonly=1 && shift 1
-        test "$1" == "-a" && allsets=1 && shift 1
+        test "$1" == "-n" && newres=1 && shift 1
         test "$1" == "-x" && xlist=$2 && shift 2
         test "$1" == "-v" && verbose=1 && shift 1
     done
@@ -22344,19 +22478,35 @@ AIbgmodel () {
                             # or region file containing vector of constant bg brightness
                             # (and optional regions to be ignored during model construction)
     local tdir=${AI_TMPDIR:-"/tmp"}
+    local tmpslist=$(mktemp "$tdir/tmp_slist_XXXXXX.dat")
     local wdir=$(mktemp -d "$tdir/tmp_bgmodel_XXXXXX")
     local cdir=bgcorr   # base name of bgcorr directories to search for res image
+    local bgres=1000    # background in residual images created by bggradient
+    local adir
+    local pdirlist
     local flist
+    local day
+    local hdr
     local ext
-    local bgres=1000    # shift model to this bg value
+    local dbgmult=10    # bgmult for display of residual/model images
+    local dbgval=1000   # bgval for display of residual/model images
+    local mbgmult       # target model multiplier (default: same as target input bgmult)
+    local mbgval=1000   # target model bg value
+    local targetbgval   # bgval of target input image
     local ncol
     local refentry
     local resimg
     local bgimg
+    local bgmult
+    local bgoff     # either AI_BGOFF or 0
     local sname
+    local stack
+    local badbg
     local suffix    # optional suffix extending name of cdir
+    local outext
     local x
     local s
+    local sd
     local mult
     local add
     local size
@@ -22364,145 +22514,251 @@ AIbgmodel () {
     local imlist
     local imlist2
     local mlist
+    local img
     local rot180
     
-    (test "$showhelp" || (test $# -lt 2 && test -z "$allsets")) &&
-        echo "usage: AIbgmodel [-v] [-t|-a] [-x exlist] [-3] [-b blur|$blur] [-m bgmult]" \
-            "[-bg bgval] [-s scale|$scale] [-sd sd]" \
-            "[-c dcontrast|$dcontrast] <target> <refsets | bgreg>" >&2 &&
+    test "$showhelp" &&
+        echo "usage: AIbgmodel [-v] [-t] [-n] [-x exlist] [-3] [-b blur|$blur]" \
+            "[-s scale|$scale] [-d dcontrast|$dcontrast]" \
+            "<target> <refsets | bgreg>" >&2 &&
         return 1
     
     test "${1:0:1}" == "-" &&
         echo "ERROR: unknown option $1." >&2 && return 255
 
-    # determine mode of operation
-    is_reg $reforreg && mode="bgpattern"
-    
-    # deal with allsets
-    if [ "$allsets" ]
+    # deal with 0/1 parameters
+    if [ $# -eq 0 ]
     then
-        bgval=1000
-        flist=$(AIsetinfo -b -o | grep -v "^#" | while read x s x
-            do
-                ls $cdir/$s.{bgm1,bgm10}res.{pgm,ppm} 2>/dev/null
-            done)
-        x=$(basename $(echo "$flist" | head -1))
-        target=$(echo $x | cut -d "." -f1)
-        bgmult=$(echo $x | cut -d "." -f2 | tr -d '[a-z]')
-        ext=$(echo $x | cut -d "." -f3)
-        reforreg=$(AIsetinfo -b -o | grep -v "^#" | while read x s x
-            do
-                test $s != $target && test -f $cdir/$s.bgm${bgmult}res.$ext && echo $s
-            done)
-        test "$AI_DEBUG" && echo "# target=$target reforreg=$reforreg" >&2
+        # add all image sets of current project to reforreg
+        reforreg="$(AIsetinfo -b | awk '{if($4=="o"){print $2}}')"
+    else
+        if [ $# -eq 1 ]
+        then
+            if [ $(echo ${target//,/ } | wc -w) -gt 1 ]
+            then
+                reforreg=$target
+                target=""
+            else
+                # add all other image sets of current project
+                reforreg="$(AIsetinfo -b | awk -v t=$target '{if($4=="o" && $2!=t){print $2}}')"
+            fi
+        fi
     fi
+    test -z "$target" && testonly=1 # do not apply model
 
-    # determine bg multiplier and image extension
-    test "$bgmult" && test -f $cdir/$target.bgm${bgmult}res.ppm && ext=ppm
-    test "$bgmult" && test -f $cdir/$target.bgm${bgmult}res.pgm && ext=pgm
-    if [ -z "$bgmult" ]
+    # determine mode of operation
+    test "$target" && test "$reforreg" && is_reg $reforreg &&
+        mode="bgpattern"
+
+    # set airtools project base directories    
+    if [ -z "$adirlist" ]
     then
-        x=$(ls -t $cdir/$target.bgm{1,10}res.p[pg]m 2>/dev/null | tail -1)        
-        test "$x" && ext=${x##*.}
-        test "$x" && bgmult=$(echo $x | sed -e "s,^$cdir/$target.bgm,,; s,res.$ext$,,")
+        for adir in \
+            $(dirname $(pwd))   \
+            $(dirname $(pwd))/results
+        do
+            test -d "$adir" && adirlist=$(echo $adirlist $adir)
+        done
+        test "$adirlist" && echo "# assuming airtools basedir = $adirlist" >&2
     fi
-    (test -z "$bgmult" || test -z "$ext") &&
-        echo "ERROR: unable to find target residual image." >&2 && return 255
-    echo "# bgmult=$bgmult ext=$ext" >&2
-    
+    test -z "$adirlist" &&
+        echo "ERROR: missing airtools project base dir" >&2
+
+    # search for required input files
     if [ "$mode" == "refsets" ]
     then
-        echo "# measure reference images ..." >&2
-        # measure bgvalue on target
-        if [ -z "$bgval" ]
-        then
-            bgval=($(AImstat -c $target.$ext | awk '{
-                printf("%s", $5); if(NF>13) {printf(" %s %s", $9, $13)}}'))
-            test "$verbose" && echo "# target bgval=${bgval[@]}" >&2
-        fi
-        ncol=${#bgval[@]}
-        test "$ext" == "ppm" && test $ncol -eq 1 && bgval=$bgval" "$bgval" "$bgval
-
-        # normalize bgres images to bgval (in each color)
         for refentry in $target ${reforreg//,/ }
         do
+            echo ${xlist//,/ } | grep -qw $refentry && continue
+            test "$verbose" && echo "## $refentry" >&2
             if [ "${refentry/:/}" != "$refentry" ]
             then
+                day=$(dirname $refentry)
                 sname=$(basename ${refentry%%:*})
                 suffix=${refentry##*:}
             else
+                day=$(dirname $refentry)
                 sname=$(basename $refentry)
                 suffix=""
             fi
+            #pdirlist="$A/$day $A/results/$day"
+            pdirlist=$(for adir in $adirlist; do echo $adir/$day; done)
+            test "$day" == "." && pdirlist="./"
+            ext=""
+            hdr=""
+            bgmult=""
             resimg=""
             bgimg=""
-            for refdir in $(dirname $refentry)/$cdir$suffix \
-                          $A/$(dirname $refentry)/$cdir$suffix \
-                          $A/results/$(dirname $refentry)/$cdir$suffix
-            do
-                test "$resimg" && break
-                test -e    $refdir/$sname.bgm${bgmult}res.$ext &&
-                    resimg=$refdir/$sname.bgm${bgmult}res.$ext &&
-                    bgimg=$refdir/$sname.bgm${bgmult}.$ext
-            done
-            test -z "$resimg" &&
-                echo "WARNING: missing image $cdir$suffix/$sname.bgm${bgmult}res.p[pg]m" >&2 &&
-                continue
             
-            x=($(AIstat -c $bgimg | awk -v m=$bgmult '{
-                printf("%s", $5/m); if(NF>13) {printf(" %s %s", $9/m, $13/m)}}'))
-            test "$verbose" && echo "# $bgimg: x=${x[@]}" >&2
+            for refdir in $pdirlist
+            do
+                if [ -e $refdir/$sname.head ] && [ -d $refdir/$cdir$suffix ]
+                then
+                    hdr=$refdir/$sname.head
+                    x=$(get_header $hdr NAXIS)
+                    ext="-"
+                    ls $refdir/varbgm*.$sname.pgm >/dev/null 2>&1 && ext=pgm
+                    ls $refdir/varbgm*.$sname.ppm >/dev/null 2>&1 && ext=ppm
+                    x=$(get_header -q $hdr AC_BGSUB)
+                    test -z "$x" &&
+                        x=$(ls -tr $refdir/$cdir$suffix/$sname.bgm[0-9]*res.$ext 2>/dev/null | tail -1)
+                    test "$verbose" && echo "# $hdr $ext $x" >&2
+                    if [ "$x" ]
+                    then
+                        resimg=$refdir/$cdir$suffix/$(basename $x)
+                        bgimg=${resimg%res.$ext}.$ext
+                        bgmult=$(basename $x | cut -d "." -f2 | tr -d "[a-z]")
+                    fi
+                fi
+                test "$resimg" && break
+            done
+            if [ "$strict" ]
+            then
+                test -z "$hdr" &&
+                    echo "ERROR: missing header file for $refentry" >&2 &&
+                    return 255
+                test -z "$bgmult" &&
+                    echo "ERROR: unknown bgmult for $refentry" >&2 &&
+                    return 255
+                test -z "$resimg" &&
+                    echo "ERROR: missing bgres image for $refentry" >&2 &&
+                    return 255
+            else
+                test -z "$hdr" &&
+                    echo "WARNING: skipping $refentry, missing header file" >&2 &&
+                    continue
+                test -z "$bgmult" &&
+                    echo "WARNING: skipping $refentry, unknown bgmult" >&2 &&
+                    continue
+                test -z "$resimg" &&
+                    echo "WARNING: skipping $refentry, missing bgres image" >&2 &&
+                    continue
+            fi
+            
+            test "$day" == "." && day=$(basename $(pwd))
+            test -z "$suffix" && suffix="-"
+            printf "%-8s %-5s %s %2d %s %s\n" $day $sname $ext $bgmult $refdir $suffix
+        done
+    fi > $tmpslist    
+    test ! -s $tmpslist && echo "ERROR: empty setlist" >&2 && return 255
+    test "$verbose" && cat $tmpslist
+    
+    # TODO: check for unique ext
+    outext=$(lines 1 $tmpslist | awk '{print $3}')
+    
+    # target model bgmult
+    mbgmult=$(lines 1 $tmpslist | awk '{print $4}')
+    
+    # measure target input bgval using first bg gradient image
+    img=$(lines 1 $tmpslist | awk '{print $5"/"$2"."$3}')
+    bgoff=$(get_header -q ${img/$outext/head} AI_BGOFF)
+    test -z "$bgoff" && test "$outext" == "pgm" && bgoff=100
+    test -z "$bgoff" && test "$outext" == "ppm" && bgoff=0
+    img=$(lines 1 $tmpslist | awk -v d=$cdir '{print $5"/"d"/"$2".bgm"$4"."$3}')
+    test "$verbose" && echo "target bggradient image: $img" >&2
+    targetbgval=($(AIstat -c $img | awk -v m=$mbgmult -v o=$bgoff '{
+        printf("%s", $5/m-o); 
+        if(NF>13) {printf(" %s %s", $9/m-o, $13/m-o)}}'))
+
+    ncol=${#targetbgval[@]}
+    test "$verbose" && echo "# ncol=$ncol  target bgmult=$mbgmult  bgval=${targetbgval[@]}" >&2
+    
+
+    # normalize bg residual images
+    if [ "$mode" == "refsets" ]
+    then
+        # determine input bg value, stretch residual image to dbgmult and shift to dbgval
+        echo "# normalize residual images ..." >&2
+        while read day sname ext bgmult x suffix
+        do
+            test "$verbose" && echo "# $day $sname $bgmult" >&2
+            test "$suffix" == "-" && suffix=""
+            hdr=$x/$sname.head
+            stack=$x/$sname.$ext
+            refdir=$x/$cdir$suffix
+            day="${day}_"
+            test "$x" == "./" && refdir=$cdir$suffix && day=""
+            resimg=$refdir/$sname.bgm${bgmult}res.$ext
+            bgimg=$refdir/$sname.bgm${bgmult}.$ext
+            badbg=$refdir/$sname.badbg.reg
+            
+            bgoff=$(get_header -q $hdr AI_BGOFF)
+            test -z "$bgoff" && bgoff=0
+            x=($(AIstat -c $bgimg | awk -v m=$bgmult -v o=$bgoff '{
+                printf("%s", $5/m-o); if(NF>13) {printf(" %s %s", $9/m-o, $13/m-o)}}'))
+            test "$verbose" && echo "  bg=${x[@]}" >&2
             for i in $(seq 0 $((ncol-1)))
             do
-                mult[$i]=$(echo ${x[i]} ${bgval[i]} | \
-                    awk -v s=$scale '{printf("%.4f", $2/$1*s)}')
-                add[$i]=$(echo ${x[i]} ${bgval[i]} | \
-                    awk -v b=$bgres -v s=$scale '{printf("%.1f", b-$2/$1*s*b)}')
+                test "$verbose" && echo ${x[i]} $dbgval $bgmult $dbgmult >&2
+                mult[$i]=$(echo ${x[i]} $dbgval $bgmult $dbgmult | \
+                    awk -v s=1.0 '{printf("%.4f", $2/$1*$4/$3*s)}')
+                add[$i]=$(echo ${x[i]} ${mult[i]} | \
+                    awk -v b=$bgres '{printf("%.1f", b*(1-$2))}')
             done
-            test "$verbose" && echo "mult=${mult[@]} add=${add[@]}" >&2
-            x=$(basename $(dirname $refdir) | tr '/' '_')
-            test "$x" == "." && x=""
-            test "$x" && x=${x}"_"
-            pnmccdred -m $(echo ${mult[@]} | tr ' ' ',') $resimg - | \
-                pnmccdred -a $(echo ${add[@]} | tr ' ' ',') - $wdir/$x$sname.norm.$ext
-            # imlist: all images to be displayed
-            imlist="$imlist $wdir/$x$sname.norm.$ext"
-            # mlist: all images used to build model
-            if [ "$allsets" ]
+            test "$verbose" && echo "  mult=${mult[@]} add=${add[@]}" >&2
+            test "$newres" && test ! -e "$stack" &&
+                echo "WARNING: unable to compute newres, missing $stack" >&2
+            if [ "$newres" ] && [ -e "$stack" ]
             then
-                echo "$xlist" | grep -vq $sname && mlist="$mlist $x$sname.norm.$ext"
+                # compute new residual image using current AIbgmap
+                AIbgmap -odir $tdir -o $bgoff -x 75 -q -p -d -m $stack 64 1 $badbg $bgmult
+                pnmccdred2 -m $(echo ${mult[@]} | tr ' ' ',') \
+                           -a $(echo ${add[@]} | tr ' ' ',') \
+                           $tdir/$sname.bgm${bgmult}res.$ext $wdir/$day$sname.norm.$ext
             else
-                echo "$xlist $target" | grep -vq $sname && mlist="$mlist $x$sname.norm.$ext"
+                # reuse existing residual image
+                #pnmccdred -m $(echo ${mult[@]} | tr ' ' ',') $resimg - | \
+                #    pnmccdred -a $(echo ${add[@]} | tr ' ' ',') - $wdir/$day$sname.norm.$ext
+                pnmccdred2 -m $(echo ${mult[@]} | tr ' ' ',') \
+                           -a $(echo ${add[@]} | tr ' ' ',') \
+                           $resimg $wdir/$day$sname.norm.$ext
             fi
-        done
-        
+            # mlist: list of images used to build model
+            (test -z "$target" || test "$imlist") && 
+                mlist="$mlist $day$sname.norm.$ext"
+            # imlist: list of images to be displayed
+            imlist="$imlist $wdir/$day$sname.norm.$ext"
+        done < $tmpslist
+    fi
+
+    ext=$outext
+    test -z "$target" && target="xxx"
+    
+    if [ "$mode" == "refsets" ]
+    then
         # create model
-        test "$verbose" && echo "# mlist = $mlist" >&2
+        # TODO: check rank index
         # rank index: darkest pixel = 0
         x=$(echo $mlist | wc -w | awk '{x=0;
             if($1>3) x=1; if($1>5) x=2; if($1>8) x=int($1/3)
             print x}')
+        echo "# creating model from $(echo $mlist | wc -w) images (index=$x)" >&2
+        test "$verbose" && echo "# mlist = $mlist" >&2
         (cd $wdir; vips bandrank "$(echo $mlist)" $target.bgmin.$ext[strip] --index=$x)
         
         # shift average level to bgres
         x=$(AImstat $wdir/$target.bgmin.$ext | awk -v m=$bgres '{
             printf("%.0f", m-$5); if(NF>13) {printf(",%.0f,%.0f", m-$9, m-$13)}}')
+        test "$verbose" && echo "# model bg shift=$x" >&2
         pnmccdred -a $x $wdir/$target.bgmin.$ext $wdir/x.$target.model.$ext
         # bluring
+        x=$(echo 0.5 $blur | awk '{print $1*$2}')
         if [ "$do_median" ]
         then
             mkkernel 3 3 0 > $wdir/x.kern.pbm
             kmedian $wdir/x.$target.model.$ext $wdir/x.kern.pbm | \
-                convert - -blur 0x$blur \
-                $wdir/$target.bgm${bgmult}model.$ext
+                convert - -blur 0x$x \
+                $wdir/$target.model.norm.$ext
         else
-            convert $wdir/x.$target.model.$ext -blur 0x$blur \
-                $wdir/$target.bgm${bgmult}model.$ext
+            convert $wdir/x.$target.model.$ext -blur 0x$x \
+                $wdir/$target.model.norm.$ext
         fi
     fi
     
     if [ "$mode" == "bgpattern" ]
     then
+        echo "WARNING: using experimental code !" >&2
+        sleep 5
         bgimg=$cdir/$target.bgm${bgmult}.$ext
         resimg=$cdir/$target.bgm${bgmult}res.$ext
         for x in $bgimg $resimg
@@ -22552,79 +22808,99 @@ AIbgmodel () {
         w=$1; h=$2
         angle=$(echo $angle | awk '{printf("%f", -1*$1)}')
         test "$rot180" && angle=$(echo $angle | awk '{printf("%f", $1+180)}')
+        x=$(echo 0.5 $blur | awk '{print $1*$2}')
         convert $tmpim2 -rotate $angle - | \
             imcrop -1 - $(imsize $resimg) | \
-            convert - -blur 0x$blur $wdir/$target.bgm${bgmult}model.$ext
+            convert - -blur 0x$x $wdir/$target.bgm${bgmult}model.$ext
     fi
-    #echo $tmpim2 >&2
-    #return
-
-    # create new residual image
-    test ! -s $wdir/$target.bgm${bgmult}model.$ext &&
+    test ! -s $wdir/$target.model.norm.$ext &&
         echo "ERROR: creating model image has failed." >&2 && return 255
-    size=$(imsize $wdir/$target.bgm${bgmult}model.$ext | tr ' ' 'x')
-    convert $cdir/$target.bgm${bgmult}res.$ext -resize $size\! - | \
-        pnmccdred -a 1000 -d $wdir/$target.bgm${bgmult}model.$ext - $wdir/$target.bgm${bgmult}allres.$ext
+
     
-    # show results
-    echo "# display residual images ..." >&2
-    if [ "$sd" ]
-    then
-        echo "# fixed sd=$sd" >&2
-    else
-        sd=$(imcrop $wdir/$target.bgm${bgmult}allres.$ext 90 | AIval -a - | \
-            kappasigma - 2 | awk -v c=$dcontrast '{printf("%.0f", (1.5*$2+2)/c)}')
-        echo "# measured sd=$sd" >&2
-    fi
+    # apply dcontrast
+    echo "# apply rgbscale for display ..." >&2
     test "$verbose" && opts="-v"
-    for x in $imlist
+    # using fixed sd in rgbscale
+    sd=$(echo 4 $dbgmult $dcontrast | awk '{print $1*$2/$3}')
+    for img in $imlist
     do
-        rgbscale $opts $x $sd > ${x/.norm/}
-        imlist2="$imlist2 $(basename ${x/.norm/})"
+        rgbscale $opts $img $sd > ${img/.norm/}
+        imlist2="$imlist2 $(basename ${img/.norm/})"
     done
-    rgbscale $opts $wdir/$target.bgm${bgmult}model.$ext  $sd > $wdir/model.$ext
+    rgbscale $opts $wdir/$target.model.norm.$ext $sd > $wdir/model.$ext
     imlist2="$imlist2 model.$ext"
-    if [ "$allsets" ]
+
+    # TODO: maybe apply scale on displayed model image
+    echo "# display residual images ..." >&2
+    x=$(echo $dcontrast $scale | awk '{
+        if ($1!=1) printf("_d%02.0f", 10*$1)
+        if ($2!=1) printf("_s%02.0f", 10*$2)}')
+    if [ "$target" == "xxx" ]
     then
+        test "$dcontrast"
         (cd $wdir
         montage -background '#202020' -fill '#D0D0D0' -label '%t' \
-            $imlist2 -geometry +4+2 -) > bgres.all.$ext
-        display bgres.all.$ext &
+            $imlist2 -geometry +4+2 -depth 8 -) > bgres.all$x.$ext
+        AIdisplay bgres.all$x.$ext &
     else
-        rgbscale $opts $wdir/$target.bgm${bgmult}allres.$ext $sd > $wdir/$target.final.$ext
-        imlist2="$imlist2 $target.final.$ext"
+        # create new (normalized) residual image for given target
+        # apply scale to model image
+        add=$(echo $scale $bgres | awk '{printf("%.0f", $2*(1-$1))}')
+        pnmccdred2 -m $scale -a $add $wdir/$target.model.norm.$ext - | \
+        pnmccdred2 -a $bgres -d - \
+            $wdir/$target.norm.$ext $wdir/$target.allres.norm.$ext
+        rgbscale $opts $wdir/$target.allres.norm.$ext $sd > $wdir/$target.allres.$ext
+        imlist2="$imlist2 $target.allres.$ext"
+        
         (cd $wdir
         montage -background '#202020' -fill '#D0D0D0' -label '%t' \
-            $imlist2 -geometry +4+2 -) > bgres.$target.$ext
-        display bgres.$target.$ext &
+            $imlist2 -geometry +4+2 -depth 8 -) > bgres.$target$x.$ext
+        AIdisplay bgres.$target$x.$ext &
     fi
     test "$verbose" && echo "# imlist2 = $imlist2" >&2
 
-    # apply model
-    if [ "$testonly" ] || [ "$allsets" ]
+
+    # apply model to target
+    if [ "$testonly" ] || [ "$target" == "xxx" ]
     then
-        test "$testonly" &&
-            echo "# WARNING: not applying bg model (testonly)" >&2
-        test "$allsets" &&
-        cp -p $wdir/$target.bgm${bgmult}model.$ext x.bgm${bgmult}model.$ext
+        test "$testonly" && test "$target" != "xxx" &&
+            echo "# WARNING: not applying bg model (testonly)" >&2 &&
+            cp -p $wdir/$target.model.norm.$ext x.model.norm.$ext
     else
         echo "# apply bg model ..." >&2
-        cp -p $wdir/$target.bgm${bgmult}model.$ext  $cdir/
-        cp -p $wdir/$target.bgm${bgmult}allres.$ext $cdir/
+        # scale normalized model to match target input bg value
+        for i in $(seq 0 $((ncol-1)))
+        do
+            test "$verbose" && echo ${targetbgval[i]} $dbgval $mbgmult $dbgmult >&2
+            mult[$i]=$(echo ${targetbgval[i]} $dbgval $mbgmult $dbgmult | \
+                awk -v s=$scale '{printf("%.4f", s*$1/$2*$3/$4)}')
+            add[$i]=$(echo ${targetbgval[i]} ${mult[i]} | \
+                awk -v b=$bgres '{printf("%.1f", b*(1-$2))}')
+        done
+        test "$verbose" && echo "  mult=${mult[@]} add=${add[@]}" >&2
+        pnmccdred2 -m $(echo ${mult[@]} | tr ' ' ',') \
+                   -a $(echo ${add[@]} | tr ' ' ',') \
+                   $wdir/$target.model.norm.$ext $wdir/$target.bgm${mbgmult}model.$ext
+        # subtract this from original bgres image
+        resimg=$cdir/$target.bgm${mbgmult}res.$ext
+        pnmccdred2 -a $bgres -d $wdir/$target.bgm${mbgmult}model.$ext $resimg $wdir/$target.bgm${mbgmult}allres.$ext
+        
+        cp -p $wdir/$target.bgm${mbgmult}model.$ext  $cdir/
+        cp -p $wdir/$target.bgm${mbgmult}allres.$ext $cdir/
         
         # combine gradient image and residual model for later use by AIcomet
-        convert $cdir/$target.bgm${bgmult}.$ext -resize $size\! - | \
-            pnmarith -a - $cdir/$target.bgm${bgmult}model.$ext | \
-            pnmccdred -a -1000 - $cdir/$target.bgm${bgmult}all.$ext
+        pnmarith -a $cdir/$target.bgm${mbgmult}.$ext $cdir/$target.bgm${mbgmult}model.$ext | \
+            pnmccdred -a -1000 - $cdir/$target.bgm${mbgmult}all.$ext
+        
         # rerun bg image subtraction
-        bgimg=$cdir/$target.bgm${bgmult}all.$ext
-        imbgsub $target.$ext $bgimg "" $bgmult > $target.bgs.$ext
+        bgimg=$cdir/$target.bgm${mbgmult}all.$ext
+        imbgsub $target.$ext $bgimg "" $mbgmult > $target.bgs.$ext
         test -f ${target}_m.$ext &&
-            imbgsub ${target}_m.$ext $bgimg "" $bgmult > ${target}_m.bgs.$ext
+            imbgsub ${target}_m.$ext $bgimg "" $mbgmult > ${target}_m.bgs.$ext
     fi
 
     test "${verbose}${AI_DEBUG}" && echo $wdir >&2 && return
-    rm -rf $wdir
+    rm -rf $wdir $tmpslist
     return
 }
 
@@ -24753,10 +25029,16 @@ AIsplitstack () {
         do
             sname=$baseset$ochar$((i+1))
             slist=$(echo $slist $sname)
-            n1=$(lines $((1+i*n/nparts)) $imlist | tail -1)
-            n2=$(lines $((n1+nparts-1)) $imlist | tail -1)
-            nref=$(lines $((n1+nparts/2)) $imlist | tail -1)
-            test $i -eq $nparts && n2=$(tail -1 $imlist)
+            n1=$(lines $((1+i*n/nparts)) $imlist | tail -1 | sed -e 's,^[0]*,,')
+            #n2=$(lines $((n1+nparts-1)) $imlist | tail -1 | sed -e 's,^[0]*,,')
+            n2=$(lines $(((i+1)*n/nparts)) $imlist | tail -1 | sed -e 's,^[0]*,,')
+            #nref=$(lines $((n1+nparts/2)) $imlist | tail -1 | sed -e 's,^[0]*,,')
+            nref=$(lines $((1+i*n/nparts+n/nparts/2)) $imlist | tail -1 | sed -e 's,^[0]*,,')
+            test $i -eq $nparts && n2=$(tail -1 $imlist | sed -e 's,^[0]*,,')
+            # formatting image numbers
+            n1=$(printf "%04d" $n1)
+            n2=$(printf "%04d" $n2)
+            nref=$(printf "%04d" $nref)
             line="$tstart $sname $target o $texp $n1 $n2 $nref $str"
             test -s $xsetdat && grep "^${line}$" -q $xsetdat && continue
             if [ -s $xsetdat ] && grep " $sname $target o " -q $xsetdat
@@ -24817,6 +25099,7 @@ AIsplitstack () {
                     done
             done < $reg
         else
+            echo "WARNING: unsupported settings found, expect some errors ..." >&2
             while read x sname x
             do
                 test "${sname:0:-2}" != "$baseset" && continue
@@ -28491,9 +28774,9 @@ physical" > $apreg
     do
         ut=$(jd2ut -p 2 $jd)
         x=$(echo $dasec | awk '{print $1/60}')
-        LANG=C printf "%s%s  Z %5.2fAQ 99.9L 50999  %4.1f" "$(comet2icq $comet)" "${ut//-/ }" $mag $x
-        test "$apunit" == "arcsec" && LANG=C printf "                      %s\n" $dasec
-        test "$apunit" == "tkm"    && LANG=C printf "                      %s\n" $((dkm/1000))
+        LANG=C printf "%s%s  Z %5.2fAQ 99.9L 50999  %5.2f" "$(comet2icq $comet)" "${ut//-/ }" $mag $x
+        test "$apunit" == "arcsec" && LANG=C printf "                     %s\n" $dasec
+        test "$apunit" == "tkm"    && LANG=C printf "                     %s\n" $((dkm/1000))
     done | LANG=C sort > $icqdat
     x=$(echo ${aplist//,/ } | wc -w)
     i=$(echo ${aplist//,/ } | tr ' ' '\n' | sort -n | awk -v x=$x 'BEGIN{y=1+int(x/2-0.1)}
@@ -29737,7 +30020,7 @@ ds9cmd () {
     local line
     local bgfit10
     local comult
-    local bgoff
+    local bgoffb
     local tel
     local catalog
     local maglim
@@ -31523,7 +31806,7 @@ AIlist () {
     # list airtools results by examining data from image header files
     # valid project directory names: YYMMDDxxxx where x is empty or a letter a-z
     local showhelp
-    local adirlist  # list of base directories of Airtools reductions
+    local adirlist  # list of base directories of AIRTOOLS projects
     local color="G" # color channel from multiband image (either R,G or B)
     local photcat   # select given photometric catalog only
     local telid     # telescope identifier
@@ -31539,7 +31822,7 @@ AIlist () {
     local verbose
 
     local i
-    for i in $(seq 1 12)
+    for i in $(seq 1 14)
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-d" && adirlist="$adirlist $2" && shift 2
@@ -31580,13 +31863,14 @@ AIlist () {
     chmod u+x $tmpsh
 
     (test "$showhelp") &&
-        echo "usage: AIlist [-j] [-i] [-c] [-d airtoolsdir] [-n ndays|$ndays] [-t telid] [-s site] [-p photcat] [-f fields] <target> [first] [last]" >&2 &&
+        echo "usage: AIlist [-a] [-j] [-i] [-c] [-d airtoolsdir] [-n ndays|$ndays] [-t telid] [-s site] [-p photcat] [-f fields] <target> [first] [last]" >&2 &&
         return 1
     
     (test "$fields" == "list" || test "$fields" == "help") &&
         echo "additional fields:
     texp    EXPTIME/NEXP
     nexp    NEXP
+    bin     BINNING
     pscale  pixelscale
     rot     image_rotation
     pier    PIERSIDE
@@ -31594,6 +31878,7 @@ AIlist () {
     ccoeff  AP_CTRA (color trans. coefficient)
     mrms    AP_MRMS (rms of mag residuals)
     bg      AI_BGG
+    bgmult  bgmult
     rms     AI_RMSG
     fwhm    AI_FWHM
     tail    AI_DLEN/AI_DANG" >&2 &&
@@ -31762,6 +32047,8 @@ EOF
         local moon
         local pscale
         local rot
+        local bin
+        local bgmult
         local pier
         local diam
         local apilist
@@ -31853,16 +32140,17 @@ EOF
         # optional fields related to the image set
         texp=$(echo $(get_header -s -q $hdr EXPTIME,NEXP) | awk '{if(NF==2)printf("%.0f", $1/$2)}');
         test -z "$texp" && texp="-"
-        set - $(get_header -q -l $hdr NEXP AI_BGG AI_RMSG AI_FWHM PIERSIDE \
+        set - $(get_header -q -l $hdr NEXP AI_BGG AI_RMSG AI_FWHM BINNING PIERSIDE \
             AI_COALT AI_BGOFF AI_DLEN AI_DANG)
         nexp=$1
         bg=$2
         rms=$3
         fwhm=$4
-        pier=$5
-        alt=$6
-        bgoff=$7
-        tail="$8/$9"    # in px/angle from saoimage
+        bin=$5
+        pier=$6
+        alt=$7
+        bgoff=$8
+        tail="$9/$10"    # in px/angle from saoimage
 
         # remove offset from bg
         test "$bgoff" != "-" && test "$bg" != "-" && bg=$((bg-bgoff))
@@ -31882,6 +32170,18 @@ EOF
             test "$alt" == "-"  && alt=$(printf "%.0f" $1)
             test "$az" == "-"   && az=$(printf  "%.0f" $2)
             test "$moon" == "-" && test $5 -ge 0 && moon="$3,$4,$5"
+        fi
+        
+        # bgmult
+        test "$fields" && if (echo $fields | grep -qw bgmult)
+        then
+            bgmult=""
+            bgmult=$(get_header -q $hdr AC_BGSUB | cut -d "." -f2 | tr -d "[a-z]")
+            test -z "$bgmult" &&
+                x=$(ls -tr $(dirname $f)/bgcorr/$sname.bgm{1,10}.p[pg]m 2>/dev/null | tail -1) &&
+                test "$x" &&
+                bgmult=$(basename $x | cut -d "." -f2 | tr -d '[a-z]')
+            test -z "$bgmult" && bgmult="-"
         fi
         
         # print basic info
@@ -31945,6 +32245,14 @@ EOF
                 else
                     diam=" -  "
                 fi
+                test "$pscale" != "-" && pscale=$(echo $pscale | awk '{
+                    if ($1>5) {
+                        printf("%.1f", $1)
+                    } else if ($1>0.5) {
+                        printf("%.2f", $1)
+                    } else {
+                        printf("%.3f", $1)
+                    }}')
                 
                 # additional output fields
                 outadd=""
@@ -32097,14 +32405,16 @@ AIarchive () {
                 done | sort -u > $tmp1
             else
                 # all data related to single image set
-                flist=$(ls -d .[a-z]* *.{log,txt,sh,dat} 2>/dev/null | grep -v ".src.dat$")
+                flist=$(ls -d .[a-z]* *.{log,txt,sh,dat,env,icq} 2>/dev/null | grep -v ".src.dat$")
+                flist="$flist "$(ls -d split/*.{log,txt,sh} split/set.dat split/wcs/*log 2>/dev/null)
                 for set in ${slist//,/ }
                 do
                     flist="$flist "$(ls -d \
                     badpix*.png \
                     wcs/*log    \
                     *${set}*    \
-                    */${set}*   2>/dev/null)
+                    */${set}*   \
+                    split/wcs/${set}* 2>/dev/null)
                     # per image files from bgvar, measure
                     for num in $(AI_EXCLUDE="" AIimlist -x $set)
                     do
@@ -32122,7 +32432,8 @@ AIarchive () {
             fi
             ;;
         results) # most interesting results (excluding large images)
-            flist=$(ls -d .[a-z]* *.{log,txt,dat,sh,env} 2>/dev/null)
+            flist=$(ls -d .[a-z]* *.{log,txt,dat,sh,env,icq} 2>/dev/null)
+            flist="$flist "$(ls -d split/*.{log,txt,sh} split/set.dat split/wcs/*log 2>/dev/null)
             for set in ${slist//,/ }
             do
                 test "$set" == "all" && set=""
@@ -32134,6 +32445,8 @@ AIarchive () {
                 wcs/${set}*fgroups*png wcs/*log     \
                 comet/${set}*{reg,dat}              \
                 phot/${set}*                        \
+                split/${set}*.{head,reg,fwhm.png}   \
+                split/wcs/${set}*fgroups*png        \
                 chkctr/* mpc/*                      2>/dev/null)
             done
             for f in $flist

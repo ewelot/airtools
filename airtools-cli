@@ -2462,7 +2462,7 @@ _remove () {
         fi
         if match bgvar "$plist"
         then
-            test -s bgdiff.dat && echo "sed -i '/^$num.bgdiff/d' bgdiff.dat"
+            test -s bgdiff.dat && echo "sed -i '/^$num\./d' bgdiff.dat"
             test -s bgsfit.dat && echo "sed -i '/^$num /d' bgsfit.dat"
         fi
         if match reg "$plist"

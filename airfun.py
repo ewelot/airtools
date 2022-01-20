@@ -432,6 +432,49 @@ def ppmtogray(param):
         outimg.write_to_target(target, "." + outfmt, strip=outstrip)
     exit()
 
+
+def svgtopbm(param):
+    # convert svg areas (circle/polygon/box) to pbm
+    # regions are interpreted as good pixel regions (white, pgm value 255, pbm value 0)
+    # TODO: currently output is a bi-level PGM image
+    outfmt='ppm'
+    outstrip=True
+    invert=False
+    if(param[0]=='-i'):
+        invert=True
+        del param[0]
+    infilename = param[0]
+    outfilename = param[1]
+
+    # reading input image
+    if (infilename and infilename != '-'):
+        inimg = pyvips.Image.new_from_file(infilename)
+    else:
+        source = pyvips.Source.new_from_descriptor(sys.stdin.fileno())
+        inimg = pyvips.Image.new_from_source(source, "")
+
+    #vips extract_area $in $out $bwidth $bwidth $((w-2*bwidth)) $((h-2*bwidth))
+    #vips gravity $in $out "centre" $w $h extend="white"
+    w=inimg.width
+    h=inimg.height
+    if (invert):
+        outimg = inimg.Colourspace("b-w").relational_const("lesseq", 255*0.5)
+    else:
+        outimg = inimg.Colourspace("b-w").relational_const("more", 255*0.5)
+
+    # writing output image
+    if (outfilename and outfilename != '-'):
+        if (outfmt=='fits'):
+            outimg.fitssave(outfilename)
+        else:
+            outimg.ppmsave(outfilename, strip=1)
+    else:
+        target = pyvips.Target.new_to_descriptor(sys.stdout.fileno())
+        outimg.write_to_target(target, "." + outfmt, strip=outstrip)
+
+    exit()
+
+
 # replace border by white (or black) pixels
 # syntax: pnmreplaceborder [-f] [-b] <in> <out> [bwidth|2]
 def pnmreplaceborder(param):

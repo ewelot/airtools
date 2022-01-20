@@ -6,17 +6,22 @@
 package tl.airtoolsgui.controller;
 
 import java.io.File;
+import java.io.IOException;
 import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
-import java.time.format.FormatStyle;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.ResourceBundle;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.event.ActionEvent;
@@ -85,12 +90,15 @@ public class LightCurveController implements Initializable {
     private Label labelWarning;
     
     @FXML
+    private Button buttonCOBSData;
+    @FXML
     private Button buttonStart;
     @FXML
     private Button buttonCancel;
 
     private SimpleLogger logger;
     private StringProperty projectDir = new SimpleStringProperty();
+    private StringProperty tempDir = new SimpleStringProperty();
     private AirtoolsCLICommand aircliCmd;
     private final String aircliTask = "usercmd";
     private final String airfunFunc = "icqplot";
@@ -202,15 +210,27 @@ public class LightCurveController implements Initializable {
         }
         dpStart.setPromptText(pattern);
         dpEnd.setPromptText(pattern);
+        
+        // add listener to trigger action at end of aircliCmd (label changes from "Stop" to "Start")
+        buttonStart.textProperty().addListener( (v, oldValue, newValue) -> {
+            if (newValue.equals("Start")) {
+                setButtonCOBSDataDisabledState(true);
+            }
+        });
+        tfCometName.textProperty().addListener( (v, oldValue, newValue) -> {
+            setButtonCOBSDataDisabledState(false);
+        });
     }
     
     
-    public void setReferences (ShellScript sh, SimpleLogger logger, StringProperty projectDir) {
+    public void setReferences (ShellScript sh, SimpleLogger logger, StringProperty projectDir, StringProperty tempDir) {
         this.logger = logger;
         this.projectDir = projectDir;
+        this.tempDir = tempDir;
         this.aircliCmd = new AirtoolsCLICommand(buttonStart, logger, sh);
 
         labelWarning.setText("");
+        setButtonCOBSDataDisabledState(false);
     }
     
 
@@ -286,6 +306,50 @@ public class LightCurveController implements Initializable {
     private void onDpEnd(ActionEvent event) {
     }
 
+    
+    public void setButtonCOBSDataDisabledState (boolean do_log) {
+        File textFile = null;
+        String comet = tfCometName.getText();
+        String fileName = tempDir.getValue() + "/" + "tmp_cobs." + comet + ".icq";
+        
+        textFile = new File(fileName);
+        if (textFile.exists()) {
+            buttonCOBSData.setDisable(false);
+        } else {
+            if (do_log) logger.log("WARNING: file " + fileName + " not found");
+            buttonCOBSData.setDisable(true);
+        }
+    }
+
+    @FXML
+    private void onButtonCOBSData(ActionEvent event) {
+        System.out.println("LightCurveController: onButtonCOBSData()");
+        String msg="";
+        File textFile = null;
+        String comet = tfCometName.getText();
+        String tempFileName = tempDir.getValue() + "/" + "tmp_cobs." + comet + ".icq";
+        String cobsFileName = "cobs." + comet + ".icq";
+        
+        textFile = new File(tempFileName);
+        if (textFile.exists()) {
+            try {
+                Files.copy(Paths.get(tempFileName), Paths.get(projectDir.getValue() + "/" + cobsFileName), StandardCopyOption.COPY_ATTRIBUTES, StandardCopyOption.REPLACE_EXISTING);
+                ProcessBuilder pb = new ProcessBuilder("/bin/bash", "-c", "mousepad " + projectDir.getValue() + "/" + cobsFileName);
+                Process editorProcess = pb.start();
+            } catch (IOException ex) {
+                msg="WARNING: unable to start text viewer.";
+                labelWarning.setText(msg);
+                System.out.println(msg);
+                Logger.getLogger(LightCurveController.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        } else {
+            msg="WARNING: missing COBS data file.";
+            labelWarning.setText(msg);
+            System.out.println(msg);
+        }
+    }
+
+
     @FXML
     private void onButtonStart(ActionEvent event) {
         System.out.println("LightCurveController: onButtonStart()");
@@ -350,6 +414,9 @@ public class LightCurveController implements Initializable {
         aircliCmd.setOpts(aircliCmdOpts.toArray(new String[0]));
         aircliCmd.setArgs(aircliCmdArgs.toArray(new String[0]));
         aircliCmd.run();
+        
+        // TODO: run command after aircliCmd has finished
+        //setButtonCOBSDataDisabledState();
     }
     
     @FXML
