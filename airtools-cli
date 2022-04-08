@@ -19,8 +19,8 @@
 ########################################################################
 AOVARS="AO_SKIP AO_FLATS AO_LIGHT AO_BGVAR AO_REGIS AO_STACK AO_AMASK AO_ACOOR AO_ABINN"
 
-VERSION="1.3.7"
-VINFO="T. Lehmann, Nov. 2021"
+VERSION="1.3.8"
+VINFO="T. Lehmann, Mar. 2022"
 PINFO="\
     options:
       -h            show this help text
@@ -34,6 +34,15 @@ PINFO="\
       task          run given task    
 "
 CHANGELOG="
+    1.3.8 - 31 Mar 2022
+        * stack: lower threshold for detecting sources from 5 to 3.5
+
+    1.3.8a1 - 24 Feb 2022
+        * register, stack: improve initial guess of fwhm by reducing deblending
+            of stars (better match of defocused stars)
+        * stack: extract sources using a background mesh size depending on
+            fwhm of stars
+
     1.3.7 - 18 Nov 2021
         * badpix: bugfix to correctly set bandrank index in case of sets
             being rejected due to low number of images
@@ -536,14 +545,15 @@ _imageinfo () {
         else
             # scanning other FITS images
             test "$AI_DEBUG" && echo find $AI_RAWDIR/ -type f -not -path "$AI_RAWDIR/$skippat"\* -name "*.fts" >&2
-            flist=$(find $AI_RAWDIR/ -type f -not -path "$AI_RAWDIR/$skippat"\* \( \
+            flist=$(find $AI_RAWDIR/ -type f \( \
                    -name "*.fit"  -o -name "*.FIT"  \
                 -o -name "*.fits" -o -name "*.FITS" \
                 -o -name "*.fts"  -o -name "*.FTS"  \
                 -o -name "*.fit.gz"  -o -name "*.fit.zip" \
                 -o -name "*.fits.gz" -o -name "*.fits.zip" \
                 -o -name "*.fts.gz"  -o -name "*.fts.zip" \) \
-                -not -path "$AI_RAWDIR/unused/*"
+                -not -path "$AI_RAWDIR/unused/*" \
+                -not -path "$AI_RAWDIR/$skippat"\*
                 )
             if [ "$flist" ]
             then
@@ -1187,7 +1197,7 @@ _register () {
         test -z "$img" &&
             echo "ERROR: unable to find calibrated image for nref=$num." &&
             return 255
-        AI_MAGZERO=25 AIsource -q -g -o $tmpcat $img
+        AI_MAGZERO=25 AIsource -q -g -o $tmpcat -dbc 0.1 $img
         fwhm=$(sexselect $tmpcat | kappasigma - 6 | awk '{printf("%.1f", $1)}')
         echo "#" AIsource -f $fwhm $set
         
@@ -1414,6 +1424,7 @@ _stack () {
     local bgg
     local rlim
     local fwhm
+    local bgmesh
     local object
     local telid
     local bin
@@ -1507,13 +1518,19 @@ _stack () {
             else
                 # get approx fwhm
                 imcrop $set.$ext 50 | ppm2gray - > $tmpimg
-                AI_MAGZERO=25.2 AIsource -q -f 4 -o $tmpsrc $tmpimg "" 10
+                AI_MAGZERO=25.2 AIsource -q -f 4 -o $tmpsrc -dbc 0.1 $tmpimg "" 10
                 rlim=$(imsize $tmpimg | awk '{printf("%.0f", 0.3*sqrt($1*$1+$2*$2))}')
                 fwhm=$(sexselect $tmpsrc  "" 0.02 $rlim 2>&1 | median - 6 | \
-                    awk '{if($1>4) {printf("%.0f", $1)} else {print 4}}')
-                # extract sources
-                test "$AI_DEBUG" && test "$fwhm" -gt 4 && echo "# extract sources using approx. fwhm=$fwhm" >&2
-                AIsource -q -f $fwhm $set.$ext "" 5
+                    awk '{printf("%.1f", $1)}')
+                # set bg mesh size
+                bgmesh=$(echo $fwhm 24 | awk '{
+                    x=6+3*$1
+                    if ($1>4) x=18+2*($1-4)
+                    if ($1>6) x=22+1*($1-6)
+                    printf("%.0f", x)}')
+                # create catalog of sources
+                test "$AI_DEBUG" && echo "# extract sources using fwhm=$fwhm, bgmesh=$bgmesh" >&2
+                AIsource -q -f $fwhm $set.$ext "" 3.5 $bgmesh
                 fwhm=""
             fi
             sopt=""; test "$ext" == "ppm" && sopt="-2"

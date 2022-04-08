@@ -433,6 +433,48 @@ def ppmtogray(param):
     exit()
 
 
+# convert from (noisy) RGB image to color image by using LRGB techniques
+# syntax: lrgb -f inppm outppm bgR,bgG,bgB rmsg
+def lrgb(param):
+    outfmt='ppm'
+    outstrip=True
+    if(param[0]=='-f'):
+        outfmt='fits'
+        outstrip=False
+        del param[0]
+    infilename = param[0]
+    outfilename = param[1]
+    if(len(param)>2):
+        bg = param[2]
+        bg = tuple(float(val) for val in tuple(bg.split(",")))
+    if(len(param)>3):
+        sd = float(param[3])
+
+    # reading input image
+    if (infilename and infilename != '-'):
+        inimg = pyvips.Image.new_from_file(infilename)
+    else:
+        source = pyvips.Source.new_from_descriptor(sys.stdin.fileno())
+        inimg = pyvips.Image.new_from_source(source, "")
+
+    # color smoothing in Lab, and some boost
+    l,a,b = inimg.colourspace("lab").bandsplit()
+    l = l.gaussblur(0.6)
+    a = a.gaussblur(3).linear(1.2,0)
+    b = b.gaussblur(3).linear(1.2,0)
+    outimg = l.bandjoin([a,b]).colourspace("srgb")
+    
+    # writing output image
+    if (outfilename and outfilename != '-'):
+        if (outfmt=='fits'):
+            outimg.fitssave(outfilename)
+        else:
+            outimg.ppmsave(outfilename, strip=1)
+    else:
+        target = pyvips.Target.new_to_descriptor(sys.stdout.fileno())
+        outimg.write_to_target(target, "." + outfmt, strip=outstrip)
+    exit()
+
 def svgtopbm(param):
     # convert svg areas (circle/polygon/box) to pbm
     # regions are interpreted as good pixel regions (white, pgm value 255, pbm value 0)
@@ -743,6 +785,7 @@ def cleanbadpixel_grey(param):
     exit()
 
 # merge 4 monochrome images into bayered image
+# syntax: bmerge top-left top-right bottom-left bottom-right
 def bmerge(param):
     outfilename="-"
     outfmt="ppm"

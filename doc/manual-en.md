@@ -35,8 +35,13 @@ Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v4.1)
         first Project](#setting-up-the-first-project)
       - [<span class="toc-section-number">4.3</span> Parameter
         Files](#parameter-files)
-      - [<span class="toc-section-number">4.4</span> Raw Images and
-        Image Set Definition](#raw-images-and-image-set-definition)
+      - [<span class="toc-section-number">4.4</span> Raw
+        Images](#raw-images)
+      - [<span class="toc-section-number">4.5</span> Image orientation,
+        flip status and Bayer
+        pattern](#image-orientation-flip-status-and-bayer-pattern)
+      - [<span class="toc-section-number">4.6</span> Image Set
+        Definition](#image-set-definition)
   - [<span class="toc-section-number">5</span> Image
     Reduction](#image-reduction)
       - [<span class="toc-section-number">5.1</span> Master Darks and
@@ -149,7 +154,7 @@ The full installation will take about half an hour to complete.
 
 VirtualBox (<http://www.virtualbox.org>) is a free and powerful
 virtualization software for enterprise and home users. Get the latest
-software package (version 6.1.26 at the time of writing) for your host
+software package (version 6.1.32 at the time of writing) for your host
 operating system from the
 [Downloads](https://www.virtualbox.org/wiki/Downloads) page and install
 it.
@@ -205,7 +210,7 @@ label, which indicates a “Long Term Support” release. This Linux OS
 version is well supported by the AIRTOOLS software. Choose a mirror
 download close to your location and download the 64-bit desktop image.
 At the time of this writing it is named
-`xubuntu-20.04.2.0-desktop-amd64.iso`.
+`xubuntu-20.04.4-desktop-amd64.iso`.
 
 The ISO image file is used in place of a install medium for the virtual
 machine. To do so you have to start the VirtualBox software (if not
@@ -557,13 +562,14 @@ reference for your newly added lines. The columns used are:
     Essentially this describes the order and interpretation of FITS
     data: If the FITS file is organized in such a way that the data of
     the bottom image row comes first and that of the top-most row latest
-    then it is considered unflipped and the other way it is flipped. The
-    check for image flipping is described in the next chapter.
+    then it is considered unflipped and the other way it is flipped.
+    More information about checking the image orientation is provided in
+    chapter 4.5.
   - rot:  
-    If the camera is rotated with respect to the sky coordinate system
-    then you should provide a value different from 0. If true north is
-    left on your image then use a value of 90. A rough approximation is
-    sufficient.
+    Camera rotation with respect to the sky coordinate system. This
+    parameter is left for historical reason but not used in current
+    versions of the software and should be left undefined (using the
+    string “-”).
   - rawbits:  
     Original bitdepth or number of bits per pixel in a single color
     channel. Note that at start of the image reduction the counts (ADU,
@@ -588,18 +594,18 @@ reference for your newly added lines. The columns used are:
     calibrated scale (see log output of your first photometric
     calibration later on)
   - ttype:  
-    Telescope type: L=reflector, R=refractor, A=photo Lens
+    Telescope type: L=reflector, R=refractor, A=photo lens
   - ctype:  
     Sensor type: CCD=monochrome CCD, DSLR=DSLR with native camera model
-    RAW files, CMOS=monochrome CMOS sensor, RGGB or BGGR for a
-    one-shot-color CMOS sensor with a Bayer filter matrix in the given
-    layout.
+    RAW files, CMOS=monochrome CMOS sensor, RGGB or similar pattern for
+    a one-shot-color CMOS sensor with a Bayer filter matrix in the given
+    layout (see also chapter 4.5).
 
 Save your edits and close the text editor. After any modification you
 can choose if the new parameter file is just applied to your current
 project or if you like to use it in subsequent new projects.
 
-## Raw Images and Image Set Definition
+## Raw Images
 
 Initially the AIRTOOLS software was written to work on digital camera
 raw image files. It uses a modified version of the
@@ -612,9 +618,9 @@ monochrome images as well as bayered images from one-shot color sensors
 
 At first you must copy your unprocessed raw images to the project’s raw
 directory within the Linux file system. There are different solutions to
-handle this file transfer between the host operating system and a
-VirtualBox guest. We suggest using an external USB pen drive or USB disk
-for this purpose.
+handle this file transfer between the host operating system if AIRTOOLS
+is running in a virtualized environment. We suggest using an external
+USB pen drive or USB disk for this purpose.
 
 Use the file manager of your host OS to copy the raw image files to the
 USB disk. Wait until all data have been completely written to disk. From
@@ -624,9 +630,10 @@ see a list of USB devices from which you need to identify and select the
 USB disk. After a few seconds a new USB disk icon will apear on the
 virtual Linux desktop and little after the file manager window pops up.
 Use the common copy-and-paste feature to copy your raw images from the
-USB disk to the appropriate raw directory of the current project.
-Finally push the eject button on the USB device entry of the file
-manager and close it.
+USB disk to the appropriate raw directory of the current project. After
+the file transfer is finished you can disconnect the USB device by
+pushing the eject button next to the USB device entry of the file
+manager.
 
 You are now going to start the first AIRTOOLS task. By pressing the
 “Extract basic image info” the program reads meta data of all raw
@@ -636,17 +643,66 @@ of relevant data for each image. Please note the column which holds a
 are in FITS format, second column if images are RAW files from DSLR).
 Images are referenced by this number throughout the reduction process.
 
-When a camera for which the data acquisition system delivers FITS data
-is used for the first time then you should check the image orientation
-on a single frame. Choose an image number referring to a raw image with
-a known object - one which you can easily recognize on a sky chart. Go
-to the “Misc. Tools” tab, enter the image number next to the “Load Raw
-Images” button and press the button to start the SAOImage viewer. If
-necessary correct the values for flipping and image rotation in the
-camera parameters file (refer to the previous chapter).
+To view an individual raw image or a selection of several raw images you
+can open the “Misc. Tools” tab, enter the image number or a sequence
+into the textfield next to the “Load Raw Images” button (e.g. 3-5,9-11)
+and press the button to start, which starts the SAOImage viewer.
 
-Now it is time to group the individual images to form “image sets”. An
-image set is a number of images of the same type and target, e.g. a
+## Image orientation, flip status and Bayer pattern
+
+Most professional tools in astronomy are storing and displaying image
+data starting at the bottom line, following general conventions provided
+by the FITS specification. Unfortunately, most camera drivers nowadays
+are delivering data the other way around, starting with the topmost row.
+Depending on the data acquisition software and different tools for
+displaying FITS images, there might be additional steps of image
+flipping involved. It is therefore difficult to reliably estimate the
+image orientation in a viewer program on the computer in advance, even
+if we know the path of light in the optical train of our instrument.
+
+In AIRTOOLS we have to provide image orientation parameters via the
+camera parameters file (e.g. column “flip”) for each individual setup.
+The best way to get things right is to look at an example raw FITS image
+captured by your camera which contains an object with a known
+orientation (e.g. Plejades or Whirlpool Galaxy). Load a raw image in the
+SAOImage display application and check if the object appears
+flipped/mirrored or not. This determines the value for the “flip”
+parameter, using a setting of 1 if the image is flipped.
+
+![Raw image preview (fliped image) and Bayer matrix
+pattern](images/rawfile_bayer2.png "rawfile_bayer2")
+
+Special care must be taken when dealing with images from one-shot-color
+cameras with a Bayer matrix filter. The parameter “ctype” must be used
+to tell the software about the present Bayer pattern order. We need to
+estimate it by examining a raw image in the SAOImage viewer. Choose an
+image area void of stars, or even better an image of the twilight sky
+(red and blue pixels ideally should have different brightness). Zoom in
+to display about 8x8 pixels and ajust brightness and contrast to
+highlight the underlaying Bayer pattern structure. Select a pixel for
+which the center has x and y image coordinates close to uneven numbers.
+This is the first pixel of the Bayer matrix (the pixel to the right is
+the second one of the matrix, see Figure 3). If adjacent pixels on both
+diagonals crossing the selected one are similar in brightness then the
+first pixel of the Bayer pattern is a green one. It is difficult to
+distinguish between the two possible alternatives GBRG and GRBG but most
+likely it will be the first. If diagonal pixels are varying a lot in
+brightness (as is the case in the example image) then the first pixel of
+the pattern is either red or blue, which means either RGGB or BGGR.
+Again, most likely it is the first variant. A final decision can only be
+drawn when examining a de-bayered image of a known colored target.
+Another possibility is to compare sky flats taken at bright twilight and
+almost dark sky, because the bright twilight appears much bluer.
+
+The example image is a capture of the night sky under bright urban light
+pollution, resulting in much higher intensity of red pixels than blue
+ones. Pixel 1 appears much brighter than pixel 4 which means the red
+pixel is the first one of the Bayer pattern and the correct entry for
+“ctype” in the parameter file in this case is therefore RGGB.
+
+## Image Set Definition
+
+An image set is a number of images of the same type and target, e.g. a
 couple of dark exposures with a given exposure time or a bracketed
 sequence of exposures of a comet. All image sets of the project are
 described in a parameter file called `set.dat` which must be created by
