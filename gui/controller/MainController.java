@@ -381,27 +381,29 @@ public class MainController implements Initializable {
         System.out.println("onProjectDirChange()");
         logger.log("Project Directory = " + projectDir.getValue());
         
-        // get rawDir and tempDir from local project config file
+        // get rawDir and tempDir from config file of the new project dir
         String [] shellCmd;
         String strValue;
         String localConfigFileName=projectDir.getValue() + "/.airtoolsrc";
-        shellCmd = new String[] {"bash", "-c", ". " + localConfigFileName + " && echo $AI_RAWDIR"};
-        strValue = executeShellCommand(shellCmd, false);
-        if (! strValue.isBlank()) {
-            System.out.println("AI_RAWDIR=" + strValue);
-            rawDir.setValue(strValue);
-        } else {
-            logger.log("WARNING: AI_RAWDIR is not set.");
+        if (new File(localConfigFileName).exists()) {
+            shellCmd = new String[] {"bash", "-c", ". " + localConfigFileName + " && echo $AI_RAWDIR"};
+            strValue = executeShellCommand(shellCmd, false);
+            if (! strValue.isBlank()) {
+                System.out.println("AI_RAWDIR=" + strValue);
+                rawDir.setValue(strValue);
+            } else {
+                logger.log("WARNING: AI_RAWDIR is not set.");
+            }
+            shellCmd = new String[] {"bash", "-c", ". " + localConfigFileName + " && echo $AI_TMPDIR"};
+            strValue = executeShellCommand(shellCmd, false);
+            if (! strValue.isBlank()) {
+                System.out.println("AI_TMPDIR=" + strValue);
+                tempDir.setValue(strValue);
+            } else {
+                logger.log("WARNING: AI_TMPDIR is not set.");
+            }
+            logger.log("");
         }
-        shellCmd = new String[] {"bash", "-c", ". " + localConfigFileName + " && echo $AI_TMPDIR"};
-        strValue = executeShellCommand(shellCmd, false);
-        if (! strValue.isBlank()) {
-            System.out.println("AI_TMPDIR=" + strValue);
-            tempDir.setValue(strValue);
-        } else {
-            logger.log("WARNING: AI_TMPDIR is not set.");
-        }
-        logger.log("");
                 
         
         sh.setWorkingDir(projectDir.getValue());
