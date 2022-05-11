@@ -15,8 +15,8 @@ import javafx.scene.control.Button;
 public class AirtoolsCLICommand {
     
     private String cmdName;
-    private String[] opts;
-    private String[] args;
+    private String[] opts = new String[0];
+    private String[] args = new String[0];
     private final Button btnStart;
 
     private final SimpleLogger logger;
@@ -47,7 +47,7 @@ public class AirtoolsCLICommand {
     }
 
     public void run() {
-        String labelStart;
+        final String labelStart;
         String colorStart = "#333333";
         String colorStop = "#f00000";
         String str;
@@ -58,9 +58,13 @@ public class AirtoolsCLICommand {
             logger.log("");
             //logger.log("# " + "Running ds9cmd " + taskName + opts + args);
             logger.statusLog("Running " + cmdName + " ...");
-            labelStart = btnStart.getText();
-            btnStart.setText("Stop");
-            btnStart.setStyle("-fx-text-fill: " + colorStop);
+            if (btnStart != null) {
+                labelStart = btnStart.getText();
+                btnStart.setText("Stop");
+                btnStart.setStyle("-fx-text-fill: " + colorStop);
+            } else {
+                labelStart = "";
+            }
             
             // convert opts array to optsStr
             str="";
@@ -102,14 +106,18 @@ public class AirtoolsCLICommand {
                     logger.statusLog("Task failed");
                 }
                 task=null;
-                btnStart.setText(labelStart);
-                btnStart.setStyle("-fx-text-fill: " + colorStart);
+                if (btnStart != null) {
+                    btnStart.setText(labelStart);
+                    btnStart.setStyle("-fx-text-fill: " + colorStart);
+                }
             });
             task.setOnCancelled(e -> {
                 logger.statusLog("Task cancelled");
                 task=null;
-                btnStart.setText(labelStart);
-                btnStart.setStyle("-fx-text-fill: " + colorStart);
+                if (btnStart != null) {
+                    btnStart.setText(labelStart);
+                    btnStart.setStyle("-fx-text-fill: " + colorStart);
+                }
             });
             Thread thread = new Thread(task);
             thread.setDaemon(true);

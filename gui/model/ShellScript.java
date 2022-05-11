@@ -67,6 +67,11 @@ public class ShellScript {
     }
 
     public void runFunction(String funcName) {
+        boolean quiet=false;
+        runFunction(funcName, quiet);
+    }
+    
+    public void runFunction(String funcName, boolean quiet) {
         String command;
         exitCode=255;
         String cmdDescription = funcName;
@@ -134,7 +139,7 @@ public class ShellScript {
             thread.start();
             
             exitCode = process.waitFor();
-            logger.log("# " + cmdDescription + " finished with exitCode=" + exitCode);
+            if (! quiet) logger.log("# " + cmdDescription + " finished with exitCode=" + exitCode);
         } catch (IOException ex) {
             //Logger.getLogger(ShellScript.class.getName()).log(Level.SEVERE, null, ex);
             logger.log(ex);

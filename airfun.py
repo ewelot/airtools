@@ -442,6 +442,10 @@ def lrgb(param):
         outfmt='fits'
         outstrip=False
         del param[0]
+    if(param[0]=='-t'):
+        outfmt='tif'
+        outstrip=False
+        del param[0]
     infilename = param[0]
     outfilename = param[1]
     if(len(param)>2):
@@ -462,14 +466,17 @@ def lrgb(param):
     l = l.gaussblur(0.6)
     a = a.gaussblur(3).linear(1.2,0)
     b = b.gaussblur(3).linear(1.2,0)
-    outimg = l.bandjoin([a,b]).colourspace("srgb")
+    outimg = l.bandjoin([a,b]).colourspace("rgb16")
     
     # writing output image
     if (outfilename and outfilename != '-'):
         if (outfmt=='fits'):
             outimg.fitssave(outfilename)
         else:
-            outimg.ppmsave(outfilename, strip=1)
+            if (outfmt=='tif'):
+                outimg.tiffsave(outfilename)
+            else:
+                outimg.ppmsave(outfilename, strip=1)
     else:
         target = pyvips.Target.new_to_descriptor(sys.stdout.fileno())
         outimg.write_to_target(target, "." + outfmt, strip=outstrip)

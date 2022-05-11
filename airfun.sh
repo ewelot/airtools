@@ -14,23 +14,16 @@
 # - in order to use SAOImage DS9 analysis tasks (via AIexamine) you must
 #   have installed files airds9.ana and aircmd.sh
 ########################################################################
-AI_VERSION="5.1.12"
+AI_VERSION="5.1.13"
 : << '----'
 CHANGELOG
-    TODO: AIsplitstack make sure it has at least 2 images per sub-set
-        AIsplitstack: apply bggradient
-        AIsplitstack: make sure field size of splitted stacks is large enough
-          for astrometry (check with installed data files)
-        AIsplitstack: terminal gets corrupted
-        AIastrometry: using splitted sets together with a given setname
-          does not work
-        icqplot:
-            -r AIT should also remove local observations
-            -r CCD should only leave visual data
-        mapphot: deal with file names containing spaces
-    GUI:
-        GUI: New project / Cancel should not check site/new site (?)
-
+    5.1.13 - 29 Apr 2022
+        * AIlist: bugfix to keep precision of coma diameter to 0.1 arcmin
+            when requesting ICQ format output
+        * icqplot:
+            bugfix to correctly use start date (dmin) when fitting data
+            added option -ph to plot phase angle
+        * new functions: vcomp check_new_version
 
     5.1.12 - 07 Apr 2022
         * regshift: bugfix for wrong variable name (affecting -f option)
@@ -2479,10 +2472,10 @@ vcomp () {
         echo "usage: vcomp <vers1> <vers2>" >&2 &&
         return 1
 
-    for p1 in ${v1//./ }
+    for p1 in ${v1//[.-]/ }
     do
         n=$((n+1))
-        p2=$(echo ${v2//./ } | cut -d ' ' -f$n)
+        p2=$(echo ${v2//[.-]/ } | cut -d ' ' -f$n)
         test "$AI_DEBUG" && printf "%-2s %-6s %-6s\n" $n $p1 $p2
         test "$p1" == "$p2" && continue
         test -z "$p2" && val=1 && break
@@ -2514,11 +2507,64 @@ vcomp () {
     if [ -z "$val" ]
     then
         n=$((n+1))
-        p2=$(echo ${v2//./ } | cut -d ' ' -f$n)
+        p2=$(echo ${v2//[.-]/ } | cut -d ' ' -f$n)
         test "$p2" && val=2
     fi
     test -z "$val" && val=0
     echo $val
+}
+
+
+check_new_version () {
+    # check for a new package version
+    local verbose
+    local showhelp
+    for i in 1 2
+    do
+        (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
+        test "$1" == "-v" && verbose=1 && shift 1
+    done
+    local repo=fg-kometen.vdsastro.de/airtools
+    local dist
+    local srcdist
+    local vold
+    local vnew
+    local tmppkg=$(mktemp /tmp/tmp_pkg_XXXXXX)
+    
+    (test "$showhelp" || test $# -ne 0) &&
+        echo "usage: check_new_version [-v]" >&2 &&
+        return 1
+
+    dist=$(lsb_release -s -c)
+    test -s /etc/apt/sources.list.d/airtools.list &&
+        srcdist=$(cat /etc/apt/sources.list.d/airtools.list | grep "^deb .*$repo" | awk '{
+            print $(NF-1)}')
+    # if empty check other sources.list entries
+    test -z "$srcdist" &&
+        srcdist=$(cat /etc/apt/sources.list.d/*.list 2>/dev/null | grep "^deb .*$repo" | awk '{
+            print $(NF-1)}')
+    test -z "$srcdist" &&
+        srcdist=$(cat /etc/apt/sources.list | grep "^deb .*$repo" | awk '{
+            print $(NF-1)}')
+    test -z "$srcdist" &&
+        echo "ERROR: no package repository for airtools listed." >&2 &&
+        return 255
+    test "$verbose" &&
+        echo "# using repository for $srcdist"
+    
+    # download Packages file
+    curl -s -o $tmppkg http://$repo/debian/dists/$srcdist/main/binary-amd64/Packages
+    vnew=$(grep -A2 "^Package: airtools$" $tmppkg | grep Version | tail -1 | awk '{printf("%s", $2)}')
+    vcurr=$(dpkg-query -W airtools | awk '{printf("%s", $2)}')
+    test "$verbose" &&
+        echo "# current version: $vcurr" >&2 &&
+        echo "# newest version:  $vnew" >&2
+    test $(vcomp $vnew $vcurr) -eq 1 &&
+        echo "\
+##############################################
+A new program version is available: ${vnew}
+##############################################" >&2
+    rm -f $tmppkg
 }
 
 
@@ -9114,8 +9160,8 @@ f InT APERTURcamchip SFW C ## u.uu xx.x PIXELSIZE       guideline
 "
                 if [ "${ccdinfo// /}" ]
                 then
-                    camchip=$(AI_TELESCOPE=$tel get_param camera.dat camchip xxx)
-                    test "$camchip" == "-" && camchip=""
+                    camchip=$(AI_TELESCOPE=$tel get_param camera.dat camchip xxx | sed -e 's,-,   ,g')
+                    #test "$camchip" == "-" && camchip=""
                     str=$(printf "%4.1fs%4.1f" $pixscale $pixscale)
                     ccdinfo=$(printf "I     C%5.2fm%-7s %-3s %1s %12s %9s" $coma "${camchip/[,_\/]/ }" $sfwkey $calib "" "$str")
                 else
@@ -10483,6 +10529,7 @@ icqplot () {
     local obslist       # list of observer id's with individual colored points
     local rmobslist     # list of observer id's to remove from plot
     local do_plot_distance  # overplot solar distance
+    local do_plot_phase # overplot phase angle
     local do_mpcmodel   # if set then plot MPC model curve
     local fittype="none" # fittype for magnitude model curve m=M + 5*log(De) + 2.5*n*log(rs)
     local ephemdb       # comets ephemeris database (XEphem format)
@@ -10496,7 +10543,7 @@ icqplot () {
     local outext="png"  # png|eps plot file extension (if outfile is not given) 
     local verbose       # if set print additional messages and keep gnuplot files
 
-    for i in $(seq 1 20)
+    for i in $(seq 1 26)
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-f"  && fittype="all"     && shift 1
@@ -10504,6 +10551,7 @@ icqplot () {
         test "$1" == "-m" && do_mpcmodel=1  && shift 1
         test "$1" == "-n" && newmodel="$2"  && shift 2
         test "$1" == "-d" && do_plot_distance=1 && shift 1
+        test "$1" == "-ph" && do_plot_phase=1 && shift 1
         test "$1" == "-o" && outfile="$2"   && shift 2
         test "$1" == "-ext" && outext="$2"   && shift 2
         test "$1" == "-s" && size="$2"      && shift 2
@@ -10528,13 +10576,14 @@ icqplot () {
     
     local comet=$1
     local icqdat=$2         # data file containing records in ICQ data format
-    local type=${3:-"mag"}  # type of plot: mag, hmag, coma, lcoma
+    local type=${3:-"mag"}  # type of plot: mag, hmag, hmagdist, coma, lcoma, lcomadist
     
     local tdir=${AI_TMPDIR:-"/tmp"}
     local tmpobs=$(mktemp "$tdir/tmp_obs_$$.XXXXXX.dat")
     local tmpdat1=$(mktemp "$tdir/tmp_dat1_$$.XXXXXX.dat")
     local tmpdat2=$(mktemp "$tdir/tmp_dat2_$$.XXXXXX.dat")
     local tmpmpc=$(mktemp "$tdir/tmp_mpc_$$.XXXXXX.dat")
+    local tmpephem=$(mktemp "$tdir/tmp_ephem_$$.XXXXXX.dat")
     local tmpmodel=$(mktemp "$tdir/tmp_model_$$.XXXXXX.dat")
     local tmpfit=$(mktemp "$tdir/tmp_fit_$$.XXXXXX.dat")
     local tmpgp=$(mktemp "$tdir/tmp_gp_$$.XXXXXX.gp")
@@ -10581,7 +10630,9 @@ icqplot () {
     local ytics
     local ptsize
     local drange
-    local dinterval
+    local dinter
+    local prange
+    local pinter
     local plotcmd
     local color
     local lcolor
@@ -10614,6 +10665,8 @@ icqplot () {
     local x
     local num
     local nskip
+    local utdate
+    local uttime
     local pid
     local pyprog    # full path to airfun.py
 
@@ -10643,6 +10696,32 @@ icqplot () {
     # ICQ id of local observer
     observer=$AI_OBSICQID
     test -z "$observer" && observer=${AI_OBSERVER:-"OBSxx"}
+    
+    # ignore some options on certain plot types
+    case "$type" in
+        mag)    ;;
+        hmag)   ;;
+        hmagdist) do_plot_distance=""
+                ;;
+        coma)   do_mpcmodel=""
+                fittype="none"
+                newmodel=""
+                ;;
+        lcoma)  do_mpcmodel=""
+                fittype="none"
+                newmodel=""
+                ;;
+        lcomadist) do_plot_distance=""
+                do_mpcmodel=""
+                fittype="none"
+                newmodel=""
+                ;;
+        *)      echo "ERROR: unknown plot type." >&2
+                return 255
+                ;;
+    esac
+    test "$do_plot_phase" && do_plot_distance=""
+
 
     # download $ephemdb if required
     if [ -z "$ephemdb" ]
@@ -10659,21 +10738,6 @@ icqplot () {
         fi
         ephemdb=$tmpedb
     fi
-    
-    # ignore some options on certain plot types
-    case "$type" in
-        hmag)   do_plot_distance=""
-                ;;
-        coma)   do_mpcmodel=""
-                fittype="none"
-                newmodel=""
-                ;;
-        lcoma)  do_plot_distance=""
-                do_mpcmodel=""
-                fittype="none"
-                newmodel=""
-                ;;
-    esac
     
 
     #-----------------------------------
@@ -10710,7 +10774,7 @@ icqplot () {
     test -s $tmplocalobs && flist="$flist $tmplocalobs"
     test "$do_cobsobs"  && test -s $tmpcobsobs  && flist="$flist $tmpcobsobs"
     cat $flist | awk '{printf("%s\n", substr($0,12,13))}' | \
-        tr -d ' ' | grep "^[[:digit:].]*$" | LANG=C sort -n > $tmpdat1
+        tr -d ' ' | grep "^[0-9][[:digit:].]*$" | LANG=C sort -n > $tmpdat1
     ! test -s $tmpdat1 &&
         echo "ERROR: no observations to process." >&2 && return 255
     dmin=$(lines 1 $tmpdat1 | cut -d '.' -f1)
@@ -10726,7 +10790,7 @@ icqplot () {
         echo "# date range of observations within xrange: $dmin $dmax" >&2
     fi
     
-    # get comet ephemerides, orbital period, perihel time (xp is utdate,
+    # get comet elements, orbital period, perihel time (xp is utdate,
     #   up is unix time) and distance
     false && if [ "${comet%P}" != "${comet}" ] || [ "${comet%I}" != "${comet}" ]
     then
@@ -10932,6 +10996,7 @@ icqplot () {
     # compute additional values (e.g. hmag, lcoma) using ephemerides
     # position 1     2    3      4     5   6    7    8     9      10     11   12         13    14
     # fields:  utime date source obsid mag hmag coma lcoma method filter soft log(r_sun) r_sun d_earth
+    # TODO: add phase angle
     if [ "$cephem" ]
     then
         python3 $pyprog addephem $tmpobs "$cephem" > $tmpdat1
@@ -10988,7 +11053,7 @@ icqplot () {
 
 
     # set xtics
-    if [ "$type" == "mag" ] || [ "$type" == "coma" ]
+    if [ "${type/dist/}" == "$type" ]
     then
         # x axis is date/time
         xcol=1; mxcol=1
@@ -11127,7 +11192,7 @@ icqplot () {
                 ycol=5; mycol=3
                 test -z "$title" && title="$comet - Magnitude"
                 ;;
-        hmag)
+        hmag*)
                 ycol=6; mycol=4
                 test -z "$title" && title="$comet - Heliocentric Magnitude"
                 ;;
@@ -11135,7 +11200,7 @@ icqplot () {
                 ycol=7
                 test -z "$title" && title="$comet - Coma Diameter"
                 ;;
-        lcoma)
+        lcoma*)
                 ycol=8
                 test -z "$title" && title="$comet - Linear Coma Diameter"
                 ;;
@@ -11149,17 +11214,17 @@ icqplot () {
         min=$(head -1 $tmpdat2)
         max=$(tail -1 $tmpdat2)
         case $type in
-            hmag)   yrange=$(echo $min $max | awk '{
+            hmag*)  yrange=$(echo $min $max | awk '{
                         printf("%.0f:%.0f", int($2+0.7)+1, int($1-0.7))}')
                     ;;
-            lcoma)  yrange=$(echo $min $max | awk '{
+            lcoma*) yrange=$(echo $min $max | awk '{
                         printf("%.0f:%.0f", int($1*0.5), int($2/0.5)+1)}')
                     ;;
         esac
     fi
     
     # determine ytics for coma size plots if necessary
-    if [ "$type" == "coma" ] || [ "$type" == "lcoma" ]
+    if [ "${type}/coma/" != "$type" ]
     then
         # determine ytics for log scale
         if [ "$yrange" ]
@@ -11175,6 +11240,7 @@ icqplot () {
         fi
         test "$type" == "coma"  && ytics="($(mktics    $min $max | tr ' ' ', '))"
         test "$type" == "lcoma" && ytics="($(mktics -c $min $max | tr ' ' ', '))"
+        test "$type" == "lcomadist" && ytics="($(mktics -c $min $max | tr ' ' ', '))"
         test "$verbose" && echo "# ytics=$ytics" >&2
     fi
 
@@ -11217,7 +11283,7 @@ icqplot () {
         python3 $pyprog mkephem -s "$cephem" $umin $umax $g $k $npoints | \
             grep -v "^#" > $tmpmodel
     fi
-    if [ "$do_mpcmodel" ] || [ "$do_plot_distance" ]
+    if [ "$do_mpcmodel" ] || [ "$do_plot_distance" ] || [ "$do_plot_phase" ] 
     then
         g=$(echo "$cephem" | awk -F ',' '{x=$(NF-1); sub(/^[a-z ]*/,"",x); printf("%s", x)}')
         k=$(echo "$cephem" | awk -F ',' '{x=$NF; sub(/^[a-z ]*/,"",x); printf("%s", x)}')
@@ -11227,7 +11293,35 @@ icqplot () {
         python3 $pyprog mkephem -s "$cephem" $umin $umax $g $k $npoints | \
             grep -v "^#" > $tmpmpc
     fi
-    
+    if [ "$do_plot_phase" ]
+    then
+        # add phase angle by using get_mpcephem
+        # convert umin to utdate uttime
+        set - $(date -u -d "@$umin" +"%Y-%m-%d %T")
+        utdate=$1
+        uttime=$2
+        # set interval to hh:mm
+        x=$(echo $umin $umax $npoints | awk '{
+            isec=($2-$1)/$3+30
+            h=int(isec/3600)
+            m=int(isec/60-h*60)
+            printf("%d:%02d", h, m)
+            }')
+        get_mpcephem -i $x -n $npoints $comet $utdate $uttime | awk '{
+            if ($1 ~ /#/) {print $0; next}
+            # convert ut date to jd and unix timestamp (seconds)
+            y=$1
+            m=$2
+            d=$3
+            hr=substr($4,1,2)+substr($4,3,2)/60+substr($4,5,2)/3600
+            if (1*m<=2) {y=y-1; m=m+12}
+            a=int(y/100); b=2-a+int(a/4)
+            jd=int(365.25*(y+4716)) + int(30.6001*(m+1)) + d + hr/24 + b - 1524.5
+            utime=(jd - 2440587.5)*24*3600
+            printf("%.0f %s\n", utime, $0)
+            }' > $tmpephem
+    fi
+
     
     #-----------------------------------
     #   fit brightness model
@@ -11257,7 +11351,7 @@ icqplot () {
     fi
 
     # fit model parameters
-    if [ "$fittype" != "none" ] && ([ "$type" == "mag" ] || [ "$type" == "hmag" ])
+    if [ "$fittype" != "none" ] && [ "${type/mag/}" != "$type" ]
     then
         # log(r_sun) at column 12
         # hmag at column 6
@@ -11368,7 +11462,7 @@ EOF
     
     # xrange, xtics according to $type
     test -z "$xticsfmt" && xticsfmt="%b %y"
-    if [ "$type" == "mag" ] || [ "$type" == "coma" ]
+    if [ "${type/dist/}" == "$type" ]
     then
         echo "set xdata time
 set timefmt '%s'
@@ -11410,7 +11504,7 @@ set label 'P' at screen $multiplot, graph 0.95 center" >> $tmpgp
                 echo "set yrange [$yrange] reverse" >> $tmpgp
                 echo "set ylabel 'mag' offset 1" >> $tmpgp
                 ;;
-        hmag)
+        hmag*)
                 echo "set yrange [$yrange] reverse" >> $tmpgp
                 echo "set ylabel 'mag' offset 1" >> $tmpgp
                 ;;
@@ -11420,7 +11514,7 @@ set label 'P' at screen $multiplot, graph 0.95 center" >> $tmpgp
                 echo "set ytics $ytics" >> $tmpgp
                 echo "set ylabel 'arcmin' offset 1" >> $tmpgp
                 ;;
-        lcoma)
+        lcoma*)
                 echo "set yrange [$yrange]" >> $tmpgp
                 echo "set log y" >> $tmpgp        
                 echo "set ytics $ytics" >> $tmpgp
@@ -11447,9 +11541,28 @@ set label 'P' at screen $multiplot, graph 0.95 center" >> $tmpgp
         echo "set y2range [$drange]" >> $tmpgp
         echo "set y2label 'r_{sun} / AU' offset -1" >> $tmpgp
         test "$dinter" && echo "set y2tics $dinter" >> $tmpgp
-    else
-        test "$type" == "mag" && echo "set rmargin 8" >> $tmpgp
     fi
+    if [ "$do_plot_phase" ]
+    then
+        # phase angle at column 15
+        prange=$(minmax $tmpephem 15 | awk '{
+            d=$2-$1
+            low=$1-0.1*d-0.01*$1
+            high=$2+0.1*d+0.01*$1
+            printf("%f:%f", low, high)}')
+        pinter=$(echo $prange | awk -F ':' '{dr=$2-$1; x=0.5
+            if (dr>3)   x=1
+            if (dr>6)   x=2
+            if (dr>15)  x=5
+            if (dr>30)  x=10
+            print x}')
+        test "$verbose" && echo "# prange=$prange pinter=$pinter" >&2
+        echo "set y2range [$prange]" >> $tmpgp
+        echo "set y2label 'phase angle / deg' offset -1" >> $tmpgp
+        test "$pinter" && echo "set y2tics $pinter" >> $tmpgp
+    fi
+    test -z "${do_plot_distance}${do_plot_phase}" &&
+        test "$type" == "mag" && echo "set rmargin 8" >> $tmpgp
     
     # check observers (or software key) for valid observations
     if [ "$obslist" ]
@@ -11578,6 +11691,16 @@ $plotcmd '$tmpmpc'  using $xcol:6 \\
             plotcmd="    ,"
         fi
 
+        # plotting phase angle
+        if [ "$do_plot_phase" ]
+        then
+            lcolor="#00AA00"
+            echo "\
+$plotcmd '$tmpephem'  using $xcol:15 \\
+        title 'Phase' lw 1 lc rgb '$lcolor' dt '-' with lines axes x1y2 \\" >> $tmpgp
+            plotcmd="    ,"
+        fi
+
         # plotting model curves
         if [ "$mycol" ] && [ -s $tmpmodel ] # newmodel
         then
@@ -11621,7 +11744,7 @@ $plotcmd '$tmpfit'  using $mxcol:($datefilter ? \$$mycol : 1/0) \\
         test -s $tmpmodel && echo "model:   $tmpmodel" >&2
         echo "gnuplot: $tmpgp" >&2
     else
-        rm -f $tmpobs $tmpdat1 $tmpdat2 $tmpfit $tmpmpc $tmpmodel $tmpgp $obsdata
+        rm -f $tmpobs $tmpdat1 $tmpdat2 $tmpfit $tmpmpc $tmpephem $tmpmodel $tmpgp $obsdata
     fi
     return $retval
 }
@@ -14648,19 +14771,25 @@ colorize () {
     local showhelp
     local mode="full"
     local outsize=1400  # size of long axis on output image
-    local max=0.995
+    local depth=8
+    local clip=3        # clip promille of brightest pixels
+    local do_overwrite
     local i
-    for i in $(seq 1 4)
+    for i in $(seq 1 6)
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-s" && outsize=$2 && shift 2
-        test "$1" == "-m" && max=$2 && shift 2
-        test "$1" == "-c" && mode="center" && shift 1
+        test "$1" == "-c" && clip=$2 && shift 2
+        test "$1" == "-o" && do_overwrite=1 && shift 1
+        test "$1" == "-16" && depth=16 && shift 1
     done
     local ppmlist=${@:-"-"}
     local ppm
+    local max
+    local dim
     local outim
     local outlist
+    local opts
     local sdg
     local add
     local tdir=${AI_TMPDIR:-"/tmp"}
@@ -14669,24 +14798,43 @@ colorize () {
     local tmpstat=$(mktemp "$tdir/tmp_stat_XXXXXX.dat")
     
     (test "$showhelp" || test $# -lt 1) &&
-        echo "usage: ppm2color [-c] [-s outsize|$outsize] [-m max|$max] <ppm1> [ppm2 ...]" >&2 &&
+        echo "usage: colorize [-s outsize|$outsize] [-c clip_permil|$clip] <ppm1> [ppm2 ...]" >&2 &&
         return 1
     
+    # deal with scaling image dimension (outsize < 10)
+    if [ ${outsize%.*} -lt 10 ]
+    then
+        dim=$(imsize ${ppmlist%% *} | awk -v s=$outsize '{
+            printf("%.0fx%.0f", s*$1, s*$2)}')
+    else
+        dim=${outsize}x${outsize}
+    fi
     outlist=""
+    max=$(echo $clip | awk '{printf("%f", 1-$1/1000)}')
     for ppm in $ppmlist
     do
         test ! -f "$ppm" &&
             echo "ERROR: ppm file $ppm not found." >&2 &&
             return 255
         basename $ppm >&2
-        outim=$(basename $ppm | sed -e 's,.[a-z]*$,.color.tif,')
+        case $depth in
+            8)  outim=$(basename $ppm | sed -e 's,.[a-z]*$,.color8.tif,')
+                opts=""
+                ;;
+            16) outim=$(basename $ppm | sed -e 's,.[a-z]*$,.color16.tif,')
+                opts="-16"
+                ;;
+        esac
+        test -e $outim && test -z "$do_overwrite" &&
+            echo "ERROR: output image $outim already exists" && return 255
         case $mode in
-            full)   convert $ppm -scale ${outsize}x${outsize}\> $tmpim
+            full)   convert $ppm -scale ${dim}\> $tmpim
                     ;;
-            center) imcrop $ppm $outsize $outsize > $tmpim
+            center) imcrop $ppm $outsize ${dim/x/ } > $tmpim
                     ;;
         esac
-        AIstiff -q -o $outim $tmpim $max
+        echo AIstiff -q $opts -o $outim $tmpim $max >&2
+        AIstiff -q $opts -o $outim $tmpim $max
         outlist="$outlist $outim"
     done
     AIdisplay $outlist
@@ -17785,7 +17933,7 @@ AIexamine () {
     local ds9opts               # xpaset commands to be added at the end
     local ds9name="AIRTOOLS"
     local do_linear
-    local do_lock_colorbar
+    local do_lock_colorbar      # lock 
     local do_replace_image
     local verbose
     local i
@@ -19953,7 +20101,6 @@ AIflat () {
     local imlist=$(mktemp "$tdir/tmp_imlist_XXXXXX.dat")
     local statfile=$(mktemp "$tdir/tmp_imstat_XXXXXX.dat")
     local tmpim=$(mktemp "$tdir/tmp_im1_XXXXXX.pnm")
-    #### TL: next line workaround libvips error reading stdin only
     local tmpim2=$(mktemp "$tdir/tmp_im1_XXXXXX.pnm")
     local tmpdark=$(mktemp "$tdir/tmp_dark_XXXXXX.pgm")
     local tmpmean=$(mktemp "$tdir/tmp_mean_XXXXXX.pnm")
@@ -31804,7 +31951,7 @@ AIsetinfo () {
                 x=$(get_header $sname.head AI_FWHM); test "$x" && fwhm=$x
                 x=$(get_header -q $sname.head AI_BGOFF)
                 test "$x" && bg=$((bg-x))
-                x=$(get_header $sname.head PIERSIDE)
+                x=$(get_header -q $sname.head PIERSIDE)
                 test "$x" && pierside=${x:0:1}
             fi
         else
@@ -31815,7 +31962,7 @@ AIsetinfo () {
                 listhead $rhdr | grep -vE "^Header listing|^$" > $tmphead
                 x=$(get_jd -q $tmphead)
                 test "$x" && jdref=$x
-                x=$(get_header $tmphead PIERSIDE)
+                x=$(get_header -q $tmphead PIERSIDE)
                 test "$x" && pierside=${x:0:1}
             else
                 # try to examine <nref>.hdr as created by gacam
@@ -32525,7 +32672,7 @@ EOF
                 if [ "$do_icq" ]
                 then
                     # TODO: deal with unknown cmag, diam
-                    outphot=$(printf "%5.2fXX XXXXX XXXXX  %2.0f                        %s" $cmag $diam $icqid)
+                    outphot=$(printf "%5.2fXX XXXXX XXXXX  %4.1f                      %s" $cmag $diam $icqid)
                 else
                     outphot=$(printf " %5s %s %-6s %-4s %s %-5s %2s %3s  $moonfmt" \
                         $cmag "$diam" $pcat $mlim $mzer ${tel//\'/} $alt $az $moon)

@@ -106,9 +106,11 @@ public class LightCurveController implements Initializable {
     
     private enum PlotType {
         MAG("Observed Magnitude"),
-        HMAG("Heliocentric Magnitude"),
+        HMAG("Heliocentric Magnitude vs. Date"),
+        HMAGDIST("Heliocentric Magnitude vs. Distance"),
         COMA("Apparent Coma Diameter"),
-        LCOMA("Linear Coma Diameter");
+        LCOMA("Linear Coma Diameter vs. Date"),
+        LCOMADIST("Linear Coma Diameter vs. Distance");
 
         private final String label;
 

@@ -28,7 +28,6 @@ import javafx.scene.control.TextArea;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
-import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -47,8 +46,6 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.SimpleIntegerProperty;
 import javafx.beans.property.SimpleStringProperty;
@@ -732,6 +729,15 @@ public class MainController implements Initializable {
                 alert.showAndWait();
                 // TODO: add line to sites.dat
             }
+            
+            /* check for new program version */
+            System.out.println("running check_new_version ...");
+            boolean quiet=true;
+            sh.setOpts("-q -c");
+            sh.setArgs("");
+            sh.runFunction("check_new_version", quiet);
+            System.out.println("check_new_version finished");
+
         } catch (IOException ex) {
             Logger.getLogger(MainController.class.getName()).log(Level.SEVERE, null, ex);
         }

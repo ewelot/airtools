@@ -714,6 +714,10 @@ it is common practice to reuse them later on. This can be done by simply
 copying them over from older project directories to the current one
 using the file manager.
 
+Some (remote) observatories deliver already calibrated images to their
+customers. In this special case you can omit dark and flat field calibration
+by providing the name "cal" for both dark and flat field image names.
+
 \pagebreak
 
 
