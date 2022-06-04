@@ -16,7 +16,7 @@
 <?import javafx.scene.layout.VBox?>
 <?import javafx.scene.text.Font?>
 
-<AnchorPane fx:id="paneLightCurve" xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="tl.airtoolsgui.controller.LightCurveController">
+<AnchorPane fx:id="paneLightCurve" xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" fx:controller="tl.airtoolsgui.controller.LightCurveController">
    <children>
       <VBox spacing="16.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
          <children>
@@ -80,6 +80,7 @@
                         <RowConstraints vgrow="SOMETIMES" />
                         <RowConstraints vgrow="SOMETIMES" />
                         <RowConstraints vgrow="SOMETIMES" />
+                        <RowConstraints vgrow="SOMETIMES" />
                      </rowConstraints>
                      <children>
                         <Label text="Plot Type:" />
@@ -101,9 +102,11 @@
                            </children>
                         </HBox>
                         <Label text="Identify Observers:" GridPane.rowIndex="4" />
-                        <TextField fx:id="tfObsList" promptText="OBSxx, OBSyy, ..." GridPane.columnIndex="1" GridPane.rowIndex="4" />
-                        <Label text="Additional Options:" GridPane.rowIndex="5" />
-                        <TextField fx:id="tfAddOptions" promptText="-wide -t title  -y bottom:top   ..." GridPane.columnIndex="1" GridPane.rowIndex="5" />
+                        <TextField fx:id="tfObsList" promptText="ICQ01, ICQ02, ..." GridPane.columnIndex="1" GridPane.rowIndex="4" />
+                        <Label text="Hide Observers:" GridPane.rowIndex="5" />
+                        <TextField fx:id="tfHideList" promptText="ICQ01, ICQ02, ...  or ALL" GridPane.columnIndex="1" GridPane.rowIndex="5" />
+                        <Label text="Additional Options:" GridPane.rowIndex="6" />
+                        <TextField fx:id="tfAddOptions" promptText="-y bottom:top -t title -wide -eps ..." GridPane.columnIndex="1" GridPane.rowIndex="6" />
                      </children>
                   </GridPane>
                   <Label text="Magnitude Models">
@@ -160,7 +163,7 @@
                                     <Font name="Monospaced Regular" size="12.0" />
                                  </font>
                               </Label>
-                              <TextField fx:id="tfModelM" prefColumnCount="3" promptText="M" />
+                              <TextField fx:id="tfModelM" prefColumnCount="3" promptText="H0" />
                               <Label text=" + 5*log(D) + 2.5*">
                                  <font>
                                     <Font name="Monospaced Regular" size="12.0" />

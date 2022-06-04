@@ -434,18 +434,24 @@ def ppmtogray(param):
 
 
 # convert from (noisy) RGB image to color image by using LRGB techniques
-# syntax: lrgb -f inppm outppm bgR,bgG,bgB rmsg
+# syntax: lrgb [-f|-t] [-16] inppm outppm bgR,bgG,bgB rmsg
 def lrgb(param):
     outfmt='ppm'
     outstrip=True
-    if(param[0]=='-f'):
-        outfmt='fits'
-        outstrip=False
-        del param[0]
-    if(param[0]=='-t'):
-        outfmt='tif'
-        outstrip=False
-        del param[0]
+    depth=8
+    bg=""
+    while (param[0][0:1] == "-"):
+        if(param[0]=='-f'):
+            outfmt='fits'
+            outstrip=False
+            del param[0]
+        if(param[0]=='-t'):
+            outfmt='tif'
+            outstrip=False
+            del param[0]
+        if(param[0]=='-16'):
+            depth=16
+            del param[0]
     infilename = param[0]
     outfilename = param[1]
     if(len(param)>2):
@@ -464,9 +470,14 @@ def lrgb(param):
     # color smoothing in Lab, and some boost
     l,a,b = inimg.colourspace("lab").bandsplit()
     l = l.gaussblur(0.6)
+    if bg:
+        x,a,b = inimg.subtract(bg).colourspace("lab").bandsplit()
     a = a.gaussblur(3).linear(1.2,0)
     b = b.gaussblur(3).linear(1.2,0)
-    outimg = l.bandjoin([a,b]).colourspace("rgb16")
+    if (depth == 16):
+        outimg = l.bandjoin([a,b]).colourspace("rgb16")
+    else:
+        outimg = l.bandjoin([a,b]).colourspace("srgb")
     
     # writing output image
     if (outfilename and outfilename != '-'):

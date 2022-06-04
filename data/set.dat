@@ -8,5 +8,3 @@
 20:25 co01 2013US10 o  60 0005 0015 0010 dk01 sk01  T14  # green filter
 20:46 dk01 bias     a   0 0016 0020 -    -    -     T14
 05:40 sk01 skyflat  f   1 0021 0026 -    dk01 -     T14
-
-# version 4   (please leave this line untouched)

@@ -71,6 +71,8 @@ public class LightCurveController implements Initializable {
     @FXML
     private TextField tfObsList;
     @FXML
+    private TextField tfHideList;
+    @FXML
     private ChoiceBox<KeyPosition> cbKeyPosition;
     @FXML
     private TextField tfAddOptions;
@@ -127,7 +129,8 @@ public class LightCurveController implements Initializable {
     private enum FitType {
         NONE("none", ""),
         ALL("all available data", "-f"),
-        LIST("data matching observers list", "-ff");
+        LIST("data matching observers list", "-fo"),
+        FIRST("data matching first observer in list", "-ff");
         
         private final String label;
         private final String option;
@@ -182,7 +185,7 @@ public class LightCurveController implements Initializable {
         cbPlotType.getSelectionModel().select(PlotType.MAG);
 
         cbFitType.getItems().setAll(FitType.values());
-        cbFitType.getSelectionModel().select(FitType.ALL);
+        cbFitType.getSelectionModel().select(FitType.NONE);
         
         cbKeyPosition.getItems().setAll(KeyPosition.values());
         cbKeyPosition.getSelectionModel().select(KeyPosition.TOPLEFT);
@@ -288,6 +291,7 @@ public class LightCurveController implements Initializable {
         if (! tfICQFile.getText().isBlank()) {
             File f = new File(tfICQFile.getText());
             dirName = f.getParent();
+            if (dirName == null) dirName="";
         }
         if (dirName.isBlank()) dirName = projectDir.getValue();
         if (dirName.isBlank()) dirName = System.getProperty("user.home");
@@ -395,6 +399,10 @@ public class LightCurveController implements Initializable {
         
         if (! tfObsList.getText().isBlank()) {
             aircliCmdArgs.add("-i \"" + tfObsList.getText() + "\"");
+        }
+        
+        if (! tfHideList.getText().isBlank()) {
+            aircliCmdArgs.add("-r \"" + tfHideList.getText() + "\"");
         }
         
         if (! tfAddOptions.getText().isBlank()) {

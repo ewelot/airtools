@@ -14,9 +14,24 @@
 # - in order to use SAOImage DS9 analysis tasks (via AIexamine) you must
 #   have installed files airds9.ana and aircmd.sh
 ########################################################################
-AI_VERSION="5.1.13"
+AI_VERSION="5.1.15"
 : << '----'
 CHANGELOG
+    5.1.15 - 31 May 2022
+        * AIbg: bugfix to correctly apply median on measurements of different
+            regions
+        * vcomp: bugfix: redirect debug output to stdout
+        * check_new_version: bugfix to correctly evaluate all version strings
+            in the Packages file from the repository
+        * icqplot:
+            - improved handling of rmobslist
+            - added options -eps, -ps to replace -ext <ext>
+            - use epscairo as terminal type for EPS output
+            - added fittype firstobs to fit data of first observer in list
+
+    5.1.14 - 11 May 2022
+	    * get_cobs: modified to cope with the new COBS API
+
     5.1.13 - 29 Apr 2022
         * AIlist: bugfix to keep precision of coma diameter to 0.1 arcmin
             when requesting ICQ format output
@@ -2476,19 +2491,19 @@ vcomp () {
     do
         n=$((n+1))
         p2=$(echo ${v2//[.-]/ } | cut -d ' ' -f$n)
-        test "$AI_DEBUG" && printf "%-2s %-6s %-6s\n" $n $p1 $p2
+        test "$AI_DEBUG" && printf "%-2s %-6s %-6s\n" $n $p1 $p2 >&2
         test "$p1" == "$p2" && continue
         test -z "$p2" && val=1 && break
         # evaluate n
         n1=$(echo $p1 | sed -e 's,[a-zA-Z]\+[0-9]*$,,')
         n2=$(echo $p2 | sed -e 's,[a-zA-Z]\+[0-9]*$,,')
-        test "$AI_DEBUG" && printf "   %6s %6s\n" $n1 $n2
+        test "$AI_DEBUG" && printf "   %6s %6s\n" $n1 $n2 >&2
         test $n1 -gt $n2 && val=1 && break
         test $n1 -lt $n2 && val=2 && break
         # evaluate a
         a1=$(echo $p1 | sed -e 's,^'$n1',,; s,[0-9]*$,,')
         a2=$(echo $p2 | sed -e 's,^'$n2',,; s,[0-9]*$,,')
-        test "$AI_DEBUG" && printf "   %6s %6s\n" $a1 $a2
+        test "$AI_DEBUG" && printf "   %6s %6s\n" $a1 $a2 >&2
         test -z "$a1" && test -z "$a2" && continue
         test -z "$a1" && test "$a2" && val=1 && break
         test "$a1" && test -z "$a2" && val=2 && break
@@ -2497,7 +2512,7 @@ vcomp () {
         # evaluate x
         x1=$(echo $p1 | sed -e 's,^'$n1$a1',,')
         x2=$(echo $p2 | sed -e 's,^'$n2$a2',,')
-        test "$AI_DEBUG" && printf "   %6s %6s\n" $x1 $x2
+        test "$AI_DEBUG" && printf "   %6s %6s\n" $x1 $x2 >&2
         test -z "$x1" && test -z "$x2" && continue
         test -z "$x1" && test "$x2" && val=2 && break
         test "$x1" && test -z "$x2" && val=1 && break
@@ -2554,7 +2569,13 @@ check_new_version () {
     
     # download Packages file
     curl -s -o $tmppkg http://$repo/debian/dists/$srcdist/main/binary-amd64/Packages
-    vnew=$(grep -A2 "^Package: airtools$" $tmppkg | grep Version | tail -1 | awk '{printf("%s", $2)}')
+    vnew=$(grep -A2 "^Package: airtools$" $tmppkg | grep Version | \
+        while read x v
+        do
+            test -z "$vv" && vv=$v
+            test $(vcomp $v $vv) -eq 1 && vv=$v
+            echo $vv
+        done | tail -1)
     vcurr=$(dpkg-query -W airtools | awk '{printf("%s", $2)}')
     test "$verbose" &&
         echo "# current version: $vcurr" >&2 &&
@@ -2564,6 +2585,7 @@ check_new_version () {
 ##############################################
 A new program version is available: ${vnew}
 ##############################################" >&2
+    test "$AI_DEBUG" && echo $tmppkg >&2 && return
     rm -f $tmppkg
 }
 
@@ -2970,11 +2992,13 @@ adulim () {
     local quiet
     local merr=0.07
     local sn=2.8
+    local rlim  # max radius in pixels or percent of diameter
     local i
-    for i in 1 2 3 4
+    for i in 1 2 3 4 5
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-e" && merr=$2 && shift 2
+        test "$1" == "-r" && rlim=$2 && shift 2
         test "$1" == "-s" && sn=$2 && shift 2
         test "$1" == "-q" && quiet=1 && shift 1
     done
@@ -3004,18 +3028,27 @@ adulim () {
         awk '{if(NF==2) printf("%.1f", $1/$2)}')
     test -z "$texp" && return 255
     nexp=$(get_header -s $hdr NEXP)
-    fwhm=$(get_header $hdr AI_FWHM)
+    if [ "$rlim" ]
+    then
+        test ${rlim%.*} -lt 100 &&
+            rlim=$(imsize $set | awk -v p=$rlim '{printf("%.0f", p/100*sqrt($1*$1+$2*$2))}')
+        fwhm=$(sexselect $scat "" 0.02 $rlim | median - 6 | awk '{printf("%.1f", $1)}')
+        test -z "$quiet" && echo "# rlim=$rlim fwhm=$fwhm" >&2
+    else
+        fwhm=$(get_header $hdr AI_FWHM)
+    fi
     test -z "$fwhm" && return 255
     mzero=$(get_header $hdr MAGZERO)
     test -z "$mzero" && return 255
     mult=$(dmag2di $merr | awk -v sn=$sn '{printf("%.1f\n", 1/($1-1)/sn)}')
     
-    nsrc=$(sexselect $scat "" 0.1 | wc -l)
-    crowd=$(echo $nsrc $fwhm $(imsize $set) | awk '{
+    nsrc=$(sexselect $scat "" 0.1 $rlim | wc -l)
+    crowd=$(echo $nsrc $fwhm $(imsize $set) $rlim | awk '{
         npix=$3*$4
+        if (NF>4) npix=3.1416*$5*$5
         area=3.142*$2^2
         printf("%.1f\n", 100*$1*area/npix)}')
-    set -- $(sexselect $scat | awk -v e=$merr '{if($8>(e-0.005) && $8<(e+0.005)) print $7}' | kappasigma -n -)
+    set -- $(sexselect $scat "" "" $rlim | awk -v e=$merr '{if($8>(e-0.005) && $8<(e+0.005)) print $7}' | kappasigma -n -)
     test -z "$quiet" && echo "# texp=$texp  nexp=$nexp  crowd=$crowd  m($merr)=${1:0:5} +-${2:0:4}" >&2
     mag2i $1 $texp $mzero | awk -v m=$mult '{printf("%.0f\n", $1/m)}'
 }
@@ -7833,58 +7866,6 @@ mpchecker () {
     test ! "$AI_DEBUG" && rm -f $tmpreg $tmp1 $tmp2 $tmpxy $tmprade
 }
 
-get_cobs_old () {
-    # get observations from COBS database
-    # output is written to stdout
-    local showhelp
-    (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
-
-    local comet="$1"    # comet ID (1074 = 2014Q2) or name
-    local start=${2:-"$(date +"%F" -d 'now - 1 year')"}
-    local cdat=${3:-"../cobs.cometid.csv"}  # ID data file with lines:
-                                            # cometid,name,fullname
-    local prog=http://www.cobs.si/analysis2
-    #local interval="start_date=2015/07/01%2000:00&end_date=2015/12/31%2000:00"
-    local interval
-    #local url="${prog}?plot_type=0&comet_id=${cid}&${interval}&obs_type=0"
-    local url=""
-    local cid
-    local cname
-    local end
-    local tmp1=$(mktemp "/tmp/tmp_tmp1_$$.XXXXXX.html")
-
-    (test "$showhelp" || test $# -lt 1) &&
-        echo -e "usage: get_cobs <comet> [start_yyyy-mm-dd|$start] [cobs_id_file|$cdat]" >&2 &&
-        return 1
-
-    test ! -f $cdat &&
-        echo "ERROR: COBS cometID data file $cdat not found." >&2 && return 255
-    is_integer "$comet" && cid=$comet
-    # TODO: do exact query of second field in $cdat
-    test -z "$cid" && cid=$(grep -w "$comet" $cdat | cut -d "," -f1)
-    test -z "$cid" && if is_integer "${comet:0:4}" && [ ${#comet} -ge 6 ]
-    then
-        test "${comet:4:1}" != " " && cname="C/${comet:0:4} ${comet:4}"
-        test "${comet:4:1}" == " " && cname="C/$comet"
-        cid=$(grep -w "$cname" $cdat | cut -d "," -f1)
-    fi
-    test -z "$cid" &&
-        echo "ERROR: no comet ID for $comet in $cdat" >&2 && return 255
-    
-    end=$(date +"%F" -d 'now + 1 day')
-    interval="start_date=${start//-/\/}%2000:00&end_date=${end//-/\/}%2000:00"
-    url="${prog}?plot_type=0&obs_type=0&comet_id=${cid}&${interval}"
-    # analysis2 arguments:
-    #   plot_type (0-magnitude , ...)
-    #   obs_type (0 - all)
-
-    echo "url=$url" >&2
-    wget -O $tmp1 "$url"
-    w3m -dump $tmp1
-    rm -f $tmp1
-    return
-}
-
 
 cometname () {
     # expand short comet name
@@ -7971,73 +7952,79 @@ get_cobs () {
     # get observations from COBS database
     # output is written to stdout
     local showhelp
-    local all   # if set then get all available data
+    local all   # if set then get all available data, otherwise limit to 3 years
+    local obsid # ICQ id of observer
     local i
-    for i in 1 2
+    for i in 1 2 3
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
+        test "$1" == "-o" && obsid=$2 && shift 2
         test "$1" == "-a" && all=1 && shift 1
     done
     
     local comet="$1"    # comet name, e.g. "2016 R2"
-    local start=${2:-""}
-    local end=$(date +"%F" -d 'now + 1 day')
-    local interval
-    local prog=http://www.cobs.si/analysis
+    local start=${2:-""} # YYYY-MM-DD
+    local cobsapi=https://cobs.si/api
     local x
     local n
-    local fullname
-    local par1
-    local par2
+    local cobsname
+    local param
     local url
     local cname         # full comet name
-    local tmp1=$(mktemp "/tmp/tmp_tmp1_$$.XXXXXX.html")
-    local tmpcdb=$(mktemp "/tmp/tmp_cdb_$$.XXXXXX.dat") # comet name database
+    local tdir=${AI_TMPDIR:-"/tmp"}
+    local tmp1=$(mktemp "$tdir/tmp_tmp1_$$.XXXXXX.html")
+    local tmpstamp=$(mktemp "$tdir/tmp_tstamp_$$.XXXXXX.dat")
+    local tmpicq=$(mktemp "$tdir/tmp_icq_$$.XXXXXX.dat")
+    local tmpcdb=$tdir/tmp_cometdb.dat  # comet name database
 
-    (test "$showhelp" || test $# -lt 1) &&
-        echo -e "usage: get_cobs <comet> [start_yyyy-mm-dd|$start]" >&2 &&
+    (test "$showhelp") &&
+        echo -e "usage: get_cobs [-a] [-o obsID] <comet> [start_yyyy-mm-dd|$start]" >&2 &&
         return 1
+
+    test -z "$obsid$comet" &&
+        echo "ERROR: missing comet name or observer id" >&2 && return 255
 
     # workaround for buggy date in Ubuntu 20.04
     #test "$all" && start=$(date +"%F" -d 'now - 300 years')
-    test "$all" && start=$(date +"%F" | awk -F "-" '{printf("%d-%02d-%02d\n", $1-300, $2, $3)}')
-    test -z "$start" && start=$(date +"%F" -d 'now - 3 years')
+    #test "$all" && start=$(date +"%F" | awk -F "-" -v x=300 '{printf("%d-%02d-%02d\n", $1-x, $2, $3)}')
+    #test -z "$start" && start=$(date +"%F" -d 'now - 3 years')
     
     # get comet names database
-    wget -O $tmp1 "$prog"
-    cat $tmp1 | awk '{
-        if ($0~/Select comet/) {getline; ok=1}
-        if ($0~/\/select/) {ok=0}
-        if (ok==1) {print $0}
-        }' | tr '<>' '\n' | grep "[a-zA-Z0-9]" | grep -v "option" > $tmpcdb
-    x=$(cometname $comet)
-    # search in $tmpcdb and convert to fullname
-    n=$(grep "^$x[/ ]" $tmpcdb | wc -l)
-    test $n -eq 0 &&
-        echo "ERROR: comet $x unknown to database $tmpcdb" >&2 &&
-        return 255
-    test $n -gt 1 &&
-        echo "ERROR: comet $x has multiple matches in database $tmpcdb" >&2 &&
-        return 255
-    fullname=$(grep "^$x[/ ]" $tmpcdb)
-    echo "fullname=$fullname" >&2
+    touch -d 'now - 1 days' $tmpstamp
+    if [ ! -s "$tmpcdb" ] || [ $tmpstamp -nt $tmpcdb ]
+    then
+        wget -O $tmp1 $cobsapi/comet_list.api?is-observed=1
+        jq .objects[].name $tmp1 | tr -d '"' > $tmpcdb
+    fi
     
-    # example
-    # comet="C/2016 R2 (PANSTARRS)"
-    par1="required_fields=COMET_FULLNAME&COMET_FULLNAME=${fullname}"
-    par2="COMET_MPC=&PERIHELION_DATE=&PLOT_TYPE=Magnitude&OBSERVER=0&ASSOCIATION=0&SUBMIT=Get+Obs&COUNTRY=0"
-    #interval="START_DATE=YYYY%2FMM%2FDD+hh%3Amm&H0=&N=&END_DATE=YYYY%2FMM%2FDD+hh%3Amm"
-    interval="START_DATE=${start//-/\/}+00:00&END_DATE=${end//-/\/}+00:00"
+    # get full name of comet
+    if [ "$comet" ]
+    then
+        x=$(cometname $comet)
+        # search in $tmpcdb and convert to fullname
+        cobsname=$(grep "^${x}$" $tmpcdb)
+        test -z "$cobsname" &&
+            echo "ERROR: comet $x unknown to database $tmpcdb" >&2 &&
+            return 255
+        echo "cobsname=$cobsname" >&2
+    fi
     
-    url="${prog}?${par1}&${par2}&${interval}"
+    param="format=icq"
+    test "$comet" && param="$param&des=${cobsname}"
+    test "$obsid" && param="$param&user=${obsid}"
+    test "$start" && param=="$param&from_date=${start} 00:00"
+    
+    url="${cobsapi}/obs_list.api?${param}"
     test "$AI_DEBUG" && echo "url=$url" >&2
-    wget -O $tmp1 "$url"
+    wget -O $tmpicq "$url"
+    test $? -ne 0 &&
+        echo "ERROR: failed command: wget \"$url\"" >&2 &&
+        return 255
+
+    cat $tmpicq
     
-    grep "obs_visual" $tmp1 | sed 's,<br>,\n,g' | \
-        sed 's,</span>,,; s,<span class="obs_visual">,,; s,</pre>,,' | grep "[0-9]"
-    
-    test "$AI_DEBUG" && echo $tmp1 $tmpcdb >&2 && return
-    rm -f $tmp1 $tmpcdb
+    test "$AI_DEBUG" && echo $tmp1 $tmpcdb $tmpicq >&2 && return
+    rm -f $tmp1 $tmpstamp $tmpicq
     return
 }
 
@@ -8049,7 +8036,7 @@ get_jplcoord () {
     local do_write_header   # if set write coordinates to image header keywords
     local verbose
     local i
-    for i in 1 2
+    for i in 1 2 3
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-w" && do_write_header=1 && shift 1
@@ -8372,7 +8359,7 @@ get_mpcephem () {
     ! check_url && echo "ERROR: no internet connection." >&2 && return 1
     ! check_url $url && echo "ERROR: no access to $url" >&2 && return 2
     
-    # set interval
+    # round interval
     interval=""
     test $n -eq 1 && interval="1&u=s"
     test -z "$interval" && test $dmin -le 240 && interval=$dmin"&u=m"
@@ -8382,7 +8369,7 @@ get_mpcephem () {
         # interval >10d
         interval=$(echo $dhr | awk '{printf("%.0f", $1/24)}')"&u=d"
     fi
-    
+
 
     args="l=$n&i=$interval&uto=0&c=&long=$long&lat=$lat&alt=$alt"
     args2="raty=a&s=t&m=h&adir=N&oed=&e=-2&resoc=&tit=&bu=&ch=c&ce=f&js=f"
@@ -10540,38 +10527,40 @@ icqplot () {
     local do_curr_app   # if set limit data to last apparition
     local do_keep_cobsobs # if set then keep a copy of cobs data (cobs_$comet.icq)
     local outfile       # if set the plot is saved to the given file name
-    local outext="png"  # png|eps plot file extension (if outfile is not given) 
+    local outext="png"  # png|eps|ps plot file extension (if outfile is not given) 
     local verbose       # if set print additional messages and keep gnuplot files
 
-    for i in $(seq 1 26)
+    for i in $(seq 1 30)
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
-        test "$1" == "-f"  && fittype="all"     && shift 1
-        test "$1" == "-ff" && fittype="obslist" && shift 1
-        test "$1" == "-m" && do_mpcmodel=1  && shift 1
-        test "$1" == "-n" && newmodel="$2"  && shift 2
-        test "$1" == "-d" && do_plot_distance=1 && shift 1
-        test "$1" == "-ph" && do_plot_phase=1 && shift 1
-        test "$1" == "-o" && outfile="$2"   && shift 2
-        test "$1" == "-ext" && outext="$2"   && shift 2
-        test "$1" == "-s" && size="$2"      && shift 2
+        test "$1" == "-f"   && fittype="all"    && shift 1
+        test "$1" == "-fo"  && fittype="obslist" && shift 1
+        test "$1" == "-ff"  && fittype="firstobs" && shift 1
+        test "$1" == "-m"   && do_mpcmodel=1    && shift 1
+        test "$1" == "-n"   && newmodel="$2"    && shift 2
+        test "$1" == "-d"   && do_plot_distance=1 && shift 1
+        test "$1" == "-ph"  && do_plot_phase=1  && shift 1
+        test "$1" == "-o"   && outfile="$2"     && shift 2
+        test "$1" == "-eps" && outext="eps"     && shift 1
+        test "$1" == "-ps"  && outext="ps"      && shift 1
+        test "$1" == "-s"   && size="$2"        && shift 2
         (test "$1" == "-w" || test "$1" == "-wide") &&
             wider=$(echo $wider | awk '{print 1.25*$1}') && shift 1
-        test "$1" == "-t" && title="$2"     && shift 2
-        test "$1" == "-k" && keypos="$2"    && shift 2
-        test "$1" == "-kw" && kwidthadd="$2" && shift 2
-        test "$1" == "-x" && xrange="$2"    && shift 2
-        test "$1" == "-y" && yrange="$2"    && shift 2
-        test "$1" == "-e" && ephemdb="$2"   && shift 2
-        test "$1" == "-i" && obslist="$2"   && shift 2
-        test "$1" == "-r" && rmobslist="$2"   && shift 2
-        test "$1" == "-p" && npoints="$2"   && shift 2
-        test "$1" == "-c" && do_cobsobs=1   && shift 1
-        test "$1" == "-cc" && do_keep_cobsobs=1 && shift 1
-        test "$1" == "-l" && do_localobs=1  && shift 1
-        test "$1" == "-u" && do_update=1    && shift 1
-        test "$1" == "-ca" && do_curr_app=1 && shift 1
-        test "$1" == "-v" && verbose=1      && shift 1
+        test "$1" == "-t"   && title="$2"       && shift 2
+        test "$1" == "-k"   && keypos="$2"      && shift 2
+        test "$1" == "-kw"  && kwidthadd="$2"   && shift 2
+        test "$1" == "-x"   && xrange="$2"      && shift 2
+        test "$1" == "-y"   && yrange="$2"      && shift 2
+        test "$1" == "-e"   && ephemdb="$2"     && shift 2
+        test "$1" == "-i"   && obslist="$2"     && shift 2
+        test "$1" == "-r"   && rmobslist="$2"   && shift 2
+        test "$1" == "-p"   && npoints="$2"     && shift 2
+        test "$1" == "-c"   && do_cobsobs=1     && shift 1
+        test "$1" == "-cc"  && do_keep_cobsobs=1 && shift 1
+        test "$1" == "-l"   && do_localobs=1    && shift 1
+        test "$1" == "-u"   && do_update=1      && shift 1
+        test "$1" == "-ca"  && do_curr_app=1    && shift 1
+        test "$1" == "-v"   && verbose=1        && shift 1
     done
     
     local comet=$1
@@ -10671,8 +10660,8 @@ icqplot () {
     local pyprog    # full path to airfun.py
 
     (test "$showhelp" || test $# -lt 1) &&
-        echo "usage: icqplot [-h] [-v] [-c] [-l] [-u] [-f|-ff] [-m] [-n <g,k,desc>] [-d]" \
-            "[-o outfile | -ext outext|$outext] [-w|-s w,h|$size] [-t <plottitle>] [-k <keypos>] [-kw <keywidth-add>]" \
+        echo "usage: icqplot [-h] [-v] [-c] [-l] [-u] [-f|-fo|-ff] [-m] [-n <g,k,desc>] [-d]" \
+            "[-o outfile | -eps | -ps] [-w|-s w,h|$size] [-t <plottitle>] [-k <keypos>] [-kw <keywidth-add>]" \
             "[-ca] [-x YYYYMMDDstart:YYYYMMDDend] [-y ymin:ymax] [-p npoints] [-e ephemdb] [-i obsidlist]" \
             "<comet> [icqdat] [plottype|$type]" >&2 &&
         return 1
@@ -10864,13 +10853,17 @@ icqplot () {
     fi
     
     # check file extension of outfile
-    test -z "$outfile" && outfile=$comet.$type.$(date +'%y%m%d').$outext
-    str=${outfile##*.}
-    outext=${str,,}
-        case "$outext" in
-            png|eps|ps) ;;
-            *)  echo "ERROR: filetype of outfile is not supported." >&2 && return 255;;
-        esac
+    if [ "$outfile" ]
+    then
+        str=${outfile##*.}
+        outext=${str,,}
+    else
+        outfile=$comet.$type.$(date +'%y%m%d').${outext}
+    fi
+    case "$outext" in
+        png|eps|ps) ;;
+        *)  echo "ERROR: filetype of outfile is not supported." >&2 && return 255;;
+    esac
 
     
     # convert ICQ data files into CSV format
@@ -11278,7 +11271,7 @@ icqplot () {
         k=$(echo $newmodel | cut -d ',' -f2)
         newlabel=$(echo $newmodel | cut -d ',' -f3-)
         test -z "$newlabel" &&
-            newlabel=$(echo $g $k | awk '{printf("Model: m_0=%s n=%s", $1, $2)}')
+            newlabel=$(echo $g $k | awk '{printf("Model: H_0=%s n=%s", $1, $2)}')
         #num=100; nskip=3 # note: skip first and last 3 point
         python3 $pyprog mkephem -s "$cephem" $umin $umax $g $k $npoints | \
             grep -v "^#" > $tmpmodel
@@ -11287,7 +11280,7 @@ icqplot () {
     then
         g=$(echo "$cephem" | awk -F ',' '{x=$(NF-1); sub(/^[a-z ]*/,"",x); printf("%s", x)}')
         k=$(echo "$cephem" | awk -F ',' '{x=$NF; sub(/^[a-z ]*/,"",x); printf("%s", x)}')
-        mpclabel=$(echo $g $k | awk '{printf("MPC Model: m_0=%s n=%s", $1, $2)}')
+        mpclabel=$(echo $g $k | awk '{printf("MPC Model: H_0=%s n=%s", $1, $2)}')
         test "$verbose" && echo "# command: python3 $pyprog mkephem -s" \
             "\"$cephem\" $umin $umax $g $k $npoints" >&2
         python3 $pyprog mkephem -s "$cephem" $umin $umax $g $k $npoints | \
@@ -11324,32 +11317,39 @@ icqplot () {
 
     
     #-----------------------------------
-    #   fit brightness model
+    #   remove observations
     #-----------------------------------
     # if rmobslist is set, remove records of given id's from obsdata
+    # they wont show up in plot and are not used in fitting
     # note: obs ID is in column 4, software ID in column 11
-    softlist=$(echo $(cut -d ' ' -f 11 $tmpdat1 | sort -u))
+    #   special IDs in rmobslist are CCD and ALL
+    #   observations matching obslist are always kept
     if [ "$rmobslist" ]
     then
-        x=0 # 0 = skip, 1 = keep
-        test "$obslist" && case "$rmobslist" in
-            other|all) rmobslist=$obslist; x=1;;
-        esac
-        
-        cat $tmpdat1 | awk -v idlist="${rmobslist//,/ }" -v x=$x 'BEGIN{n=split(idlist, a, /[ ]+/)}{
-            for (i=1; i<=n; i++) {if ($4==a[i] || $11==a[i]) {if (x==1) print $0; next}}
-            if (x==0) print $0
-            }' > $obsdata
-
-        # TODO: do not remove record if $obslist is matched
-        false && cat $tmpdat1 | awk -v idlist="${rmobslist//,/ }" -v x=$x 'BEGIN{n=split(idlist, a, /[ ]+/)}{
-            for (i=1; i<=n; i++) {if ($4==a[i] || $11==a[i]) {if (x==1) print $0; next}}
-            if (x==0) print $0
+        cat $tmpdat1 | \
+        awk -v obslist="${obslist//,/ }" -v rmlist="${rmobslist//,/ }" \
+        'BEGIN{no=split(obslist, o, /[ ]+/); nr=split(rmlist, r, /[ ]+/)}{
+            # keep all observations from obslist
+            for (i=1; i<=no; i++) {
+                if (o[i] == "CCD" && $11 != "V") {print $0; next}
+                if ($4==o[i] || $11==o[i]) {print $0; next}
+            }
+            # reject observations from rmobslist
+            for (i=1; i<=nr; i++) {
+                if (toupper(r[i]) == "ALL") next
+                if (r[i] == "CCD" && $11 != "V") next
+                if ($4==r[i] || $11==r[i]) next
+            }
+            print $0
             }' > $obsdata
     else
         cp $tmpdat1 $obsdata
     fi
 
+
+    #-----------------------------------
+    #   fit brightness model
+    #-----------------------------------
     # fit model parameters
     if [ "$fittype" != "none" ] && [ "${type/mag/}" != "$type" ]
     then
@@ -11357,16 +11357,27 @@ icqplot () {
         # hmag at column 6
         case $fittype in
             all)
-                grep -v GON05 $obsdata | \
-                gplinfit - 12 6 2>/dev/null > $tmpdat2
+                gplinfit $obsdata 12 6 2>/dev/null > $tmpdat2
                 ;;
             obslist)
                 # observations matching obslist (both obs ID and software ID)
-                # force removing of GON05
-                cat $obsdata | awk -v idlist="${obslist//,/ }" -v rmlist="GON05" '{
+                cat $obsdata | awk -v idlist="${obslist//,/ }" '{
                     found=0
-                    if (rmlist~$4) next
                     if (idlist~$4 || idlist~$11) found=1
+                    if (found == 1) print $0
+                    }' > $tmpdat1
+                
+                test "$AI_DEBUG" &&
+                    echo "# fit obslist data (first 10 lines):" >&2 &&
+                    head $tmpdat1 >&2
+                gplinfit $tmpdat1 12 6 2>/dev/null > $tmpdat2
+                ;;
+            firstobs)
+                # observations matching first observer in obslist (both obs ID and software ID)
+                str="${obslist//,/ }"
+                cat $obsdata | awk -v obsid="${str%% *}" '{
+                    found=0
+                    if (obsid~$4 || obsid~$11) found=1
                     if (found == 1) print $0
                     }' > $tmpdat1
                 
@@ -11380,7 +11391,7 @@ icqplot () {
         head -1  $tmpdat2 | awk '{if (NF>=2) printf("# model fit: nobs=%d, rms=%.3f\n", $1+2, $2)}'
         afit=$(grep "^a " $tmpdat2 | awk '{if (NF>=3) printf("%.3f,%.3f", $2, $3)}')
         bfit=$(grep "^b " $tmpdat2 | awk '{if (NF>=3) printf("%.3f,%.3f", $2, $3)}')
-        grep "^a " $tmpdat2 | awk '{printf("  m0= %6.3f +- %.3f\n", $2, $3)}'
+        grep "^a " $tmpdat2 | awk '{printf("  H0= %6.3f +- %.3f\n", $2, $3)}'
         grep "^b " $tmpdat2 | awk '{printf("  n= %7.3f +- %.3f\n", $2/2.5, $3/2.5)}'
     fi
     
@@ -11389,7 +11400,7 @@ icqplot () {
     then
         g=$(echo $afit | awk -F ',' '{print $1}')
         k=$(echo $bfit | awk -F ',' '{print $1/2.5}')
-        fitlabel=$(printf "Model Fit: m_0=%.1f n=%.1f" $g $k)
+        fitlabel=$(printf "Model Fit: H_0=%.1f n=%.1f" $g $k)
         test "$verbose" && echo "# command: python3 $pyprog mkephem -s" \
             "\"$cephem\" $umin $umax $g $k $npoints" >&2
         python3 $pyprog mkephem -s "$cephem" $umin $umax $g $k $npoints | \
@@ -11405,7 +11416,6 @@ icqplot () {
     
     # initialize plot
     test "$verbose" && echo "# plot size=$size" >&2
-    str=${outfile##*.}
     case "$outext" in
         png)    term=pngcairo
                 termopts="enhanced dashlength 2.2"
@@ -11415,12 +11425,21 @@ icqplot () {
                 gridparam="lt 3 dt (2,8)"
                 docviewer="feh"
                 ;;
-        ps|eps) term=postscript
+        ps)     term=postscript
                 termopts="enhanced eps color blacktext dashlength 2.0"
                 font=""
                 fsize=$(echo ${size#,*} | awk '{printf("%.0f", sqrt($1)*7)}')
                 #docviewer="evince"
                 bwidth=1
+                docviewer="xdg-open"
+                ;;
+        eps)    term=epscairo
+                termopts="enhanced dashlength 1.0"
+                font="Arial"
+                fsize=$(echo ${size#,*} | awk '{printf("%.0f", sqrt($1)*5.5)}')
+                #docviewer="evince"
+                bwidth=1.2
+                gridparam="lt 3 dt (2,5)"
                 docviewer="xdg-open"
                 ;;
     esac
@@ -11506,7 +11525,7 @@ set label 'P' at screen $multiplot, graph 0.95 center" >> $tmpgp
                 ;;
         hmag*)
                 echo "set yrange [$yrange] reverse" >> $tmpgp
-                echo "set ylabel 'mag' offset 1" >> $tmpgp
+                echo "set ylabel 'mag - 5log{/Symbol D}' offset 1" >> $tmpgp
                 ;;
         coma)
                 echo "set yrange [$yrange]" >> $tmpgp
@@ -11565,6 +11584,7 @@ set label 'P' at screen $multiplot, graph 0.95 center" >> $tmpgp
         test "$type" == "mag" && echo "set rmargin 8" >> $tmpgp
     
     # check observers (or software key) for valid observations
+    softlist=$(echo $(cut -d ' ' -f 11 $obsdata | sort -u))
     if [ "$obslist" ]
     then
         str=$obslist
@@ -11596,6 +11616,7 @@ set label 'P' at screen $multiplot, graph 0.95 center" >> $tmpgp
     test $n -gt 200 && ptsize=1.1
     test $n -gt 400 && ptsize=1.0
     test $n -gt 800 && ptsize=0.9
+    test $outext == "eps" && ptsize=$(echo $ptsize | awk '{printf("%.2f", 0.5*$1)}')
 
     # observations not matching obslist (both obs ID and software ID)
     cat $obsdata | awk -v idlist="${obslist//,/ }" 'BEGIN{n=split(idlist, a, /[ ]+/)}{
@@ -11687,7 +11708,7 @@ $plotcmd '$obsdata'  using $xcol:($datefilter && stringcolumn($idcol) eq '$str' 
             lcolor="#00AA00"
             echo "\
 $plotcmd '$tmpmpc'  using $xcol:6 \\
-        title 'Distance' lw 1 lc rgb '$lcolor' dt '-' with lines axes x1y2 \\" >> $tmpgp
+        title 'Solar Distance' lw 1 lc rgb '$lcolor' dt '-' with lines axes x1y2 \\" >> $tmpgp
             plotcmd="    ,"
         fi
 
@@ -11697,7 +11718,7 @@ $plotcmd '$tmpmpc'  using $xcol:6 \\
             lcolor="#00AA00"
             echo "\
 $plotcmd '$tmpephem'  using $xcol:15 \\
-        title 'Phase' lw 1 lc rgb '$lcolor' dt '-' with lines axes x1y2 \\" >> $tmpgp
+        title 'Phase Angle' lw 1 lc rgb '$lcolor' dt '-' with lines axes x1y2 \\" >> $tmpgp
             plotcmd="    ,"
         fi
 
@@ -14769,23 +14790,27 @@ colorize () {
     # create 8bit color preview by normalizing intensities
     # according to noise statistics and downscaling the image
     local showhelp
-    local mode="full"
+    local mode="full"   # either full or center
     local outsize=1400  # size of long axis on output image
     local depth=8
-    local clip=3        # clip promille of brightest pixels
+    local maxclip=3     # clip promille of brightest pixels
     local do_overwrite
+    local do_lrgb_smooth
     local i
-    for i in $(seq 1 6)
+    for i in $(seq 1 7)
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-s" && outsize=$2 && shift 2
-        test "$1" == "-c" && clip=$2 && shift 2
+        test "$1" == "-m" && maxclip=$2 && shift 2
         test "$1" == "-o" && do_overwrite=1 && shift 1
         test "$1" == "-16" && depth=16 && shift 1
+        test "$1" == "-c" && mode="center" && shift 1
+        test "$1" == "-l" && do_lrgb_smooth=1 && shift 1
     done
     local ppmlist=${@:-"-"}
     local ppm
     local max
+    local cropsize
     local dim
     local outim
     local outlist
@@ -14796,21 +14821,34 @@ colorize () {
     local tmpim=$(mktemp "$tdir/tmp_img1_XXXXXX.ppm")
     local tmpim2=$(mktemp "$tdir/tmp_img2_XXXXXX.ppm")
     local tmpstat=$(mktemp "$tdir/tmp_stat_XXXXXX.dat")
+    local pyprog
     
     (test "$showhelp" || test $# -lt 1) &&
-        echo "usage: colorize [-s outsize|$outsize] [-c clip_permil|$clip] <ppm1> [ppm2 ...]" >&2 &&
+        echo "usage: colorize [-c] [-o] [-16] [-s outsize|$outsize] [-m maxclip_permil|$maxclip] <ppm1> [ppm2 ...]" >&2 &&
         return 1
     
-    # deal with scaling image dimension (outsize < 10)
+    # check for required python scripts
+    pyprog=$(which airfun.py)
+    test $? -ne 0 &&
+        echo "ERROR: missing python module airfun.py." >&2 && return 255
+
+    # determine crop size
+    if [ $mode == "center" ]
+    then
+        cropsize=$(imsize ${ppmlist%% *} | awk '{printf("%.0f %.0f", $1/2, $2/2)}')
+    else
+        cropsize=$(imsize ${ppmlist%% *})
+    fi
+    # determine output image size
     if [ ${outsize%.*} -lt 10 ]
     then
-        dim=$(imsize ${ppmlist%% *} | awk -v s=$outsize '{
-            printf("%.0fx%.0f", s*$1, s*$2)}')
+        # outsize < 10 is scaling factor
+        outsize=$(echo $cropsize | awk -v s=$outsize '{printf("%.0f %.0f", s*$1, s*$2)}')
     else
-        dim=${outsize}x${outsize}
+        outsize="${outsize} ${outsize}"
     fi
     outlist=""
-    max=$(echo $clip | awk '{printf("%f", 1-$1/1000)}')
+    max=$(echo $maxclip | awk '{printf("%f", 1-$1/1000)}')
     for ppm in $ppmlist
     do
         test ! -f "$ppm" &&
@@ -14827,14 +14865,14 @@ colorize () {
         esac
         test -e $outim && test -z "$do_overwrite" &&
             echo "ERROR: output image $outim already exists" && return 255
-        case $mode in
-            full)   convert $ppm -scale ${dim}\> $tmpim
-                    ;;
-            center) imcrop $ppm $outsize ${dim/x/ } > $tmpim
-                    ;;
-        esac
+        imcrop $ppm $cropsize | convert - -scale ${outsize/ /x}\> $tmpim
         echo AIstiff -q $opts -o $outim $tmpim $max >&2
         AIstiff -q $opts -o $outim $tmpim $max
+        if [ "$do_lrgb_smooth" ]
+        then
+            python3 $pyprog lrgb -t $opts $outim ${outim/.tif/.lrgb.tif}
+            outim=${outim/.tif/.lrgb.tif}
+        fi
         outlist="$outlist $outim"
     done
     AIdisplay $outlist
@@ -16531,7 +16569,6 @@ AIraw2rgb () {
             "[-b bayer_pattern] <img> [dark] [bad] [flat]" >&2 &&
         return 1
 
-    
     is_raw $img && type="raw"
     test -z "$type" && test "$bayer_pattern" && type="fitsbayer"
     test -z "$type" &&
@@ -22233,7 +22270,7 @@ AIbg () {
     done
     for i in $(seq 1 $nc)
     do
-        grep "^$i " $tmp2 | sort -nr -k2,2 > $tmp1
+        grep "^$i " $tmp2 | sort -nr -k3,3 > $tmp1
         # cat $tmp1 | sed -e 's,^,# ,' >&2
         tail -$((nx*ny*45/100)) $tmp1 | lines 1
     done

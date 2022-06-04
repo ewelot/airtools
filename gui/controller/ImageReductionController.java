@@ -213,6 +213,7 @@ public class ImageReductionController implements Initializable {
                 @Override
                 protected Void call() {
                     for (AirtoolsTask aTask : taskList) {
+                        opts="";
                         String skipParts="";
                         if (isCancelled()) break;
                         if (!aTask.isSelected() || exitCode != 0) continue;
