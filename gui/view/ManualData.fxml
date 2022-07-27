@@ -31,6 +31,7 @@
                         <RowConstraints vgrow="SOMETIMES" />
                         <RowConstraints vgrow="SOMETIMES" />
                         <RowConstraints vgrow="SOMETIMES" />
+                        <RowConstraints vgrow="SOMETIMES" />
                      </rowConstraints>
                      <children>
                         <Label text="Image Set:" />
@@ -41,6 +42,7 @@
                         <Label text="Dust tail angle in image (right=0):" GridPane.rowIndex="5" />
                         <Label text="Plasma tail length in pixel:" GridPane.rowIndex="6" />
                         <Label text="Plasma tail angle in image (right=0):" GridPane.rowIndex="7" />
+                        <Label text="Comment:" GridPane.rowIndex="8" />
                         <TextField fx:id="tfImageSet" editable="false" focusTraversable="false" style="-fx-background-color: #bbb, #f0f0f0;" text="co01 (1P)" GridPane.columnIndex="1" />
                         <ComboBox fx:id="cbChannel" prefWidth="150.0" GridPane.columnIndex="1" GridPane.rowIndex="1" />
                         <TextField fx:id="tfCCorr" GridPane.columnIndex="1" GridPane.rowIndex="2" />
@@ -49,6 +51,7 @@
                         <TextField fx:id="tfDtAng" GridPane.columnIndex="1" GridPane.rowIndex="5" />
                         <TextField fx:id="tfPtLen" GridPane.columnIndex="1" GridPane.rowIndex="6" />
                         <TextField fx:id="tfPtAng" GridPane.columnIndex="1" GridPane.rowIndex="7" />
+                        <TextField fx:id="tfComment" GridPane.columnIndex="1" GridPane.rowIndex="8" />
                      </children>
                   </GridPane>
                   <Label fx:id="labelWarning" text="&lt;Warnings&gt;" textFill="#d00000" />

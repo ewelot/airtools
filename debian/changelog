@@ -1,3 +1,13 @@
+airtools (4.2-1) experimental; urgency=medium
+
+  * Added creation of badpixel mask to main image reduction pipeline
+  * Added menu entry to import FITS stacks
+  * New expert menu including a custom badpixel mask tool and an extended
+    form for custom astrometric calibration
+  * Update to airfun.sh version 5.2 and airtools-cli version 1.4
+
+ -- Thomas Lehmann <t.lehmann@mailbox.org>  Tue, 26 Jul 2022 20:06:35 +0200
+
 airtools (4.1.11-1) experimental; urgency=medium
 
   * Update to airfun.sh version 5.1.15

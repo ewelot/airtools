@@ -32,12 +32,13 @@ public class Header {
         int i;
         
         // keywords related to manual data measurements
-        int acor;
-        int alim;
+        int acor=0;
+        int alim=0;
         int dlen;
         int dang;
         int plen;
         int pang;
+        String comment;
         
         // keywords related to photometry
         int aidx;
@@ -58,6 +59,7 @@ public class Header {
             if (! str.isBlank()) acor=Integer.valueOf(str); else acor=Integer.valueOf(undefNumber);
             str=prop.getProperty("AI_ALIM" + i, undefNumber).replaceAll("/.*", "").strip().replaceAll("'", "");
             if (! str.isBlank()) alim=Integer.valueOf(str); else alim=Integer.valueOf(undefNumber);
+
             str=prop.getProperty("AI_DLEN", undefNumber).replaceAll("/.*", "").strip().replaceAll("'", "");
             if (! str.isBlank()) dlen=Integer.valueOf(str); else dlen=Integer.valueOf(undefNumber);
             str=prop.getProperty("AI_DANG", undefNumber).replaceAll("/.*", "").strip().replaceAll("'", "");
@@ -66,9 +68,11 @@ public class Header {
             if (! str.isBlank()) plen=Integer.valueOf(str); else plen=Integer.valueOf(undefNumber);
             str=prop.getProperty("AI_PANG", undefNumber).replaceAll("/.*", "").strip().replaceAll("'", "");
             if (! str.isBlank()) pang=Integer.valueOf(str); else pang=Integer.valueOf(undefNumber);
-                
-            manualDataList.add(new ManualData(acor, alim, dlen, dang, plen, pang));
+            comment=prop.getProperty("AI_COMM", undefString).replaceAll("/.*", "").strip().replaceAll("'", "");
+
+            manualDataList.add(new ManualData(acor, alim, dlen, dang, plen, pang, comment));
         }
+
         
         // read photometry entries from header (max 9, one for each channel+catalog)
         for (i=1; i<=9; i++) {

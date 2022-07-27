@@ -12,7 +12,7 @@
 <?import javafx.scene.layout.VBox?>
 
 
-<DialogPane fx:id="setupAirtoolsDialogPane" xmlns="http://javafx.com/javafx/8.0.171" xmlns:fx="http://javafx.com/fxml/1" fx:controller="tl.airtoolsgui.controller.SetupAirtoolsController">
+<DialogPane fx:id="setupAirtoolsDialogPane" xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="tl.airtoolsgui.controller.SetupAirtoolsController">
    <content>
       <VBox spacing="16.0">
          <children>

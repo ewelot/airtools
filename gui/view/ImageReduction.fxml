@@ -34,6 +34,7 @@
                   <RowConstraints vgrow="NEVER" />
                   <RowConstraints vgrow="NEVER" />
                   <RowConstraints vgrow="NEVER" />
+                  <RowConstraints vgrow="NEVER" />
                </rowConstraints>
                <children>
                   <CheckBox fx:id="cbImageinfo" mnemonicParsing="false" text="Extract basic image info" />
@@ -42,18 +43,20 @@
                   <Label fx:id="labelDarks" minWidth="100.0" GridPane.columnIndex="1" GridPane.rowIndex="1" />
                   <CheckBox fx:id="cbFlats" mnemonicParsing="false" text="Create master flats" GridPane.rowIndex="2" />
                   <Label fx:id="labelFlats" minWidth="100.0" GridPane.columnIndex="1" GridPane.rowIndex="2" />
-                  <CheckBox fx:id="cbLights" mnemonicParsing="false" text="Calibrate light images" GridPane.rowIndex="3" />
-                  <Label fx:id="labelLights" minWidth="100.0" GridPane.columnIndex="1" GridPane.rowIndex="3" />
-                  <CheckBox fx:id="cbBgvar" mnemonicParsing="false" text="Check sky background" GridPane.rowIndex="4" />
-                  <Label fx:id="labelBgvar" minWidth="100.0" GridPane.columnIndex="1" GridPane.rowIndex="4" />
-                  <CheckBox fx:id="cbRegister" mnemonicParsing="false" text="Register images" GridPane.rowIndex="5" />
-                  <Label fx:id="labelRegister" minWidth="100.0" GridPane.columnIndex="1" GridPane.rowIndex="5" />
-                  <CheckBox fx:id="cbStack" mnemonicParsing="false" text="Stack images (on stars)" GridPane.rowIndex="6" />
-                  <Label fx:id="labelStack" minWidth="100.0" GridPane.columnIndex="1" GridPane.rowIndex="6" />
-                  <CheckBox fx:id="cbAstrometry" mnemonicParsing="false" text="Astrometric calibration" GridPane.rowIndex="7" />
-                  <Label fx:id="labelAstrometry" minWidth="100.0" GridPane.columnIndex="1" GridPane.rowIndex="7" />
-                  <CheckBox fx:id="cbCostack" mnemonicParsing="false" text="Stack images on comet" GridPane.rowIndex="8" />
-                  <Label fx:id="labelCostack" minWidth="100.0" GridPane.columnIndex="1" GridPane.rowIndex="8" />
+                  <CheckBox fx:id="cbBadpix" mnemonicParsing="false" text="Create badpixel mask" GridPane.rowIndex="3" />
+                  <Label fx:id="labelBadpix" minWidth="100.0" GridPane.columnIndex="1" GridPane.rowIndex="3" />
+                  <CheckBox fx:id="cbLights" mnemonicParsing="false" text="Calibrate light images" GridPane.rowIndex="4" />
+                  <Label fx:id="labelLights" minWidth="100.0" GridPane.columnIndex="1" GridPane.rowIndex="4" />
+                  <CheckBox fx:id="cbBgvar" mnemonicParsing="false" text="Check sky background" GridPane.rowIndex="5" />
+                  <Label fx:id="labelBgvar" minWidth="100.0" GridPane.columnIndex="1" GridPane.rowIndex="5" />
+                  <CheckBox fx:id="cbRegister" mnemonicParsing="false" text="Register images" GridPane.rowIndex="6" />
+                  <Label fx:id="labelRegister" minWidth="100.0" GridPane.columnIndex="1" GridPane.rowIndex="6" />
+                  <CheckBox fx:id="cbStack" mnemonicParsing="false" text="Stack images (on stars)" GridPane.rowIndex="7" />
+                  <Label fx:id="labelStack" minWidth="100.0" GridPane.columnIndex="1" GridPane.rowIndex="7" />
+                  <CheckBox fx:id="cbAstrometry" mnemonicParsing="false" text="Astrometric calibration" GridPane.rowIndex="8" />
+                  <Label fx:id="labelAstrometry" minWidth="100.0" GridPane.columnIndex="1" GridPane.rowIndex="8" />
+                  <CheckBox fx:id="cbCostack" mnemonicParsing="false" text="Stack images on comet" GridPane.rowIndex="9" />
+                  <Label fx:id="labelCostack" minWidth="100.0" GridPane.columnIndex="1" GridPane.rowIndex="9" />
                </children>
                <padding>
                   <Insets bottom="8.0" left="24.0" right="8.0" top="8.0" />

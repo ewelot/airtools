@@ -30,12 +30,18 @@ import tl.airtoolsgui.model.SimpleLogger;
  *
  * @author lehmann
  */
-public class CreateBadpixelMaskController implements Initializable {
+public class BadpixelMaskController implements Initializable {
 
     @FXML
-    private AnchorPane paneCreateBadpixelMask;
+    private AnchorPane paneBadpixelMask;
     @FXML
     private TextField tfImageSets;
+    @FXML
+    private TextField tfHot;
+    @FXML
+    private TextField tfCold;
+    @FXML
+    private CheckBox cbUseAllSets;
     @FXML
     private CheckBox cbDelete;
     @FXML
@@ -44,10 +50,6 @@ public class CreateBadpixelMaskController implements Initializable {
     private Button buttonStart;
     @FXML
     private Button buttonCancel;
-    @FXML
-    private TextField tfHot;
-    @FXML
-    private TextField tfCold;
 
     private SimpleLogger logger;
     private StringProperty projectDir = new SimpleStringProperty();
@@ -89,6 +91,7 @@ public class CreateBadpixelMaskController implements Initializable {
         }
         
         // add parameters
+        if (cbUseAllSets.isSelected()) cmdOpts.add("-a");
         if (tfHot.getText().isBlank()) {
             cmdArgs.add("\"\"");
         } else {

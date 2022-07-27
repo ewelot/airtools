@@ -5,6 +5,10 @@
  */
 package tl.airtoolsgui.model;
 
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import javafx.beans.property.BooleanProperty;
+import javafx.beans.property.SimpleBooleanProperty;
 import javafx.concurrent.Task;
 import javafx.scene.control.Button;
 
@@ -22,12 +26,27 @@ public class AirtoolsCLICommand {
     private final SimpleLogger logger;
     private final ShellScript sh;
     private Task task;
+    private Thread thread;
+    private BooleanProperty isRunning;
+    private int exitcode;
+    private String resultString;
 
-    public AirtoolsCLICommand(String cmdName, Button btn, SimpleLogger logger, ShellScript sh) {
+    public AirtoolsCLICommand(String cmdName, Button btn, SimpleLogger logger, ShellScript sh, BooleanProperty isRunning) {
         this.cmdName = cmdName;
+        this.btnStart = btn;
         this.logger = logger;
         this.sh = sh;
-        this.btnStart = btn;
+        this.isRunning = isRunning;
+        this.exitcode = -1;
+        this.resultString = "";
+    }
+
+    public AirtoolsCLICommand(String cmdName, Button btn, SimpleLogger logger, ShellScript sh) {
+        this(cmdName, btn, logger, sh, new SimpleBooleanProperty(true));
+    }
+
+    public AirtoolsCLICommand(Button btn, SimpleLogger logger, ShellScript sh, BooleanProperty isRunning) {
+        this("usercmd", btn, logger, sh, isRunning);
     }
 
     public AirtoolsCLICommand(Button btn, SimpleLogger logger, ShellScript sh) {
@@ -45,8 +64,17 @@ public class AirtoolsCLICommand {
     public void setArgs(String[] args) {
         this.args = args;
     }
-
+    
+    public int getExitCode () {
+        return exitcode;
+    }
+    
+    public String getResultString () {
+        return resultString;
+    }
+    
     public void run() {
+        /* returns sh.getOutput() */
         final String labelStart;
         String colorStart = "#333333";
         String colorStop = "#f00000";
@@ -56,6 +84,9 @@ public class AirtoolsCLICommand {
         if (task == null) {
             // ready for new task
             logger.log("");
+            exitcode=-1;
+            resultString="";
+            isRunning.setValue(Boolean.TRUE);
             //logger.log("# " + "Running ds9cmd " + taskName + opts + args);
             logger.statusLog("Running " + cmdName + " ...");
             if (btnStart != null) {
@@ -94,13 +125,13 @@ public class AirtoolsCLICommand {
                     sh.setArgs(argsStr);
                     //sh.runFunction("\"" + userCmd + "\"");
                     sh.runFunction(cmdName);
-                    exitCode=sh.getExitCode();
-                    //logger.log("shell script finished with " + exitCode);
                     return null;
                 }
             };
             task.setOnSucceeded(e -> {
-                if (sh.getExitCode() == 0) {
+                exitcode=sh.getExitCode();
+                resultString=sh.getOutput();
+                if (exitcode == 0) {
                     logger.statusLog("Task finished");
                 } else {
                     logger.statusLog("Task failed");
@@ -110,23 +141,26 @@ public class AirtoolsCLICommand {
                     btnStart.setText(labelStart);
                     btnStart.setStyle("-fx-text-fill: " + colorStart);
                 }
+                isRunning.setValue(Boolean.FALSE);
             });
             task.setOnCancelled(e -> {
+                exitcode=-1;
                 logger.statusLog("Task cancelled");
                 task=null;
                 if (btnStart != null) {
                     btnStart.setText(labelStart);
                     btnStart.setStyle("-fx-text-fill: " + colorStart);
                 }
+                isRunning.setValue(Boolean.FALSE);
             });
-            Thread thread = new Thread(task);
+            thread = new Thread(task);
             thread.setDaemon(true);
             thread.start();
         } else {
             // task is running, interrupt it
             try {
-                int exitCode = sh.killProcess();
-                if (exitCode != 0) {
+                int killExitCode = sh.killProcess();
+                if (killExitCode != 0) {
                     logger.log("Failed to kill process");
                     logger.statusLog("Failed to kill process");
                 } else {
@@ -137,7 +171,16 @@ public class AirtoolsCLICommand {
                 logger.log("Failed to cancel task");
                 logger.statusLog("Failed to cancel task");
             }
+            exitcode=-1;
+            isRunning.setValue(Boolean.FALSE);
         }
     }
 
+    public void waitFor() {
+        if (task != null && thread.isAlive()) try {
+            thread.join();
+        } catch (InterruptedException ex) {
+            Logger.getLogger(AirtoolsCLICommand.class.getName()).log(Level.SEVERE, null, ex);
+        }
+    }
 }

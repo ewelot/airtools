@@ -45,6 +45,10 @@ public class ImageReductionController implements Initializable {
     @FXML
     private Label labelFlats;
     @FXML
+    private CheckBox cbBadpix;
+    @FXML
+    private Label labelBadpix;
+    @FXML
     private CheckBox cbLights;
     @FXML
     private Label labelLights;
@@ -135,6 +139,7 @@ public class ImageReductionController implements Initializable {
         cbImageinfo.setSelected(false);
         cbDarks.setSelected(false);
         cbFlats.setSelected(false);
+        cbBadpix.setSelected(false);
         cbLights.setSelected(false);
         cbBgvar.setSelected(false);
         cbRegister.setSelected(false);
@@ -156,6 +161,10 @@ public class ImageReductionController implements Initializable {
         AirtoolsTask taskFlats = new AirtoolsTask(
                 "flats", cbFlats, labelFlats);
         taskList.add(taskFlats);
+        
+        AirtoolsTask taskBadpix = new AirtoolsTask(
+                "badpix", cbBadpix, labelBadpix);
+        taskList.add(taskBadpix);
         
         AirtoolsTask taskLights = new AirtoolsTask(
                 "lights", cbLights, labelLights);

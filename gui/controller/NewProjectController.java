@@ -18,6 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -47,6 +48,7 @@ import javafx.scene.control.TextField;
 import javafx.scene.layout.AnchorPane;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
+import javafx.util.StringConverter;
 import tl.airtoolsgui.model.Observer;
 import tl.airtoolsgui.model.SitesList;
 
@@ -101,12 +103,34 @@ public class NewProjectController implements Initializable {
     private final List<String> siteList = new ArrayList<>();
     private final File distDir = new File("/usr/share/airtools");
     private String airtoolsConfDir;
+    private final DateTimeFormatter dateFormatter = 
+        DateTimeFormatter.ofPattern("yyyy-MM-dd");
     
     /**
      * Initializes the controller class.
      */
     @Override
     public void initialize(URL url, ResourceBundle rb) {
+        // use custom format with all DatePickers
+        dpDay.setConverter(new StringConverter<LocalDate>() {
+            @Override 
+            public String toString(LocalDate date) {
+                if (date != null) {
+                    return dateFormatter.format(date);
+                } else {
+                    return "";
+                }
+            }
+
+            @Override 
+            public LocalDate fromString(String string) {
+                if (string != null && !string.isEmpty()) {
+                    return LocalDate.parse(string, dateFormatter);
+                } else {
+                    return null;
+                }
+            }
+        });
         dpDay.setValue(LocalDateTime.now().minusHours(22).toLocalDate());
     }    
     
@@ -298,8 +322,9 @@ public class NewProjectController implements Initializable {
     private boolean hasFormError () {
         // check for new project directory
         File pDir = new File(tfProjectDir.getText());
-        if (pDir.exists()) {
-            // TODO: show alert if directory exists and is not empty
+        String rcFileName = tfProjectDir.getText() + "/.airtoolsrc";
+        File rcFile = new File(rcFileName);
+        if (pDir.exists() && rcFile.exists()) {
             tfErrorMsg.setText("ERROR: project directory already exists");
             return true;
         }
@@ -321,6 +346,8 @@ public class NewProjectController implements Initializable {
         System.out.println("NewProjectController: Apply");
         //showUnderConstructionDialog();
         
+        String rcFileName = tfProjectDir.getText() + "/.airtoolsrc";
+        File rcFile = new File(rcFileName);
         FileWriter fileWriter = null;
         DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyMMdd");
         String day = dpDay.getValue().format(fmt);
@@ -333,8 +360,11 @@ public class NewProjectController implements Initializable {
             // create project directory
             File newDir = new File(tfProjectDir.getText());
             if (newDir.exists()) {
-                tfErrorMsg.setText("ERROR: the project directory already exists");
-                return;
+                if (rcFile.exists()) {
+                    System.out.println("rcFile = " + rcFile.getAbsolutePath());
+                    tfErrorMsg.setText("ERROR: the project directory already exists");
+                    return;
+                }
             } else {
                 if (! newDir.mkdirs()) {
                     tfErrorMsg.setText("ERROR: cannot create the project directory");
@@ -356,8 +386,6 @@ public class NewProjectController implements Initializable {
             if (! newDir.exists()) logger.log("WARNING: raw files directory does not yet exist");
 
             // create .airtoolsrc
-            String rcFileName = tfProjectDir.getText() + "/.airtoolsrc";
-            File rcFile = new File(rcFileName);
             fileWriter = new FileWriter(rcFileName);
             PrintWriter printWriter = new PrintWriter(fileWriter);
             // mandatory settings

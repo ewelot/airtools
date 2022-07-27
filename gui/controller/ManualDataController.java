@@ -52,6 +52,8 @@ public class ManualDataController implements Initializable {
     private TextField tfPtLen;
     @FXML
     private TextField tfPtAng;
+    @FXML
+    private TextField tfComment;
 
     private ImageSet imgSet;
 
@@ -113,6 +115,7 @@ public class ManualDataController implements Initializable {
         tfDtAng.setText("");
         tfPtLen.setText("");
         tfPtAng.setText("");
+        tfComment.setText("");
         
         try {
             if (imgSet != null) {
@@ -139,6 +142,9 @@ public class ManualDataController implements Initializable {
                     }
                     if (myManualData.getPang()!= -1) {
                         tfPtAng.setText(Integer.toString(myManualData.getPang()));
+                    }
+                    if (! myManualData.getComment().isBlank()) {
+                        tfComment.setText(myManualData.getComment());
                     }
                 }
             }
@@ -191,6 +197,7 @@ public class ManualDataController implements Initializable {
                 ,tfDtAng.getText()
                 ,tfPtLen.getText()
                 ,tfPtAng.getText()
+                ,tfComment.getText()
         };
         return sarray;
     }

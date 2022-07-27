@@ -197,8 +197,17 @@ def fits3toppm(param):
     rgb.ppmsave(outppm, strip=1)
     exit()
 
-# convert FITS cube to PPM (stdout)
+# convert FITS cube to PPM (stdout), optionally apply scaling
+# syntax: fitscubetoppm [-m mult] [-a add] infits outppm
 def fitscubetoppm(param):
+    mult=1
+    add=0
+    if(param[0]=='-m'):
+        mult=float(param[1])
+        del param[0:2]
+    if(param[0]=='-a'):
+        add=float(param[1])
+        del param[0:2]
     infits = param[0]
     outpnm = param[1]
 
@@ -209,7 +218,7 @@ def fitscubetoppm(param):
         source = pyvips.Source.new_from_descriptor(sys.stdin.fileno())
         inimg = pyvips.Image.new_from_source(source, "")
 
-    inimg.copy(interpretation="rgb16").ppmsave(outpnm, strip=1)
+    inimg.linear(mult,add).copy(interpretation="rgb16").ppmsave(outpnm, strip=1)
     exit()
 
 # crop an image
@@ -249,8 +258,9 @@ def imcrop(param):
     exit()
 
 
-# image statistics (per channel output: min max median (stddev))
-# imstat -m "$fname"
+# image statistics (per channel output: min max mean (stddev))
+# imstat [-m] "$fname"
+# note: integer statistics assuming input is 8bit or 16bit integer data
 def imstat(param):
     medianbox=""
     if(param[0]=='-m'):
@@ -282,24 +292,48 @@ def imstat(param):
             end='')
     exit()
 
+# get min/max of image data
+# datarange "$fname"
+def datarange(param):
+    infile = param[0]
+
+    # reading input image
+    if (infile and infile != '-'):
+        inimg = pyvips.Image.new_from_file(infile)
+    else:
+        source = pyvips.Source.new_from_descriptor(sys.stdin.fileno())
+        inimg = pyvips.Image.new_from_source(source, "")
+
+    statsimg=inimg.stats()
+
+    # writing output values
+    print('{:f} {:f}'.format(
+        statsimg.getpoint(0, 0)[0],
+        statsimg.getpoint(1, 0)[0]),
+        end='')
+    exit()
+
 # basic CCD image reduction: outpnm = mult * (inpnm-dark)/flat + add
 #   note about sequence of operations
 #   - add preadd
 #   - multiply premult
-#   - flip imahe (top-bottom)
+#   - flip image (top-bottom)
 #   - rotate image (180 degrees)
 #   - subtract dark image
 #   - divide by flat image
+#   - clean hot pixel
 #   - multiply by mult (array for different bands)
 #   - add offset value add (array for different bands)
 #   - optionally convert from rgb to gray
-# syntax: pnmccdred [-f] [-g] [-preadd val] [-premult val] [-tb] [-r180] inpnm outpnm dark flat mult add
+# syntax: pnmccdred [-f] [-g] [-preadd val] [-premult val] [-bpat bayerpattern] [-tb] [-r180] \
+#   inpnm outpnm dark flat bad mult add
 def pnmccdred(param):
     outfmt='ppm'
     outstrip=True
     outgray=False
     preadd=0
     premult=1
+    bayerpattern=""
     flip=False
     rot=False
     if(param[0]=='-f'):
@@ -315,6 +349,9 @@ def pnmccdred(param):
     if(param[0]=='-premult'):
         premult=float(param[1])
         del param[0:2]
+    if(param[0]=='-bpat'):
+        bayerpattern=param[1]
+        del param[0:2]
     if(param[0]=='-tb'):
         flip=True
         del param[0]
@@ -326,8 +363,9 @@ def pnmccdred(param):
     np = len(param)
     if (np > 2): dark = param[2]
     if (np > 3): flat = param[3]
-    if (np > 4): mult = param[4]
-    if (np > 5): add = param[5]
+    if (np > 4): bad  = param[4]
+    if (np > 5): mult = param[5]
+    if (np > 6): add = param[6]
     if (mult): mult = tuple(float(val) for val in tuple(mult.split(",")))
     if (add):  add  = tuple(float(val) for val in tuple(add.split(",")))
 
@@ -378,18 +416,24 @@ def pnmccdred(param):
     # HAS NO EFFECT!
     #if (inimg.bands == 1 and outfmt == 'fits'):
     #    code += """.bandmean().copy(interpretation='grey16')"""
-    outimg = eval(code)
-    
 
-    # writing output image
-    if (outfilename and outfilename != '-'):
-        if (outfmt=='fits'):
-            outimg.fitssave(outfilename)
+    if bad:
+        tmpimg = eval(code)
+        if (bayerpattern):
+            cleanhotpixel(["-b", bayerpattern, tmpimg, bad, outfilename])
         else:
-            outimg.ppmsave(outfilename, strip=1)
+            cleanhotpixel([tmpimg, bad, outfilename])
     else:
-        target = pyvips.Target.new_to_descriptor(sys.stdout.fileno())
-        outimg.write_to_target(target, "." + outfmt, strip=outstrip)
+        outimg = eval(code)
+        # writing output image
+        if (outfilename and outfilename != '-'):
+            if (outfmt=='fits'):
+                outimg.fitssave(outfilename)
+            else:
+                outimg.ppmsave(outfilename, strip=1)
+        else:
+            target = pyvips.Target.new_to_descriptor(sys.stdout.fileno())
+            outimg.write_to_target(target, "." + outfmt, strip=outstrip)
 
     exit()
 
@@ -730,32 +774,79 @@ def pnmcombine(param):
         outimg.write_to_target(target, "." + outfmt, strip=outstrip)
     exit()
 
-# clean bad pixels in bayered image according to mask
-# usage: cleanbadpixel <image> <badmask> [outimage]
+# clean bad pixels in image according to mask (bilinear interpolation)
+# usage: cleanhotpixel [-b bayerpattern] <image> <badmask> [outimage]
 # default: write result to stdout (pgm format)
-def cleanbadpixel(param):
+# note: bayerpattern is filter at lower left corner
+def cleanhotpixel(param):
+    bayerpattern=""
     outfilename="-"
     outfmt="ppm"
     outstrip=True
-    infilename = param[0]
-    maskfilename = param[1]
+    if(isinstance(param[0],str) and param[0]=='-b'):
+        bayerpattern=param[1]
+        del param[0:2]
+
+    # parameters
+    if isinstance(param[0], pyvips.vimage.Image):
+        image = param[0]
+    else:
+        image = pyvips.Image.new_from_file(param[0])
+    badmask = pyvips.Image.new_from_file(param[1])
     if(len(param)>2):
         outfilename = param[2]
 
-    image = pyvips.Image.new_from_file(infilename)
-    badmask = pyvips.Image.new_from_file(maskfilename)
-
     w = image.width
     h = image.height
-    p00 = image.subsample(2, 2).median(3).zoom(2,2)
-    p10 = image.embed(-1, 0, w, h).subsample(2, 2).median(3).zoom(2,2)
-    p01 = image.embed(0, -1, w, h).subsample(2, 2).median(3).zoom(2,2)
-    p11 = image.embed(-1, -1, w, h).subsample(2, 2).median(3).zoom(2,2)
 
-    index = pyvips.Image.new_from_array([[0, 1], [2, 3]]).replicate(w/2, h/2)
-    median = index.case([p00, p10, p01, p11])
+    # unused old code
+    if ("mode" == "median"):
+        # take 3x3 median of next but one pixels
+        p00 = image.subsample(2, 2).median(3).zoom(2,2)
+        p10 = image.embed(-1, 0, w, h).subsample(2, 2).median(3).zoom(2,2)
+        p01 = image.embed(0, -1, w, h).subsample(2, 2).median(3).zoom(2,2)
+        p11 = image.embed(-1, -1, w, h).subsample(2, 2).median(3).zoom(2,2)
 
-    outimg = (badmask > 0).ifthenelse(median, image)
+        index = pyvips.Image.new_from_array([[0, 1], [2, 3]]).replicate(w/2, h/2)
+        median = index.case([p00, p10, p01, p11])
+        outimg = (badmask > 0).ifthenelse(median, image)
+
+    if (bayerpattern == ""):
+        # gray image
+        pl = image.embed(-1, 0, w, h)
+        pr = image.embed(1, 0, w, h)
+        pt = image.embed(0, -1, w, h)
+        pb = image.embed(0, 1, w, h)
+        #pnew = pyvips.Image.bandrank(parray, 4)
+        pgray = pl.bandjoin([pr, pt, pb]).bandmean()
+
+        outimg = (badmask > 0).ifthenelse(pgray, image)
+    else:
+        # bayered image
+        if (bayerpattern[1:2] == "G"):
+            greenmask = pyvips.Image.new_from_array([[1, 0], [0, 1]]).replicate(w/2, h/2)
+        else:
+            greenmask = pyvips.Image.new_from_array([[0, 1], [1, 0]]).replicate(w/2, h/2)
+        # interpolate green pixels
+        ptl = image.embed(-1, -1, w, h)
+        ptr = image.embed(1, -1, w, h)
+        pbl = image.embed(-1, 1, w, h)
+        pbr = image.embed(1, 1, w, h)
+        #pnew = pyvips.Image.bandrank(parray, 4)
+        pgreen = ptl.bandjoin([ptr, pbl, pbr]).bandmean()
+
+        # interpolate red and blue pixels
+        pl = image.embed(-2, 0, w, h)
+        pr = image.embed(2, 0, w, h)
+        pt = image.embed(0, -2, w, h)
+        pb = image.embed(0, 2, w, h)
+        #pnew = pyvips.Image.bandrank(parray, 4)
+        predblue = pl.bandjoin([pr, pt, pb]).bandmean()
+
+        outimg = (badmask > 0).ifthenelse(
+            (greenmask > 0).ifthenelse(pgreen, predblue),
+            image)
+
     # writing output image
     if (outfilename and outfilename != '-'):
         if (outfmt=='fits'):

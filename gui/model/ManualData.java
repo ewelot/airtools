@@ -16,6 +16,7 @@ public class ManualData {
     private final int dang;
     private final int plen;
     private final int pang;
+    private final String comment;
 
     public int getAcor() {
         return acor;
@@ -41,12 +42,17 @@ public class ManualData {
         return pang;
     }
     
-    public ManualData (int acor, int alim, int dlen, int dang, int plen, int pang) {
+    public String getComment() {
+        return comment;
+    }
+    
+    public ManualData (int acor, int alim, int dlen, int dang, int plen, int pang, String comment) {
         this.acor = acor;
         this.alim = alim;
         this.dlen = dlen;
         this.dang = dang;
         this.plen = plen;
         this.pang = pang;
+        this.comment = comment;
     }
 }

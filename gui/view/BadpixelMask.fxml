@@ -13,7 +13,7 @@
 <?import javafx.scene.layout.RowConstraints?>
 <?import javafx.scene.layout.VBox?>
 
-<AnchorPane fx:id="paneCreateBadpixelMask" xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="tl.airtoolsgui.controller.CreateBadpixelMaskController">
+<AnchorPane fx:id="paneBadpixelMask" xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" fx:controller="tl.airtoolsgui.controller.BadpixelMaskController">
    <children>
       <VBox spacing="16.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
          <children>
@@ -26,6 +26,7 @@
                      </columnConstraints>
                      <rowConstraints>
                         <RowConstraints vgrow="SOMETIMES" />
+                        <RowConstraints vgrow="ALWAYS" />
                         <RowConstraints vgrow="ALWAYS" />
                         <RowConstraints vgrow="ALWAYS" />
                      </rowConstraints>
@@ -43,8 +44,10 @@
                               <Insets />
                            </GridPane.margin>
                         </HBox>
-                        <Label text="Delete previous data:" GridPane.rowIndex="2" />
-                        <CheckBox fx:id="cbDelete" minHeight="26.0" mnemonicParsing="false" prefHeight="26.0" selected="false" GridPane.columnIndex="1" GridPane.rowIndex="2" />
+                        <Label text="Include masks of other sets:" GridPane.rowIndex="2" />
+                        <CheckBox fx:id="cbUseAllSets" minHeight="-Infinity" mnemonicParsing="false" prefHeight="26.0" selected="true" GridPane.columnIndex="1" GridPane.rowIndex="2" />
+                        <Label text="Delete existing masks:" GridPane.rowIndex="3" />
+                        <CheckBox fx:id="cbDelete" minHeight="26.0" mnemonicParsing="false" prefHeight="26.0" selected="false" GridPane.columnIndex="1" GridPane.rowIndex="3" />
                      </children>
                   </GridPane>
                   <Label fx:id="labelWarning" text="&lt;Warnings&gt;" textFill="#d00000" />

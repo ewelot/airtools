@@ -98,6 +98,10 @@ public class MainController implements Initializable {
     @FXML
     private MenuItem menuArchive;
     @FXML
+    private MenuItem menuImport;
+    @FXML
+    private MenuItem menuExport;
+    @FXML
     private MenuItem menuExit;
 
     @FXML
@@ -112,9 +116,14 @@ public class MainController implements Initializable {
     private MenuItem menuEditCameraParam;
 
     @FXML
-    private Menu menuAnalysis;
+    private Menu menuExpert;
     @FXML
     private MenuItem menuBadPixel;
+    @FXML
+    private MenuItem menuWCSCalib;
+
+    @FXML
+    private Menu menuAnalysis;
     @FXML
     private MenuItem menuList;
     @FXML
@@ -151,12 +160,20 @@ public class MainController implements Initializable {
     private CometPhotometryController paneCometPhotometryController;
     @FXML
     private MiscToolsController paneMiscToolsController;
+    
+    // Controllers with action on re-open
     @FXML
     private AstrometryController astrometryController;
+    @FXML
+    private WCSCalibController wcscalibController;
+    @FXML
+    private ImportFitsStacksController importFitsStacksController;
 
     // additional windows (stages)
+    private Stage windowImportFitsStacks;
     private Stage windowArchive;
-    private Stage windowCreateBadpixelMask;
+    private Stage windowBadpixelMask;
+    private Stage windowWCSCalib;
     private Stage windowListResults;
     private Stage windowLightCurve;
     private Stage windowMultiApPhotometry;
@@ -197,6 +214,13 @@ public class MainController implements Initializable {
         menuArchive.setOnAction((event) -> {
             showWindowArchive();
         });
+        menuImport.setOnAction((event) -> {
+            showWindowImportFitsStacks();
+        });
+        menuExport.setOnAction((event) -> {
+            showUnderConstructionDialog();
+            //showWindowExport();
+        });
         menuExit.setOnAction((event) -> {
             Platform.exit();
         });
@@ -215,13 +239,16 @@ public class MainController implements Initializable {
             startTextEditor("camera.dat", true);
         });
         
-        // "Analysis" menu actions
+        // "Expert" menu actions
         menuBadPixel.setOnAction((event) -> {
-            //listResults();
-            showWindowCreateBadpixelMask();
+            showWindowBadpixelMask();
         });
+        menuWCSCalib.setOnAction((event) -> {
+            showWindowWCSCalib();
+        });
+        
+        // "Analysis" menu actions
         menuList.setOnAction((event) -> {
-            //listResults();
             showWindowListResults();
         });
         menuLightCurve.setOnAction((event) -> {
@@ -323,7 +350,7 @@ public class MainController implements Initializable {
         tzoff.setValue(i);
 
         paneImageReductionController.setReferences(sh, logger);
-        paneCometPhotometryController.setReferences(sh, logger);        
+        paneCometPhotometryController.setReferences(sh, logger);
         paneCometPhotometryController.projectDir.bind(projectDir);
         paneMiscToolsController.setReferences(sh, logger);        
         paneMiscToolsController.projectDir.bind(projectDir);
@@ -732,10 +759,9 @@ public class MainController implements Initializable {
             
             /* check for new program version */
             System.out.println("running check_new_version ...");
-            boolean quiet=true;
             sh.setOpts("-q -c");
             sh.setArgs("");
-            sh.runFunction("check_new_version", quiet);
+            sh.runFunction("check_new_version");
             System.out.println("check_new_version finished");
 
         } catch (IOException ex) {
@@ -764,6 +790,29 @@ public class MainController implements Initializable {
     }
     
     
+    public void showWindowImportFitsStacks() {
+        System.out.println("showWindowImportFitsStacks()");
+        if (windowImportFitsStacks == null) try {
+            FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource("/tl/airtoolsgui/view/ImportFitsStacks.fxml"));
+            Parent parent = fxmlLoader.load();
+            importFitsStacksController = fxmlLoader.<ImportFitsStacksController>getController();
+            importFitsStacksController.setReferences(sh, logger, projectDir, tempDir);
+
+            Scene scene = new Scene(parent);
+            windowImportFitsStacks = new Stage();
+            //windowImportFitsStacks.initModality(Modality.APPLICATION_MODAL);
+            windowImportFitsStacks.setScene(scene);
+            windowImportFitsStacks.setTitle("Import FITS Stacks");
+        } catch (IOException ex) {
+            Logger.getLogger(MainController.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        if (windowImportFitsStacks != null)
+            importFitsStacksController.updateCameras();
+        //if (controller != null) controller.resetValues();
+        windowImportFitsStacks.showAndWait();
+    }
+    
+    
     public void showWindowListResults() {
         System.out.println("showWindowListResults()");
         if (windowListResults == null) try {
@@ -784,23 +833,45 @@ public class MainController implements Initializable {
     }
     
     
-    public void showWindowCreateBadpixelMask() {
-        System.out.println("showWindowCreateBadpixelMask()");
-        if (windowCreateBadpixelMask == null) try {
-            FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource("/tl/airtoolsgui/view/CreateBadpixelMask.fxml"));
+    public void showWindowBadpixelMask() {
+        System.out.println("showWindowBadpixelMask()");
+        if (windowBadpixelMask == null) try {
+            FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource("/tl/airtoolsgui/view/BadpixelMask.fxml"));
             Parent parent = fxmlLoader.load();
-            CreateBadpixelMaskController controller = fxmlLoader.<CreateBadpixelMaskController>getController();
+            BadpixelMaskController controller = fxmlLoader.<BadpixelMaskController>getController();
             controller.setReferences(sh, logger, projectDir);
 
             Scene scene = new Scene(parent);
-            windowCreateBadpixelMask = new Stage();
+            windowBadpixelMask = new Stage();
             //windowListResults.initModality(Modality.APPLICATION_MODAL);
-            windowCreateBadpixelMask.setScene(scene);
-            windowCreateBadpixelMask.setTitle("Create BadPixel Mask");
+            windowBadpixelMask.setScene(scene);
+            windowBadpixelMask.setTitle("Custom BadPixel Mask");
         } catch (IOException ex) {
             Logger.getLogger(MainController.class.getName()).log(Level.SEVERE, null, ex);
         }
-        windowCreateBadpixelMask.showAndWait();
+        windowBadpixelMask.showAndWait();
+    }
+    
+    
+    public void showWindowWCSCalib() {
+        System.out.println("showWindowWCSCalib()");
+        if (windowWCSCalib == null) try {
+            FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource("/tl/airtoolsgui/view/WCSCalib.fxml"));
+            Parent parent = fxmlLoader.load();
+            wcscalibController = fxmlLoader.<WCSCalibController>getController();
+            wcscalibController.setReferences(sh, logger, projectDir, tempDir);
+
+            Scene scene = new Scene(parent);
+            windowWCSCalib = new Stage();
+            //windowWCSCalib.initModality(Modality.APPLICATION_MODAL);
+            windowWCSCalib.setScene(scene);
+            windowWCSCalib.setTitle("Custom WCS Calibration");
+        } catch (IOException ex) {
+            Logger.getLogger(MainController.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        if (windowWCSCalib != null)
+            wcscalibController.updateImageSetList();
+        windowWCSCalib.showAndWait();
     }
     
     

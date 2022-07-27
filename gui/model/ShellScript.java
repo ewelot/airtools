@@ -5,9 +5,17 @@
  */
 package tl.airtoolsgui.model;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.function.Consumer;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javafx.concurrent.Task;
 
 /**
@@ -22,10 +30,12 @@ public class ShellScript {
     private String opts="";
     private String args="";
     private String workingDir="";
-    private Process process;
+    private static String output="";
     private int exitCode;
+    private Process process;
     private SimpleLogger logger;
 
+    
     public void setLog(SimpleLogger logger) {
         this.logger = logger;
     }
@@ -58,6 +68,14 @@ public class ShellScript {
         this.workingDir = workingDir;
     }
 
+    public String getOutput() {
+        return output;
+    }
+
+    public void setOutput(String str) {
+        this.output = str;
+    }
+
     public long getPID() {
         return process.pid();
     }
@@ -65,15 +83,37 @@ public class ShellScript {
     public int getExitCode() {
         return exitCode;
     }
+    
+    
+    private static CompletableFuture<Boolean> redirectToLogger(
+            final InputStream inputStream,
+            final Consumer<String> logLineConsumer,
+            final boolean saveResult) {
+        return CompletableFuture.supplyAsync(() -> {
+            try (
+                InputStreamReader inputStreamReader = new InputStreamReader(inputStream);
+                BufferedReader bufferedReader = new BufferedReader(inputStreamReader);
+            ) {
+                String line;
+                while((line = bufferedReader.readLine()) != null) {
+                    /* check for # is a workaround because both stdin and stderr need to
+                       be combined into single stream within airtools-cli to get them
+                       synchronized in both log file and textarea
+                    */
+                    if (saveResult && (! line.startsWith("#"))) output = line;
+                    logLineConsumer.accept(line);
+                }
+                return true;
+            } catch (IOException e) {
+                return false;
+            }
+        });
+    }
 
     public void runFunction(String funcName) {
-        boolean quiet=false;
-        runFunction(funcName, quiet);
-    }
-    
-    public void runFunction(String funcName, boolean quiet) {
         String command;
         exitCode=255;
+        output="";
         String cmdDescription = funcName;
         
         if (args != null && args.equals("-c")) cmdDescription = "User command";
@@ -109,16 +149,19 @@ public class ShellScript {
         try {
             //pb.inheritIO();
             process = pb.start();
+
             /*
             BufferedReader input = new BufferedReader (
                     new InputStreamReader(process.getInputStream()));
             String line;
             while ((line = input.readLine()) != null) {
-                logger.log(line);  
+                this.setOutput(line);  
             }
-            input.close();  
+            input.close();
             */
             
+            /* using grabIO thread works with the logger */
+            /*
             Task grabIO = new Task<Void>() {
                                 @Override
                 protected Void call() {
@@ -137,9 +180,15 @@ public class ShellScript {
             Thread thread = new Thread(grabIO);
             thread.setDaemon(true);
             thread.start();
+            */
             
+            CompletableFuture<Boolean> stdOutRes = redirectToLogger(process.getInputStream(), logger::log, true);
+            CompletableFuture<Boolean> stdErrRes = redirectToLogger(process.getErrorStream(), logger::log, false);
+
             exitCode = process.waitFor();
-            if (! quiet) logger.log("# " + cmdDescription + " finished with exitCode=" + exitCode);
+            if (exitCode != 0) {
+                logger.log("# " + cmdDescription + " finished with exitCode=" + exitCode);
+            }
         } catch (IOException ex) {
             //Logger.getLogger(ShellScript.class.getName()).log(Level.SEVERE, null, ex);
             logger.log(ex);
