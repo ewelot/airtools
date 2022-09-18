@@ -336,7 +336,7 @@ public class WCSCalibController implements Initializable {
         if (selectedFile != null) {
             String fullName = selectedFile.getAbsolutePath();
             if (fullName.startsWith(projectDir.getValue())) {
-                tfMask.setText(fullName.substring(projectDir.getValue().length()));
+                tfMask.setText(fullName.substring(projectDir.getValue().length()+1));
             } else {
                 tfMask.setText(selectedFile.getAbsolutePath());
                 tfMask.end();

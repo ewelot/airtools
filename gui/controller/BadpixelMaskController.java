@@ -83,15 +83,15 @@ public class BadpixelMaskController implements Initializable {
         
         //if (! isValidInputs()) return;
         
-        // add options
+        // add options for airtools-cli
         if (cbDelete.isSelected()) cmdOpts.add("-o");
         if (! tfImageSets.getText().isBlank()) {
             //cmdArgs+=" " + tfImageSets.getText();
             cmdOpts.add("-s \"" + tfImageSets.getText() + "\"");
         }
         
-        // add parameters
-        if (cbUseAllSets.isSelected()) cmdOpts.add("-a");
+        // add task parameters
+        if (cbUseAllSets.isSelected()) cmdArgs.add("-a");
         if (tfHot.getText().isBlank()) {
             cmdArgs.add("\"\"");
         } else {
@@ -105,7 +105,7 @@ public class BadpixelMaskController implements Initializable {
         
         // run airtools-cli command
         System.out.println("cmd: " + cmdOpts + " " + aircliTask + " " + cmdArgs);
-        logger.log("# cmd: " + cmdOpts + " " + aircliTask + " " + cmdArgs);
+        //logger.log("# cmd: " + cmdOpts + " " + aircliTask + " " + cmdArgs);
         aircliCmd.setOpts(cmdOpts.toArray(new String[0]));
         aircliCmd.setArgs(cmdArgs.toArray(new String[0]));
         aircliCmd.run();

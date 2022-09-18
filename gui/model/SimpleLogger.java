@@ -49,15 +49,8 @@ public class SimpleLogger {
     public void logTime (String msg) {
         if (msg.isEmpty()) return;
         SimpleDateFormat fmt = new SimpleDateFormat ("[yyyy-MM-dd HH:mm:ss.SSS] ");
-        if (logArea==null) {
-            System.out.println(fmt.format(new java.util.Date()) + msg);
-        } else {
-            logArea.appendText(fmt.format(new java.util.Date()) + msg + '\n');
-            if (autoScroll==null || autoScroll.isSelected()) {
-                logArea.selectPositionCaret(logArea.getLength());
-                logArea.deselect();
-            }
-        }
+        msg = fmt.format(new java.util.Date()) + msg;
+        log(msg);
     }
     
     public void log (String msg) {
@@ -68,7 +61,9 @@ public class SimpleLogger {
             Platform.runLater(() -> {
                 int caretPosition = logArea.caretPositionProperty().get();
                 logArea.appendText(msg + '\n');
-                if (autoScroll!=null && ! autoScroll.isSelected()) {
+                if (autoScroll==null || autoScroll.isSelected()) {
+                    logArea.setScrollTop(Double.MAX_VALUE);
+                } else {
                     logArea.positionCaret(caretPosition);
                 }
             });
@@ -91,10 +86,7 @@ public class SimpleLogger {
                         callno++;
                     }
                     logArea.appendText("\n");
-                    if (autoScroll==null || autoScroll.isSelected()) {
-                        logArea.selectPositionCaret(logArea.getLength());
-                        logArea.deselect();
-                    }
+                    logArea.setScrollTop(Double.MAX_VALUE);
                 });
             }
         }

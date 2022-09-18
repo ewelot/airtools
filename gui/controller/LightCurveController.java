@@ -297,9 +297,15 @@ public class LightCurveController implements Initializable {
         if (dirName.isBlank()) dirName = System.getProperty("user.home");
 
         fileChooser.setInitialDirectory(new File(dirName));
-        File file = fileChooser.showOpenDialog(this.paneLightCurve.getScene().getWindow());
-        if (file.exists()) {
-            tfICQFile.setText(file.getAbsolutePath());
+        File selectedFile = fileChooser.showOpenDialog(this.paneLightCurve.getScene().getWindow());
+        if (selectedFile != null) {
+            String fullName = selectedFile.getAbsolutePath();
+            if (fullName.startsWith(projectDir.getValue())) {
+                tfICQFile.setText(fullName.substring(projectDir.getValue().length()+1));
+            } else {
+                tfICQFile.setText(selectedFile.getAbsolutePath());
+                tfICQFile.end();
+            }
         }
     }
 

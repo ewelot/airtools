@@ -39,7 +39,7 @@ project using sample data.
 
 - Virtual machine settings are choosen to impose low hardware requirements: it
   uses 3 CPU cores and 4 GB of physical RAM. This is sufficient to run the
-  AIRTOOLS software even on large images (e.g. 60 Mpix color images). It is
+  AIRTOOLS software even on large images (e.g. 30 Mpix color images). It is
   possible to adjust those settings at any time later on.
 
 - Start importing into VirtualBox by clicking the button "Import".
@@ -68,13 +68,13 @@ project using sample data.
 
 - Create a new project appropriate for the sample data (see next chapter):
   - choose date of observations by using the calendar date picker:
-  2021 January 15th
+  2021 January 16th
   - choose observatory site Nerpio from dropdown list
 
 - Optionally fill in observer details
 
 - Remember the path to the raw images directory (with the default settings it
-    should be /home/user/raw/210115)
+    should be /home/user/raw/210116)
 
 - Press "Apply"
 
@@ -82,23 +82,26 @@ project using sample data.
 ## Copy observations data files
 
 Observations data files (raw FITS images) must be placed into the appropriate
-folder on the virtual Linux computer. Here we describe the use of the new
-VirtualBox File Manager for this purpose. For other methods of data transfer
-between host and virtual computer (e.g. using a shared folder or using external
-USB storage) please refer to the VirtualBox documentation.
+folder on the virtual Linux computer. Here we describe the use of a shared
+folder between host and virtual computer to copy those data files.
+For other methods of data transfer (e.g. using the VirtualBox File Manager
+or using external USB storage) please refer to the VirtualBox documentation.
 
 - Download [sample data](http://fg-kometen.vdsastro.de/airtools/testdata/210115_snv_raw.zip)
-  and extract files and directories in a local folder of your host computer.
+  and extract files and directories in a local folder on your host computer.
 
 - Locate the VirtualBox menubar (above the virtual Linux Desktop) and
-  select Machine/File Manager
+  select Devices/Shared Folders/Shared Folder Settings
   
-- Enter user name "user" and password "user" and create a new session
+- Click the blue folder icon in the right part of the settings window
 
-- Copy the locally extracted folder 210115 from the host (left panel) into the
-  guest file system (inside the virtual computer) below the folder /home/user/raw
+- Select the folder path where you extracted the archive on the host computer
+  and in the next "Add Share" window select Auto-mount and then click OK button
 
-- Close the session and the VirtualBox File Manager
+- Within the virtual Linux computer start the file manager. You will recognize
+  the new file share in the left panel. Locate the raw image files on this
+  file share (exported from your host computers file system) and copy them to
+  the raw files folder corresponding to your project
 
 
 ## Image reduction
@@ -114,15 +117,16 @@ all tasks to calibrate and stack images automatically.
   set.dat and copy and paste the following contents:
 
 ```
-# 2021-01-15
-# Nerpio Veloce
+# 2021-01-16
+# SkyGems Nerpio Veloce
 
 # LT
 # h:m set  target type texp n1 n2   nref dark flat  tel  # notes
-06:39 dk01 dark     d   5 0001 0010 -    -    -     SNV
-20:01 co01 398P     o  60 0011 0018 0014 dk02 sk01  SNV  # green filter
-06:52 sk01 skyflat  f   8 0024 0035 -    dk01 -     SNV
-06:58 dk02 dark     d 120 0036 0050 -    -    -     SNV
+07:39 dk01 dark     d   5 0001 0010 -    -    -     SNV  # 2021-01-10
+21:01 co01 398P     o  60 0011 0018 0014 dk02 sk01  SNV  # green filter
+07:52 sk01 skyflat  f   8 0024 0035 -    dk01 -     SNV  # 2021-01-18
+07:58 dk02 dark     d 120 0036 0050 -    -    -     SNV
+
 ``` 
 
 - Check for a valid entry of SNV in camera.dat (Edit/Edit Camera Parameters),

@@ -142,7 +142,7 @@
 <li>Boot the guest OS.</li>
 <li>Go to the VirtualBox guest menu item “Devices” and press “Install Guest Additions CD Image”. A new CD icon appears on the Linux desktop and a few seconds later the Linux file manager is showing the contents of the Guest Additions virtual CD.</li>
 <li>Open a terminal window using “File” menu of the file manager and select “Open Terminal Here”.</li>
-<li>From the command line of the terminal run the following command (you will be asked to provide your password): <code>sudo apt-get install build-essential</code></li>
+<li>From the command line of the terminal run the following commands (you will be asked to provide your password): <code>sudo apt-get update</code> and <code>sudo apt-get install build-essential</code></li>
 <li>Start installation by entering the command: <code>sudo bash VBoxLinuxAdditions.run</code></li>
 <li>If installation has finished close the terminal window and eject the virtual CD by using the eject button (caret-up) next to the CD entry in the file manager.</li>
 <li>Finally you must reboot the Linux guest.</li>
@@ -309,33 +309,26 @@ Used to store individual calibrated images of the project which are used by seve
 <p>The example image is a capture of the night sky under bright urban light pollution, resulting in much higher intensity of red pixels than blue ones. Pixel 1 appears much brighter than pixel 4 which means the red pixel is the first one of the Bayer pattern and the correct entry for “ctype” in the parameter file in this case is therefore RGGB.</p>
 <h2 data-number="4.6" id="image-set-definition"><span class="header-section-number">4.6</span> Image Set Definition</h2>
 <p>An image set is a number of images of the same type and target, e.g. a couple of dark exposures with a given exposure time or a bracketed sequence of exposures of a comet. All image sets of the project are described in a parameter file called <code>set.dat</code> which must be created by yourself. From the AIRTOOLS application’s main menu select “Edit” and “Edit Image Set Definitions”. Here is an example of a typical file which can be used for reference:</p>
-<pre><code>    # 191116
-    # telescope 200/800, CGEM, Pentax K5IIs, ISO 200
-    # autoguider SX Lodestar, 1x1.5s, move_thres=0.07 move_relax=1.0
+<pre><code># 2021-01-16
+# SkyGems Nerpio Veloce
 
-    # UT, S 3-4, D 2, Wo 1-2..5, Wi 3, Mo 1..4
-    # h:m set  target type texp n1 n2   nref dark flat tel
-    15:30 sk01 poly80s  f   1 0044 0055 -    dk11 -    GSOG # 12x 0.4s
-    16:48 co01 2018N2   o 120 0178 0194 0186 dk01 sk01 GSOG # t=3
-    17:29 co02 260P     o 120 0196 0217 0207 dk01 sk01 GSOG
-    18:20 co03 2017T2   o 120 0221 0238 0224 dk01 sk01 GSOG
-    22:08 dk01 -        d 120 0323 0341 -    -    -    GSOG # t=1
-    # 191115
-    18:28 dk02 -        d 120 0436 0459 -    -    -    GSOG # t=6
-
-    # dk11 is taken from 191031
-    # exclude 0228-0233 cloudy
-    # 0200 satellite</code></pre>
+# LT
+# h:m set  target type texp n1 n2   nref dark flat  tel  # notes
+07:39 dk01 dark     d   5 0001 0010 -    -    -     SNV  # 2021-01-10
+21:01 co01 398P     o  60 0011 0018 0014 dk02 sk01  SNV  # green filter
+07:52 sk01 skyflat  f   8 0024 0035 -    dk01 -     SNV  # 2021-01-18
+07:58 dk02 dark     d 120 0036 0050 -    -    -     SNV
+</code></pre>
 <p>The syntax is as follows: everything after the character <code>#</code> is considered a comment. Each line (uncommented and non-empty) defines an image set using at least 11 fields (words separated by spaces) which are:</p>
 <dl>
 <dt>h:m:</dt>
-<dd>The local time at start of observation (approximation only, not used by the program)
+<dd>The local time (or UT if you prefer) at start of imaging. This is for personel reference only and not used at all by the program.
 </dd>
 <dt>set:</dt>
-<dd>The name given to the image set. We do recommend the following scheme: Use the first two letters to denote the image type, where “dk” is for darks (and bias exposures) and “sk” for sky flats, “co” might be used for a comet observation. Any other deep sky target could use two (or three) letters from the constellation it belongs to. After the letters use a two-digit running number, so the image set of the first comet target would be named <code>co01</code>, the second <code>co02</code> and so on. The set name is used in many places later on, e.g. in the file names of computed stacks and other result files.
+<dd>The name given to the image set. We do recommend the following scheme: Use the first two letters to denote the image type, where “dk” is for darks (and bias exposures) and “sk” for sky flats, “co” might be used for a comet observation. Any other deep sky target could use two (or three) letters from the constellation it belongs to. After the letters use a two-digit running number, so the image set of the first comet target would be named <code>co01</code>, the second <code>co02</code> and so on. The set name is used in many places later on, e.g. in the file names of computed stacks and other result files. Therefore a short name using four characters only is recommended.
 </dd>
 <dt>target:</dt>
-<dd>Short name of the target observed (up to 8 characters).
+<dd>Short name of the target observed (up to 8 characters). For comets a compact name has to be used, e.g. 2017K2 is recognized as C/2017 K2 (PANSTARRS).
 </dd>
 <dt>type:</dt>
 <dd>Type of images (1 character): d=dark/bias, f=flat, o=lights, a=addition (continuation) of a previously defined image set. If you for some reason would like to exclude a series of images from the analysis (e.g. a focus sequence) but keep the information about those files for your record then use the character <code>-</code> in place of the image type.
@@ -363,6 +356,7 @@ Used to store individual calibrated images of the project which are used by seve
 </dd>
 </dl>
 <p>A note about master calibration images. It is not required and not convenient to capture darks and flats in every night. After you have collected some calibration sets and build some master files by AIRTOOLS it is common practice to reuse them later on. This can be done by simply copying them over from older project directories to the current one using the file manager.</p>
+<p>Some (remote) observatories deliver already calibrated images to their customers. In this special case you can omit dark and flat field calibration by providing the name “cal” for both dark and flat field image names.</p>
 <h1 data-number="5" id="image-reduction"><span class="header-section-number">5</span> Image Reduction</h1>
 <p>The “Image Reduction” tab is the first tab of the AIRTOOLS graphical user interface. Its main purpose is to provide general tasks for basic reduction of astronomical images that is to process all of the raw image sequences to obtain deep stacked result images of your targets.</p>
 <p>The tasks are presented in logical order and may be run one step after the other - which is recommended for first time users - or run completely unattended, including astrometry and blind stacking on a moving comet. Just select the tasks you wish to run in a row. Suitable parameters are determined automatically and will work in most cases.</p>

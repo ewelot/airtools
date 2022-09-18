@@ -2851,10 +2851,10 @@ _cleanup () {
 trap _cleanup EXIT
 
 
-test -z "$quiet" && echo "
+echo "
 # Running task $task ($(date +'%H:%M')) ..." >&2
 _$task "$@"
 errcode=$?
 test -z "$errcode" && error "Missing return code from task."
-test "$errcode" == "0" && test -z "$quiet" && echo "# task finished at $(date +'%H:%M')" >&2
+test "$errcode" == "0" && echo "# task finished at $(date +'%H:%M')" >&2
 exit $errcode

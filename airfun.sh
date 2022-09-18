@@ -14,9 +14,30 @@
 # - in order to use SAOImage DS9 analysis tasks (via AIexamine) you must
 #   have installed files airds9.ana and aircmd.sh
 ########################################################################
-AI_VERSION="5.2"
+AI_VERSION="5.2.1"
 : << '----'
 CHANGELOG
+    5.2.1 - 12 Sep 2022
+        * addldacwcs, ahead2ldac, mkrefcat: use fix_stilts_ldac to work around
+            a change introduced by stilts 3.4.1
+        * sexselect use fitsextract and fitsjoin instead of stilts for
+            extracting or joining FITS table extensions
+        * is_ahead: deal with output of newer version of file command
+        * AIstack: replaced convert by gm convert for some resize
+            operations (enlarging images) to set lower requirements on
+            imagemagick resources
+        * AIexamine:
+            - removed lock frame
+            - added some sleep seconds to make sure fitsconvert parallel
+              has finished (poor workaround)
+        * AIbnorm: make boxsize of smooting depend on image size for the
+            background image to be subtracted if option -b is used, to only
+            remove a smooth bg gradient
+        * airfun.py cleanhotpixel: use median of nearest pixels instead of mean
+        * phot2icq: changed software key from AIT to AIR (suggested by ICQ)
+        * new functions: regflip fitssplit fitsextract fitsjoin fix_stilts_ldac
+            imsize_from_ldac_imhead check_imresources
+
     5.2 - 26 Jul 2022
         * AIbgmap: added check to detect saturated background
         * set_header: added checks for valid keyword names
@@ -2615,10 +2636,16 @@ check_new_version () {
         srcdist=$(cat /etc/apt/sources.list | grep "^deb .*$repo" | awk '{
             print $(NF-1)}')
     test -z "$srcdist" &&
-        echo "ERROR: no package repository for airtools listed." >&2 &&
+        echo "ERROR: missing entry for airtools package repository." >&2 &&
         return 255
-    test "$verbose" &&
-        echo "# using repository for $srcdist"
+    if [ "$srcdist" != "$dist" ]
+    then
+        echo "WARNING: the package repository entry for airtools does not match
+the name of your Linux distribution. Continue at your own risk!"
+    else
+        test "$verbose" &&
+            echo "# using repository for $srcdist"
+    fi
     
     # download Packages file
     curl -s -o $tmppkg http://$repo/debian/dists/$srcdist/main/binary-amd64/Packages
@@ -2640,6 +2667,46 @@ A new program version is available: ${vnew}
 ##############################################" >&2
     test "$AI_DEBUG" && echo $tmppkg >&2 && return
     rm -f $tmppkg
+}
+
+
+check_imresources () {
+    # check resource limits of imagemagick
+    local mb=$1   # image size in MB (16bit integer data)
+    local policy=${2:-"/etc/ImageMagick-6/policy.xml"}
+    local memory
+    local map
+    local disk
+    local minmemory
+    local tmpdat=$(mktemp /tmp/tmp_dat_XXXXXX)
+    
+    test ! -f $policy &&
+        echo "ERROR: policy file $policy not found." >&2 && return 255
+    grep -E "^[ ]*<policy[ ]+domain=\"resource\"" $policy | \
+        sed -e 's/.* name=//; s/value=//' | tr -d '"/>' | awk '{
+        val=$2
+        if($2~/MB$/)  {sub("MB","",$2);  val=1*$2}
+        if($2~/MiB$/) {sub("MiB","",$2); val=1*$2}
+        if($2~/GB$/)  {sub("GB","",$2);  val=1000*$2}
+        if($2~/GiB$/) {sub("GiB","",$2); val=1024*$2}
+        printf("%s %s\n", $1, val)
+        }' > $tmpdat
+    memory=$(grep -w "^memory" $tmpdat | tail -1 | awk '{print $2}')
+    map=$(grep -w "^map" $tmpdat | tail -1 | awk '{print $2}')
+    disk=$(grep -w "^disk" $tmpdat | tail -1 | awk '{print $2}')
+    
+    minmemory=$(echo $mb | awk '{
+        x=2.1*$1
+        div=128
+        if (x<640) div=64; if (x<320) div=32
+        y=div*(int((x-1)/div)+1)
+        printf("%d", y)}')
+    
+    echo "current limits (MiB): memory=$memory map=$map disk=$disk"
+    echo "recommended minimum memory: $minmemory"
+    test 
+    rm -f $tmpdat
+    return
 }
 
 
@@ -2726,6 +2793,7 @@ is_ahead () {
     else
         test "${str/ASCII text/}" == "$str" && test "${str/ISO-8859 text/}" == "$str" &&
             test "${str/UTF-8 Unicode text/}" == "$str" &&
+            test "${str/Unicode text, UTF-8 text/}" == "$str" &&
             return 255
         grep -Ev "^COMMENT|^HISTORY|^END" "$f" | grep -qEv "^[A-Z][A-Z0-9_ \-]{,7}=" &&
             return 255
@@ -3568,7 +3636,15 @@ datefmt () {
 }
 
 mknlist () {
-    # create list of 4-digit numbers
+    # create list of numbers (default 4 digits with leading zeroes)
+    local showhelp
+    local fmt="%04g"
+    local i
+    for i in 1 2
+    do
+        (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
+        test "$1" == "-i" && fmt="%g" && shift 1
+    done    
     local str
     local x
     for str in ${@//,/ }
@@ -3579,12 +3655,12 @@ mknlist () {
             do
                 ! is_number $x &&
                     echo "ERROR: $x is not a number" >&2 && return 255
-                printf "%04g\n" $x
+                printf "$fmt\n" $x
             done
         else
             ! is_number $str &&
                 echo "ERROR: $str is not a number" >&2 && return 255
-            printf "%04g\n" $str
+            printf "$fmt\n" $str
         fi
     done
     return 0
@@ -8357,21 +8433,21 @@ CRPIX2  =      $x     / Reference pixel on this axis
 CD2_1   =      0          / Linear projection matrix
 CD2_2   =      $pscale    / Linear projection matrix
 PHOTFLAG=      F
-END     " > $ahead
+END" > $ahead
 
         # create LDAC_IMHEAD table
         echo '# "Field Header Card"' > $tmp2
         printf '"' >> $tmp2
         cat $ahead | awk '{printf("%-80s\n", $0)}' | tr -d '\n' >> $tmp2
         echo '"' >> $tmp2
-        stilts tcopy ifmt=ascii ofmt=fits-basic $tmp2 $tmpldac
+        stilts tcopy ifmt=ascii ofmt=fits-basic $tmp2 | fix_stilts_ldac > $tmpldac
         sethead $tmpldac",1" EXTNAME=LDAC_IMHEAD
         sethead $tmpldac",1" TDIM1='(80,'$(wc -l $ahead | cut -d ' ' -f1)')'
 
         # combine LDAC_IMHEAD and LDAC_OBJECTS
         stilts tcopy ifmt=fits ofmt=fits-basic in=${tmp1}"#"1 out=$tmp2
         sethead $tmp2",1" EXTNAME=LDAC_OBJECTS
-        stilts tmulti ifmt=fits ofmt=fits-basic in=$tmpldac in=$tmp2 out=$tmp1
+        fitsjoin $tmpldac $tmp2 > $tmp1
 
         # add required columns for scamp reference catalog
         #   note: MAGERR and FLAGS are not strictly required
@@ -8586,7 +8662,7 @@ phot2icq () {
     local verbose   # show additional data
     local observer=${AI_OBSICQID:-""}
     local method="Z"
-    local sfwkey="AIT"  # ICQ Photometry Software Key for AIRTOOLS
+    local sfwkey="AIR"  # ICQ Photometry Software Key for AIRTOOLS
     local calib=5       # 1-bias 4-bias/dark 5-bias/dark/flat
     local ccdinfo       # if set then show additional CCD info in ICQ record
     local i
@@ -11941,6 +12017,26 @@ regshift () {
 }
 
 
+regflip () {
+    # flip regions top-down (circle/point/polygon/box)
+    local showhelp
+    local i
+    for i in 1 2
+    do
+        (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
+    done
+    local reg=$1
+    local h=$2      # height of image
+
+    (test "$showhelp" || test $# -lt 2) &&
+        echo "usage: regflip <reg> <h>" >&2 &&
+        return 1
+
+    test "$reg" == "-" && reg="/dev/stdin"
+    regshift -f $reg 0 0 0 0 $h
+}
+
+
 # transform region file between large image and croped image
 reg2reg () {
     local showhelp
@@ -13640,6 +13736,17 @@ xytrans () {
     }'
 }
 
+fix_stilts_ldac () {
+    # workaround a change in stilts 3.4.1: "Undersized, including zero-length,
+    #   strings written to FITS columns are now by default terminated with
+    #   an ASCII NUL rather than in some cases padded with spaces."
+    #   -> spaces following the END keyword in LDAC_IMHEAD table column are
+    #      replaced by NUL characters which breaks function fitsfind in
+    #      fitsutil.c of scamp (resulting in segfault)
+    # note: this function should only be used with LDAC_IMHEAD tables
+    local str=$(for i in {1..77}; do printf " "; done)
+    sed -r -e 's/END[\x0]{77}/END'"$str"'/g'
+}
 
 # TODO: deal with multiple extensions
 # NOTE: this function is used by sexselect only
@@ -13688,20 +13795,17 @@ NAXIS2  =               $h                                                  \
 END                                                                             \
 "
 EOF
-    stilts tcopy ifmt=ascii ofmt=fits-basic $tmp1 $tmp2
+    stilts tcopy ifmt=ascii ofmt=fits-basic $tmp1 | fix_stilts_ldac > $tmp2
     sethead $tmp2",1" EXTNAME=LDAC_IMHEAD
+    sethead $tmp2",1" TDIM1='(80,6)'
 
     # extract column names
     grep "^#" $tmpin | awk '{if($2~/^[0-9]+$/) x=x" "$3}END{print "#"x}' > $tmp1
     grep -v "^#" $tmpin >> $tmp1
     stilts tcopy ifmt=ascii ofmt=fits-basic $tmp1 $tmp3
     sethead $tmp3",1" EXTNAME=LDAC_OBJECTS
-    stilts tmulti ifmt=fits ofmt=fits-basic in=$tmp2 in=$tmp3 out=$out
+    fitsjoin $tmp2 $tmp3
     
-    # modify EXTNAME for tables
-    sethead $out",1" TDIM1='(80,0)'
-    
-    cat $out
     rm $tmpin $tmp1 $tmp2 $tmp3 $out
 }
 
@@ -13711,6 +13815,7 @@ addldacwcs () {
     # note: only first 3 HDU's of input FITS file are used
     local scat=$1
     local wcshead=$2
+    local n
     local tdir=${AI_TMPDIR:-"/tmp"}
     local tmpcat=$(mktemp "$tdir/tmp_incat_XXXXXX.fits")
     local tmpdat=$(mktemp "$tdir/tmp_imhead_XXXXXX.dat")
@@ -13729,19 +13834,19 @@ addldacwcs () {
         printf "%-80s\n" "$REPLY"
     done >> $tmpdat
     printf "%-80s\n" "END" >> $tmpdat
+    n=$(cat $tmpdat | wc -l)
 
     # create LDAC_IMHEAD table
     echo '# "Field Header Card"' > $tmptab
     printf '"' >> $tmptab
     cat $tmpdat | tr -d '\n' >> $tmptab
     echo '"' >> $tmptab
-    stilts tcopy ifmt=ascii ofmt=fits-basic $tmptab $tmp1
+    stilts tcopy ifmt=ascii ofmt=fits-basic $tmptab | fix_stilts_ldac > $tmp1
     sethead $tmp1",1" EXTNAME=LDAC_IMHEAD
-    sethead $tmp1",1" TDIM1='(80,0)'
+    sethead $tmp1",1" TDIM1="(80,$n)"
 
     stilts tcopy ifmt=fits ofmt=fits-basic in=${tmpcat}"#"2 out=$tmp2
-    stilts tmulti ifmt=fits ofmt=fits-basic in=$tmp1 in=$tmp2
-    
+    fitsjoin $tmp1 $tmp2
     
     rm -f $tmpcat $tmpdat $tmptab $tmp1 $tmp2
 }
@@ -13788,12 +13893,9 @@ sex2rgbdat () {
     #    echo "ERROR: $scat is not a sextractor output catalog." >&2 && return 255
     
     # get original image height from LDAC_IMHEAD in scat
-    w=$(stilts tpipe in=$scat"#"1 ofmt=fits-basic | fold | grep -a "^[[:alnum:]]" | \
-        grep -A 100000 "EXTNAME .*LDAC_IMHEAD" | \
-        grep NAXIS1 | lines 1 | awk '{print $3}')
-    h=$(stilts tpipe in=$scat"#"1 ofmt=fits-basic | fold | grep -a "^[[:alnum:]]" | \
-        grep -A 100000 "EXTNAME .*LDAC_IMHEAD" | \
-        grep NAXIS2 | lines 1 | awk '{print $3}')
+    set - $(imsize_from_ldac_imhead $scat)
+    w=$1
+    h=$2
 
     # determine x,y column names
     colnames=$(stilts tpipe omode=meta in=$scat"#"4 | grep "^[ ]* [0-9]" | \
@@ -13897,7 +13999,9 @@ sexselect () {
     local tmp1=$(mktemp "$tdir/tmp_tmp1_XXXXXX.fits")
     local tmp2=$(mktemp "$tdir/tmp_tmp2_XXXXXX.dat")
     local tmp3=$(mktemp "$tdir/tmp_tmp3_XXXXXX.fits")
-    local tmp4=$(mktemp "$tdir/tmp_tmp4_XXXXXX.fits")
+    local tmpred=$(mktemp "$tdir/tmp_tred_XXXXXX.fits")
+    local tmpgrn=$(mktemp "$tdir/tmp_tgrn_XXXXXX.fits")
+    local tmpblu=$(mktemp "$tdir/tmp_tblu_XXXXXX.fits")
     local cmds=$(mktemp "$tdir/tmp_cmds_XXXXXX.txt")
     local tmpcat=$(mktemp "$tdir/tmp_stdin_XXXXXX.dat")
 
@@ -13933,12 +14037,9 @@ sexselect () {
         echo "ERROR: center=$center does not start with an integer." >&2 && return 255
 
     # get original image height from LDAC_IMHEAD in scat
-    w=$(stilts tpipe in=$scat"#"1 ofmt=fits-basic | fold | grep -a "^[[:alnum:]]" | \
-        grep -A 100000 "EXTNAME .*LDAC_IMHEAD" | \
-        grep NAXIS1 | lines 1 | awk '{print $3}')
-    h=$(stilts tpipe in=$scat"#"1 ofmt=fits-basic | fold | grep -a "^[[:alnum:]]" | \
-        grep -A 100000 "EXTNAME .*LDAC_IMHEAD" | \
-        grep NAXIS2 | lines 1 | awk '{print $3}')
+    set - $(imsize_from_ldac_imhead $scat)
+    w=$1
+    h=$2
 
     # convert input catalog
     if is_fits $scat
@@ -14023,29 +14124,33 @@ sexselect () {
         if [ "$color" == "all" ]
         then
             # TODO: cycle over all extensions
-            # first color
-            stilts tcopy ifmt=fits ofmt=fits-basic in=${tmp1}"#1" out=$tmp2
-            stilts tpipe ofmt=fits cmd="@$cmds" in=${tmp1}"#2" out=$tmp3
-            stilts tmulti multi=true ifmt=fits ofmt=fits-basic in=$tmp2 in=$tmp3 out=$tmp4
-            
             if [ $(listhead $tmp1 | grep "EXTNAME = 'LDAC_OBJECTS'" | wc -l) -eq 1 ]
             then
-                cat $tmp4
-            else        
+                fitsextract ${tmp1} 1,2 - > $tmp2
+                stilts tpipe ofmt=fits cmd="@$cmds" in=${tmp1}"#2" out=$tmp3
+                fitsjoin $tmp2 $tmp3
+            else
+                # first color
+                fitsextract ${tmp1} 1,2 - > $tmp2
+                stilts tpipe ofmt=fits cmd="@$cmds" in=${tmp1}"#2" out=$tmp3
+                fitsjoin $tmp2 $tmp3 > $tmpred
+            
                 # second color
-                stilts tmulti multi=true ifmt=fits ofmt=fits-basic in=$tmp4 in=${tmp1}"#3" out=$tmp2
+                fitsextract ${tmp1} 4 - > $tmp2
                 stilts tpipe ofmt=fits cmd="@$cmds" in=${tmp1}"#4" out=$tmp3
-                stilts tmulti multi=true ifmt=fits ofmt=fits-basic in=$tmp2 in=$tmp3 out=$tmp4
+                fitsjoin $tmp2 $tmp3 > $tmpgrn
 
                 # third color
-                stilts tmulti multi=true ifmt=fits ofmt=fits-basic in=$tmp4 in=${tmp1}"#5" out=$tmp2
+                fitsextract ${tmp1} 6 - > $tmp2
                 stilts tpipe ofmt=fits cmd="@$cmds" in=${tmp1}"#6" out=$tmp3
-                stilts tmulti multi=true ifmt=fits ofmt=fits-basic in=$tmp2 in=$tmp3
+                fitsjoin $tmp2 $tmp3 > $tmpblu
+                
+                fitsjoin $tmpred $tmpgrn $tmpblu
             fi
         else
-            stilts tcopy ifmt=fits ofmt=fits-basic in=${tmp1}"#"$((color*2-1)) out=$tmp3
-            stilts tpipe ofmt=fits cmd="@$cmds" in=${tmp1}"#"$((color*2)) out=$tmp2
-            stilts tmulti ifmt=fits ofmt=fits-basic in=$tmp3 in=$tmp2
+            fitsextract ${tmp1} 1,$((color*2)) - > $tmp2
+            stilts tpipe ofmt=fits cmd="@$cmds" in=${tmp1}"#"$((color*2)) out=$tmp3
+            fitsjoin $tmp2 $tmp3
         fi
     else
         if [ "$color" == "all" ]
@@ -14094,7 +14199,7 @@ sexselect () {
             fi
         fi
     fi
-    rm $tmp1 $tmp2 $tmp3 $tmp4 $cmds $tmpcat
+    rm $tmp1 $tmp2 $tmp3 $tmpred $tmpgrn $tmpblu $cmds $tmpcat
     return
 }
 
@@ -15281,6 +15386,80 @@ meftocube () {
     return $retval
 }
 
+fitssplit () {
+    # split FITS extensions into several FITS files
+    local infits=$1
+    local outbase=${2:-""}
+    local ext=fits
+    local i
+    local n
+    local outfits
+    
+    if [ -z "$outbase" ]
+    then
+        outbase=$(basename $infits | sed -e 's/\.[^.]*$//')
+        ext=$(basename $infits | sed -e 's/^.*\.//')
+        test "$ext" == "$(basename $infits)" && ext=""
+    fi
+    
+    n=$(listhead $infits | grep "Header listing for HDU" | wc -l)
+    
+    for i in $(seq 1 $n)
+    do
+        outfits="${outbase}.$i"
+        test "$ext" && outfits="${outbase}.$i.$ext"
+        imcopy $infits"[$((i-1))]" - > $outfits
+    done
+}
+
+fitsextract () {
+    # extract subset of FITS extensions to stdout
+    local infits=$1
+    local extlist=$2    # comma or space separated, starting at 1
+    local num
+    local flist
+    local tdir=${AI_TMPDIR:-"/tmp"}
+    local wdir=$(mktemp -d $tdir/tmp_fextract_XXXXXX)
+    
+    fitssplit $infits $wdir/x
+    for num in $(mknlist -i "$extlist")
+    do
+        test ! -f $wdir/x.$num.fits &&
+            echo "WARNING: extension $num not found." >&2 && continue
+        flist=$(echo $flist x.$num.fits)
+    done
+    if [ "$flist" ]
+    then
+        (cd $wdir; fitsjoin $flist)
+    else
+        echo "WARNING: nothing to extract." >&2
+    fi
+    rm -rf $wdir
+    return
+}
+
+fitsjoin () {
+    # join FITS files into MEF, write to stdout
+    local fname
+    local first=true
+    local hsize
+    local nskip
+    
+    for fname in $@
+    do
+        if $first
+        then
+            cat $fname
+            first=false
+        else
+            nskip=0
+            test $(listhead $fname | grep "Header listing for HDU" | wc -l) -gt 1 &&
+                get_header -e 1 $fname XTENSION | grep -q TABLE &&
+                nskip=$(imcopy $fname"[0]" - | wc -c | awk '{print $1/2880}')
+            dd bs=2880 skip=$nskip status=none if=$fname
+        fi
+    done
+}
 
 imslice () {
     # extract single slice from FITS cube or MEF to stdout
@@ -15726,6 +15905,22 @@ imsize () {
     fi
     rm -f $tmpfits
     return $retval
+}
+
+imsize_from_ldac_imhead () {
+    # read image dimension from FITS LDAC
+    fits=$1
+    local w
+    local h
+    local tdir=${AI_TMPDIR:-"/tmp"}
+    local tmpdat=$(mktemp $tdir/tmp_im_XXXXXX.dat)
+
+    stilts tpipe in=$fits"#"1 ofmt=fits-basic | tr '\0' ' ' | fold | \
+        grep -a "^[[:alnum:]]" | grep -a -A 100000 "EXTNAME .*LDAC_IMHEAD" > $tmpdat
+    w=$(grep -a NAXIS1 $tmpdat | (lines 1; dd of=/dev/null status=none) | awk '{print $3}')
+    h=$(grep -a NAXIS2 $tmpdat | (lines 1; dd of=/dev/null status=none) | awk '{print $3}')
+    echo $w $h
+    rm -f $tmpdat
 }
 
 imcoord () {
@@ -16750,7 +16945,7 @@ AIbnorm () {
     local do_keep_brightness    # keep mean brightness instead of normalizing
                                 # to nval
     local do_subtract           # do subtraction of mean value instead of division
-    local do_bgimage            # do subtraction of bg image for each color
+    local do_bgimage            # do subtraction of smooth bg image for each color
     local quiet
     local i
     for i in 1 2 3 4 5 6
@@ -16770,6 +16965,7 @@ AIbnorm () {
     local h
     local mxx
     local x
+    local bsize
     local tdir=${AI_TMPDIR:-"/tmp"}
 
     (test "$showhelp" || test $# -lt 1) &&
@@ -16791,11 +16987,15 @@ AIbnorm () {
     if [ "$do_bgimage" ]
     then
         # remove (subtract) smoothed bg image for each bayer matrix cell
+        # the goal is to remove a smooth bg gradient
+        bsize=$(echo $w $h | awk '{
+            x=($1+$2)/100
+            printf("%d", 16*(1+int(x/16)))'})
         x=$(basename $img | sed -e 's,.'$ext'$,,')
         AIbsplit -m "RGGB" $img
         for c in r1 g1 g2 b1
         do
-            AIbgmap -q $x.$c.pgm 32 3
+            AIbgmap -q $x.$c.pgm $bsize 3
             pnmccdred2 -a $nval -d $x.$c.bg.pgm $x.$c.pgm $tdir/$x.$c.sub.pgm
             rm $x.$c.bg.pgm $x.$c.bgm1.pgm $x.$c.pgm
         done
@@ -18538,7 +18738,7 @@ AIexamine () {
     local ds9opts               # xpaset commands to be added at the end
     local ds9name="AIRTOOLS"
     local do_linear
-    local do_lock_colorbar      # lock 
+    local do_lock_colorbar      # lock
     local do_replace_image
     local do_wait_ds9_closed    # program finishes after ds9 has been terminated
                                 # if not set program finishes after the last image
@@ -18793,6 +18993,8 @@ EOF
         local infile=$2
         local tfits=$3
         local hdr=$4
+        local cx
+        local cy
         local tmp1=$(mktemp "$tdir/tmp_wcs_XXXXXX.head")
         
         #echo "# $1 $2 $3 $4" >&2
@@ -18828,10 +19030,13 @@ EOF
     test $nimg -gt 1 && opts="$opts -single"
     opts="$opts -mode region $fopts -match scale -match colorbar"
     test "$do_lock_colorbar" && opts="$opts -lock scale yes -lock colorbar yes"
-    test "$has_wcs" &&
-        opts="$opts -lock frame wcs"
-    test ! "$has_wcs" &&
+    if [ "$has_wcs" ]
+    then
+        #opts="$opts -lock frame wcs"
         opts="$opts -lock frame image"
+    else
+        opts="$opts -lock frame image"
+    fi
 
 
     #### creating ds9 parameter files used by analysis tasks
@@ -18900,10 +19105,11 @@ EOF
             ds9 $opts $ds9opts
             test "$tlist" && rm -f $tlist
         else
-            (ds9 $opts $ds9opts
-            test "$tlist" && rm -f $tlist) &
+            ds9 $opts $ds9opts &
             test "$AI_DEBUG" && echo "# running wait_for_saoimage ..." >&2
             wait_for_saoimage -n $ds9name
+            sleep 2
+            test "$tlist" && rm -f $tlist
         fi
     fi
     if [ $nimg -gt 1 ] && [ ! "$do_wait_ds9_closed" ]
@@ -18913,6 +19119,7 @@ EOF
         test "$AI_DEBUG" && echo "# last=$lastfits" >&2 &&
                 echo "# running wait_for_nframes $nframes ..." >&2
         wait_for_nframes -n $ds9name $nframes > /dev/null
+        sleep 1
     fi
         
     test "$tconvlist" && test -z "$AI_DEBUG" && rm $tconvlist
@@ -22664,12 +22871,9 @@ AIregister () {
             refroll=1
         
         # get image width and height from LDAC_IMHEAD in refcat
-        w=$(stilts tpipe in=$refcat"#"1 ofmt=fits-basic | fold | grep -a "^[[:alnum:]]" | \
-            grep -A 100000 "EXTNAME .*LDAC_IMHEAD" | \
-            grep NAXIS1 | (lines 1; dd of=/dev/null status=none) | awk '{print $3}')
-        h=$(stilts tpipe in=$refcat"#"1 ofmt=fits-basic | fold | grep -a "^[[:alnum:]]" | \
-            grep -A 100000 "EXTNAME .*LDAC_IMHEAD" | \
-            grep NAXIS2 | (lines 1; dd of=/dev/null status=none) | awk '{print $3}')
+        set - $(imsize_from_ldac_imhead $refcat)
+        w=$1
+        h=$2
 
         # max distance from image center for statistics (a, e, fwhm, dm)
         dlim=0.3
@@ -22993,7 +23197,7 @@ EOF
             x=$(get_header -q ${acat%.*}.head EXPTIME)
             test "$x" && set_header ${acat%.*}.head EXPTIME=$(echo $x | awk '{printf("%.2f", 1*$1)}')
             # combine headers
-            sed -i '/^END$/d' ${acat%.*}.head
+            sed -i '/^END[ ]*$/d' ${acat%.*}.head
             cat ${inldac/.fits/.head} >> ${acat%.*}.head
             rm -f ${inldac/.fits/.head} ${inldac/.fits/.ahead}
 
@@ -23080,6 +23284,7 @@ EOF
 			test "$AI_DEBUG" && echo "xydat=$xydat; xyref=$xyref" >&2
             test "$AI_DEBUG" || rm $inldac $xydat $xmldat $tmp1 $tmp2
         }
+        # echo $tmpsh $refldac $wcscat $ahead >&2 && return 255
         
 		if [ "$nlist" ]
 		then
@@ -23171,12 +23376,9 @@ AIfwhm () {
         echo "ERROR: sextractor sources file is missing." >&2 && return 255
 
     # get image width and height from LDAC_IMHEAD in refcat
-    w=$(stilts tpipe in=$src"#"1 ofmt=fits-basic | fold | grep -a "^[[:alnum:]]" | \
-        grep -A 100000 "EXTNAME .*LDAC_IMHEAD" | \
-        grep NAXIS1 | (lines 1; dd of=/dev/null status=none) | awk '{print $3}')
-    h=$(stilts tpipe in=$src"#"1 ofmt=fits-basic | fold | grep -a "^[[:alnum:]]" | \
-        grep -A 100000 "EXTNAME .*LDAC_IMHEAD" | \
-        grep NAXIS2 | (lines 1; dd of=/dev/null status=none) | awk '{print $3}')
+    set - $(imsize_from_ldac_imhead $src)
+    w=$1
+    h=$2
 
     # x,y data range
     xrange="0:$w"
@@ -26149,7 +26351,7 @@ EOF
             then
                 if [ -f bgvar/$(basename ${img%.*}).bgdiff.$inext ]
                 then
-                    convert bgvar/$(basename ${img%.*}).bgdiff.$inext \
+                    gm convert bgvar/$(basename ${img%.*}).bgdiff.$inext \
                         -resize ${w}x${h}! - | \
                         pnmccdred -a $bgdiffzero -d - $img - | \
                         pnmtomef - > $wdir/$n.gray.fits
@@ -26167,8 +26369,11 @@ EOF
             else
                 if [ -f bgvar/$(basename ${img%.*}).bgdiff.$inext ]
                 then
-                    convert bgvar/$(basename ${img%.*}).bgdiff.$inext \
-                        -resize ${w}x${h}! - | \
+                    # replaced convert by gm convert because it requires huge amount
+                    #   of imagemagick cache resources (60MP color needs memory
+                    #   limit set to ~1GB)
+                    gm convert bgvar/$(basename ${img%.*}).bgdiff.$inext \
+                        -resize ${w}x${h}\! - | \
                         pnmccdred -a $bgdiffzero -d - $img - | pnmtomef - > $tmpfits
                 else
                     cat ${img%.*}$insuffix.${img##*.} | pnmtomef - > $tmpfits
@@ -28271,6 +28476,7 @@ AIpsfextract () {
     local codir="comet"
     local outpsf            # output psf image
     local psfphot           # output psf star photometry file
+    local starphot          # complete star catalog
     local subphot           # companions of psf stars, photometry file
     #local compphot          # output comparison star photometry file
     local subreg            # optional user provided region file to limit comphot
@@ -28485,6 +28691,7 @@ physical" > $tmpreg
         if [ $ncol == 3 ]
         then
             echo "# matching objects in color bands ..." >&2
+            # echo "sex2rgbdat -f $x $tmpcat $xrad > $starphot" >&2
             sex2rgbdat -f $x $tmpcat $xrad > $starphot 2>/dev/null
             test $? -ne 0 &&
                 echo "ERROR: failed command: sex2rgbdat -f $x $tmpcat $xrad" >&2 && return 255
@@ -31093,6 +31300,7 @@ AIfindbad () {
     local imlist=$(mktemp "$tdir/tmp_list_XXXXXX.dat")
     local imlist2=$(mktemp "$tdir/tmp_list2_XXXXXX.dat")
     local tmpim1=$(mktemp "$tdir/tmp_im1_XXXXXX.pgm")
+    local tmppng=$(mktemp "$tdir/tmp_im_XXXXXX.png")
     local kernel=$(mktemp "$tdir/tmp_kernel_XXXXXX.pbm")
     local exifdat="exif.dat"
     local setname
@@ -31282,6 +31490,11 @@ EOF
             geom=${margin}x${margin}
             convert $diff -threshold $((10000+high)) \
                 -shave $geom -bordercolor black -border $geom bad.$sname.high.png
+            # TODO: processing 60MP images will result in an error if memory
+            #   limits of imagemagick are low (256MB/512MB)
+            #   in /etc/ImageMagick-6/policy.xml one should set values like
+            #   <policy domain="resource" name="memory" value="1GiB"/>
+            #   <policy domain="resource" name="map" value="2GiB"/>
             test "$AI_DEBUG" && echo "AIval -a -c -1 bad.$sname.high.png" >&2
             AIval -a -c -1 bad.$sname.high.png > $wdir/x.high.dat
             echo $(cat $wdir/x.high.dat | wc -l) "hot pixels" >&2
@@ -31299,6 +31512,53 @@ EOF
                 cat bad.$sname.${hotthresh}_${coldthresh}.dat | awk '{print NR" "$1" "$2}' | \
                     xy2reg $diff - 0.5 0.5 > bad.$sname.${hotthresh}_${coldthresh}.reg
                 echo "# created bad.$sname.${hotthresh}_${coldthresh}.dat" >&2
+            fi
+            
+            # note: next section is currently not used
+            # look for saturated pixels
+            x=$(get_param camera.dat ctype $sname)
+            false && if [ "$x" == "DSLR" ]
+            then
+                echo "WARNING: check for saturated pixels not implemented yet." >&2
+            else
+                sat=bad.$sname.sat.png
+                if [ -f $sat ]
+                then
+                    echo "WARNING: reusing saturated pixels image $sat." >&2
+                else
+                    # create images of saturated pixels
+                    # determine list of images to be used
+                    test -d $wdir/cal || mkdir $wdir/cal
+                    AIimlist -q $sname "" raw | sort > $imlist 2>/dev/null
+                    n=$(cat $imlist  | wc -l)
+                    test $n -eq 0 && continue
+                    test $n -lt 4 && continue
+                    test $n -le $nmax && echo "# find minimum for $n images in set $sname ..."
+                    test $n -gt $nmax && echo "# find minimum for $nmax out of $n images in set $sname ..."
+                    cat $imlist | awk -v n=$n -v nmax=$nmax '{
+                        if (NR==1) {
+                            print $3; i=1
+                        } else {
+                            x=int((nmax-1)/(n-1)*(NR-1)+0.5*nmax/n)
+                            if (x>=i) {print $3; i++}
+                        }
+                    }' > $imlist2
+                    test $n -gt $nmax && n=$nmax
+                    vips bandrank "$(cat $imlist2)" $tmppng --index 0
+                    x=$(get_param camera.dat flip $sname)
+                    geom=${margin}x${margin}
+                    if [ "$x" == "1" ]
+                    then
+                        convert $tmppng -flip -threshold 65000 \
+                            -shave $geom -bordercolor black -border $geom $sat
+                    else
+                        convert $tmppng -threshold 65000 \
+                            -shave $geom -bordercolor black -border $geom $sat
+                    fi
+                fi
+                n=$(convert $sat pgm:- | pgmhist | grep -w "^255" | cut -f2)
+                test -z "$n" && n=0
+                echo "$n saturated pixels" >&2
             fi
         done < $sdat
     done
@@ -31335,8 +31595,8 @@ EOF
     fi
     
     rm -f $kernel $imlist $imlist2
-    test "$AI_DEBUG" && echo $wdir $tmpim1 >&2
-    test "$AI_DEBUG" || rm -f $tmpim1
+    test "$AI_DEBUG" && echo $wdir $tmpim1 $tmppng >&2
+    test "$AI_DEBUG" || rm -f $tmpim1 $tmppng
     test "$AI_DEBUG" || rm -rf $wdir
     return 0
 }

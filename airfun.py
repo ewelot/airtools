@@ -4,7 +4,9 @@
 # Changelog ...
 
 import sys
+import os
 import math
+from tempfile import NamedTemporaryFile
 from collections import defaultdict
 from csv import DictReader
 import ephem
@@ -224,11 +226,9 @@ def fitscubetoppm(param):
 # crop an image
 # imcrop [-f] inimg outimg w h xoff yoff
 def imcrop(param):
-    outfmt='ppm'
-    outstrip=True
+    outfmt='pnm'
     if(param[0]=='-f'):
         outfmt='fits'
-        outstrip=False
         del param[0]
     infile = param[0]
     outfile = param[1]
@@ -247,14 +247,7 @@ def imcrop(param):
     outimg=inimg.crop(xoff, yoff, width, height)
 
     # writing output image
-    if (outfile and outfile != '-'):
-        if (outfmt=='fits'):
-            outimg.fitssave(outfile)
-        else:
-            outimg.ppmsave(outfile, strip=1)
-    else:
-        target = pyvips.Target.new_to_descriptor(sys.stdout.fileno())
-        outimg.write_to_target(target, "." + outfmt, strip=outstrip)
+    writeimage(["-f", outfmt, outimg, outfile])
     exit()
 
 
@@ -328,8 +321,7 @@ def datarange(param):
 # syntax: pnmccdred [-f] [-g] [-preadd val] [-premult val] [-bpat bayerpattern] [-tb] [-r180] \
 #   inpnm outpnm dark flat bad mult add
 def pnmccdred(param):
-    outfmt='ppm'
-    outstrip=True
+    outfmt='pnm'
     outgray=False
     preadd=0
     premult=1
@@ -338,7 +330,6 @@ def pnmccdred(param):
     rot=False
     if(param[0]=='-f'):
         outfmt='fits'
-        outstrip=False
         del param[0]
     if(param[0]=='-g'):
         outgray=True
@@ -425,15 +416,7 @@ def pnmccdred(param):
             cleanhotpixel([tmpimg, bad, outfilename])
     else:
         outimg = eval(code)
-        # writing output image
-        if (outfilename and outfilename != '-'):
-            if (outfmt=='fits'):
-                outimg.fitssave(outfilename)
-            else:
-                outimg.ppmsave(outfilename, strip=1)
-        else:
-            target = pyvips.Target.new_to_descriptor(sys.stdout.fileno())
-            outimg.write_to_target(target, "." + outfmt, strip=outstrip)
+        writeimage(["-f", outfmt, outimg, outfilename])
 
     exit()
 
@@ -441,11 +424,9 @@ def pnmccdred(param):
 # convert from PPM to PGM using user supplied channel multipliers
 # syntax: ppmtogray -f inppm outpgm [multR,multG,multB]
 def ppmtogray(param):
-    outfmt='ppm'
-    outstrip=True
+    outfmt='pnm'
     if(param[0]=='-f'):
         outfmt='fits'
-        outstrip=False
         del param[0]
     infilename = param[0]
     outfilename = param[1]
@@ -466,14 +447,7 @@ def ppmtogray(param):
     outimg = inimg.linear(multnorm, 0).bandmean().rint().copy(interpretation="grey16")
 
     # writing output image
-    if (outfilename and outfilename != '-'):
-        if (outfmt=='fits'):
-            outimg.fitssave(outfilename)
-        else:
-            outimg.ppmsave(outfilename, strip=1)
-    else:
-        target = pyvips.Target.new_to_descriptor(sys.stdout.fileno())
-        outimg.write_to_target(target, "." + outfmt, strip=outstrip)
+    writeimage(["-f", outfmt, outimg, outfilename])
     exit()
 
 
@@ -481,17 +455,14 @@ def ppmtogray(param):
 # syntax: lrgb [-f|-t] [-16] inppm outppm bgR,bgG,bgB rmsg
 def lrgb(param):
     outfmt='ppm'
-    outstrip=True
     depth=8
     bg=""
     while (param[0][0:1] == "-"):
         if(param[0]=='-f'):
             outfmt='fits'
-            outstrip=False
             del param[0]
         if(param[0]=='-t'):
             outfmt='tif'
-            outstrip=False
             del param[0]
         if(param[0]=='-16'):
             depth=16
@@ -524,25 +495,14 @@ def lrgb(param):
         outimg = l.bandjoin([a,b]).colourspace("srgb")
     
     # writing output image
-    if (outfilename and outfilename != '-'):
-        if (outfmt=='fits'):
-            outimg.fitssave(outfilename)
-        else:
-            if (outfmt=='tif'):
-                outimg.tiffsave(outfilename)
-            else:
-                outimg.ppmsave(outfilename, strip=1)
-    else:
-        target = pyvips.Target.new_to_descriptor(sys.stdout.fileno())
-        outimg.write_to_target(target, "." + outfmt, strip=outstrip)
+    writeimage(["-f", outfmt, outimg, outfilename])
     exit()
 
 def svgtopbm(param):
     # convert svg areas (circle/polygon/box) to pbm
     # regions are interpreted as good pixel regions (white, pgm value 255, pbm value 0)
     # TODO: currently output is a bi-level PGM image
-    outfmt='ppm'
-    outstrip=True
+    outfmt='pbm'
     invert=False
     if(param[0]=='-i'):
         invert=True
@@ -567,14 +527,7 @@ def svgtopbm(param):
         outimg = inimg.Colourspace("b-w").relational_const("more", 255*0.5)
 
     # writing output image
-    if (outfilename and outfilename != '-'):
-        if (outfmt=='fits'):
-            outimg.fitssave(outfilename)
-        else:
-            outimg.ppmsave(outfilename, strip=1)
-    else:
-        target = pyvips.Target.new_to_descriptor(sys.stdout.fileno())
-        outimg.write_to_target(target, "." + outfmt, strip=outstrip)
+    writeimage(["-f", outfmt, outimg, outfilename])
 
     exit()
 
@@ -582,13 +535,11 @@ def svgtopbm(param):
 # replace border by white (or black) pixels
 # syntax: pnmreplaceborder [-f] [-b] <in> <out> [bwidth|2]
 def pnmreplaceborder(param):
-    outfmt='ppm'
-    outstrip=True
+    outfmt='pnm'
     bwidth=2
     bcolor="white"
     if(param[0]=='-f'):
         outfmt='fits'
-        outstrip=False
         del param[0]
     if(param[0]=='-b'):
         bcolor="black"
@@ -612,14 +563,7 @@ def pnmreplaceborder(param):
     outimg = inimg.crop(bwidth, bwidth, w-2*bwidth, h-2*bwidth).embed(bwidth, bwidth, w, h, extend=bcolor)
 
     # writing output image
-    if (outfilename and outfilename != '-'):
-        if (outfmt=='fits'):
-            outimg.fitssave(outfilename)
-        else:
-            outimg.ppmsave(outfilename, strip=1)
-    else:
-        target = pyvips.Target.new_to_descriptor(sys.stdout.fileno())
-        outimg.write_to_target(target, "." + outfmt, strip=outstrip)
+    writeimage(["-f", outfmt, outimg, outfilename])
 
     exit()
 
@@ -726,8 +670,7 @@ def regstat(param):
 
 def pnmcombine(param):
     mode='mean'
-    outfmt='ppm'
-    outstrip=True
+    outfmt='pnm'
     if(param[0]=='-m'):
         mode=param[1]
         del param[0:2]
@@ -764,15 +707,10 @@ def pnmcombine(param):
         outimg = outimg.linear(1/len(inimgarray), 0).math2_const("pow",0.5).rint()
 
     # writing output image
-    if (outfilename and outfilename != '-'):
-        if (outfmt=='fits'):
-            outimg.fitssave(outfilename)
-        else:
-            outimg.ppmsave(outfilename, strip=1)
-    else:
-        target = pyvips.Target.new_to_descriptor(sys.stdout.fileno())
-        outimg.write_to_target(target, "." + outfmt, strip=outstrip)
+    writeimage(["-f", outfmt, outimg, outfilename])
+
     exit()
+
 
 # clean bad pixels in image according to mask (bilinear interpolation)
 # usage: cleanhotpixel [-b bayerpattern] <image> <badmask> [outimage]
@@ -781,8 +719,9 @@ def pnmcombine(param):
 def cleanhotpixel(param):
     bayerpattern=""
     outfilename="-"
-    outfmt="ppm"
-    outstrip=True
+    outfmt="pgm"
+    method="median"     # if median use median otherwise mean
+    neighbors="nearest" # if nearest then l/r/t/b otherwise tl/tr/bl/br
     if(isinstance(param[0],str) and param[0]=='-b'):
         bayerpattern=param[1]
         del param[0:2]
@@ -813,12 +752,20 @@ def cleanhotpixel(param):
 
     if (bayerpattern == ""):
         # gray image
-        pl = image.embed(-1, 0, w, h)
-        pr = image.embed(1, 0, w, h)
-        pt = image.embed(0, -1, w, h)
-        pb = image.embed(0, 1, w, h)
-        #pnew = pyvips.Image.bandrank(parray, 4)
-        pgray = pl.bandjoin([pr, pt, pb]).bandmean()
+        if (neighbors == "nearest"):
+            pl = image.embed(-1, 0, w, h)
+            pr = image.embed(1, 0, w, h)
+            pt = image.embed(0, -1, w, h)
+            pb = image.embed(0, 1, w, h)
+        else:
+            pl = image.embed(-1, -1, w, h)
+            pr = image.embed(1, -1, w, h)
+            pt = image.embed(-1, 1, w, h)
+            pb = image.embed(1, 1, w, h)
+        if (method == "median"):
+            pgray = pl.bandrank([pr, pt, pb])
+        else:
+            pgray = pl.bandjoin([pr, pt, pb]).bandmean()
 
         outimg = (badmask > 0).ifthenelse(pgray, image)
     else:
@@ -832,73 +779,35 @@ def cleanhotpixel(param):
         ptr = image.embed(1, -1, w, h)
         pbl = image.embed(-1, 1, w, h)
         pbr = image.embed(1, 1, w, h)
-        #pnew = pyvips.Image.bandrank(parray, 4)
-        pgreen = ptl.bandjoin([ptr, pbl, pbr]).bandmean()
+        if (method == "median"):
+            pgreen = ptl.bandrank([ptr, pbl, pbr])
+        else:
+            pgreen = ptl.bandjoin([ptr, pbl, pbr]).bandmean()
 
         # interpolate red and blue pixels
         pl = image.embed(-2, 0, w, h)
         pr = image.embed(2, 0, w, h)
         pt = image.embed(0, -2, w, h)
         pb = image.embed(0, 2, w, h)
-        #pnew = pyvips.Image.bandrank(parray, 4)
-        predblue = pl.bandjoin([pr, pt, pb]).bandmean()
+        if (method == "median"):
+            predblue = pl.bandrank([pr, pt, pb])
+        else:
+            predblue = pl.bandjoin([pr, pt, pb]).bandmean()
 
         outimg = (badmask > 0).ifthenelse(
             (greenmask > 0).ifthenelse(pgreen, predblue),
             image)
 
     # writing output image
-    if (outfilename and outfilename != '-'):
-        if (outfmt=='fits'):
-            outimg.fitssave(outfilename)
-        else:
-            outimg.ppmsave(outfilename, strip=1)
-    else:
-        target = pyvips.Target.new_to_descriptor(sys.stdout.fileno())
-        outimg.write_to_target(target, "." + outfmt, strip=outstrip)
+    writeimage(["-f", outfmt, outimg, outfilename])
     exit()
 
-def cleanbadpixel_grey(param):
-    outfilename="-"
-    outfmt="ppm"
-    outstrip=True
-    infilename = param[0]
-    maskfilename = param[1]
-    if(len(param)>2):
-        outfilename = param[2]
-
-    image = pyvips.Image.new_from_file(infilename)
-    badmask = pyvips.Image.new_from_file(maskfilename)
-
-    w = image.width
-    h = image.height
-    p1 = image.embed(-1, 0, w, h)
-    p2 = image.embed(1, 0, w, h)
-    p3 = image.embed(0, -1, w, h)
-    p4 = image.embed(0, 1, w, h)
-    parray = [ p1, p2, p3, p4 ]
-    #pnew = pyvips.Image.bandrank(parray, 4)
-    pnew = parray[0].bandrank(parray[1:])
-    #pnew = pyvips.Image.bandrank(parray, len(parray))
-
-    outimg = (badmask > 0).ifthenelse(pnew, image)
-    # writing output image
-    if (outfilename and outfilename != '-'):
-        if (outfmt=='fits'):
-            outimg.fitssave(outfilename)
-        else:
-            outimg.ppmsave(outfilename, strip=1)
-    else:
-        target = pyvips.Target.new_to_descriptor(sys.stdout.fileno())
-        outimg.write_to_target(target, "." + outfmt, strip=outstrip)
-    exit()
 
 # merge 4 monochrome images into bayered image
 # syntax: bmerge top-left top-right bottom-left bottom-right
 def bmerge(param):
     outfilename="-"
-    outfmt="ppm"
-    outstrip=True
+    outfmt="pgm"
     infilename00 = param[0]
     infilename10 = param[1]
     infilename01 = param[2]
@@ -917,14 +826,7 @@ def bmerge(param):
     outimg = index.case([p00, p10, p01, p11])
 
     # writing output image
-    if (outfilename and outfilename != '-'):
-        if (outfmt=='fits'):
-            outimg.fitssave(outfilename)
-        else:
-            outimg.ppmsave(outfilename, strip=1)
-    else:
-        target = pyvips.Target.new_to_descriptor(sys.stdout.fileno())
-        outimg.write_to_target(target, "." + outfmt, strip=outstrip)
+    writeimage(["-f", outfmt, outimg, outfilename])
     exit()
 
 # subtract background image (scaled and downsized)
@@ -934,14 +836,12 @@ def bmerge(param):
 #   - subtract modified bgimg
 #   - multiply by outmult and shift bg to match outbg
 def imbgsub(param):
-    outfmt='ppm'
-    outstrip=True
+    outfmt='pnm'
     bgmult=0
     outmult=1
     outbg=1000
     if(param[0]=='-f'):
         outfmt='fits'
-        outstrip=False
         del param[0]
     if(param[0]=='-bgm'):
         bgmult=float(param[1])
@@ -974,16 +874,65 @@ def imbgsub(param):
 
     # output
     # writing output image
-    if (outfilename and outfilename != '-'):
-        if (outfmt=='fits'):
-            outimg.fitssave(outfilename)
-        else:
-            outimg.ppmsave(outfilename, strip=1)
-    else:
-        target = pyvips.Target.new_to_descriptor(sys.stdout.fileno())
-        outimg.write_to_target(target, "." + outfmt, strip=outstrip)
+    writeimage(["-f", outfmt, outimg, outfilename])
 
     exit()
+
+
+# write image to file or stdout (default: PNM file)
+# syntax: writeimage [-f format] image [outfilename]
+def writeimage(param):
+    fmt='pnm'
+    strip=None
+    filename=None
+    if(param[0]=='-f'):
+        # TODO: lowercase
+        fmt=param[1]
+        del param[0:2]
+    if isinstance(param[0], pyvips.vimage.Image):
+        image = param[0]
+    else:
+        image = pyvips.Image.new_from_file(param[0])
+    if(len(param)>1):
+        filename = param[1]
+
+    if (fmt == "pnm" or fmt == "ppm" or fmt == "pgm" or fmt == "pbm"):
+        strip=True
+    if (fmt == "fits" or fmt == "tif"):
+        strip=False
+    if (strip == None):
+        print("ERROR: unsupported output image file format", file=sys.stderr)
+        exit(-1)
+
+    if (filename and filename != '-'):
+        if (fmt=='fits'):
+            image.fitssave(filename)
+        else:
+            # workaraound for ppmsave in libvips 8.12.1 (Ubuntu 22.04)
+            # were format determines the output image format
+            if (pyvips.base.at_least_libvips(8,12)):
+                if (image.bands == 1):
+                    if (fmt == "pnm" or fmt == "ppm"): fmt="pgm"
+                else:
+                    if (fmt == "pnm"): fmt="ppm"
+                tmpfile=NamedTemporaryFile(delete=False)
+                image.ppmsave(tmpfile.name, format=fmt, strip=1)
+                os.rename(tmpfile.name, filename)
+            else:
+                # output file format is picked from image.bands
+                # format is not used
+                # file extension is ignored
+                image.ppmsave(filename, strip=1)
+    else:
+        #print("INFO: writing to stdout", file=sys.stderr)
+        if (image.bands == 1):
+            if (fmt == "pnm" or fmt == "ppm"): fmt="pgm"
+        else:
+            if (fmt == "pnm"): fmt="ppm"
+        target = pyvips.Target.new_to_descriptor(sys.stdout.fileno())
+        image.write_to_target(target, "." + fmt, strip=strip)
+    exit()
+
 
 # convert vips image into numpy array
 def v2np(vipsimage):
