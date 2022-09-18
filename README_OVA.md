@@ -87,7 +87,7 @@ folder between host and virtual computer to copy those data files.
 For other methods of data transfer (e.g. using the VirtualBox File Manager
 or using external USB storage) please refer to the VirtualBox documentation.
 
-- Download [sample data](http://fg-kometen.vdsastro.de/airtools/testdata/210115_snv_raw.zip)
+- Download [sample data](http://fg-kometen.vdsastro.de/airtools/testdata/210116_snv_raw.zip)
   and extract files and directories in a local folder on your host computer.
 
 - Locate the VirtualBox menubar (above the virtual Linux Desktop) and
