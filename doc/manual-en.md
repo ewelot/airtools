@@ -8,7 +8,7 @@ Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v4.2)
       - [<span class="toc-section-number">2.1</span> Installation on
         Linux](#installation-on-linux)
           - [<span class="toc-section-number">2.1.1</span> Installing
-            the AIRTOOLS software](#install_airtools)
+            the AIRTOOLS software](#installing-the-airtools-software)
           - [<span class="toc-section-number">2.1.2</span> Updating the
             AIRTOOLS software](#updating-the-airtools-software)
           - [<span class="toc-section-number">2.1.3</span> Uninstalling
@@ -17,14 +17,14 @@ Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v4.2)
         Windows using a Linux/AIRTOOLS
         appliance](#installation-on-windows-using-a-linuxairtools-appliance)
           - [<span class="toc-section-number">2.2.1</span> Installing
-            Oracle VirtualBox](#install_virtualbox)
+            Oracle VirtualBox](#installing-oracle-virtualbox)
           - [<span class="toc-section-number">2.2.2</span> Importing the
             Linux/AIRTOOLS
             appliance](#importing-the-linuxairtools-appliance)
           - [<span class="toc-section-number">2.2.3</span> Starting the
             virtual Linux OS](#starting-the-virtual-linux-os)
           - [<span class="toc-section-number">2.2.4</span> Xubuntu
-            Desktop Basics](#xubuntu_basics)
+            Desktop Basics](#xubuntu-desktop-basics)
   - [<span class="toc-section-number">3</span> The AIRTOOLS Graphical
     User Interface](#the-airtools-graphical-user-interface)
   - [<span class="toc-section-number">4</span> The first AIRTOOLS
@@ -83,14 +83,14 @@ Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v4.2)
           - [<span class="toc-section-number">7.1.3</span> Installing
             Xubuntu Linux](#installing-xubuntu-linux)
           - [<span class="toc-section-number">7.1.4</span> Xubuntu
-            Desktop Basics](#xubuntu-desktop-basics)
+            Desktop Basics](#xubuntu-desktop-basics-1)
           - [<span class="toc-section-number">7.1.5</span> Installing
             VirtualBox Guest
             Additions](#installing-virtualbox-guest-additions)
           - [<span class="toc-section-number">7.1.6</span> Installing
-            the AIRTOOLS software](#installing-the-airtools-software)
+            the AIRTOOLS software](#installing-the-airtools-software-1)
       - [<span class="toc-section-number">7.2</span> Sample data
-        project](#sample_project)
+        project](#sample-data-project)
           - [<span class="toc-section-number">7.2.1</span> Create
             project](#create-project)
           - [<span class="toc-section-number">7.2.2</span> Get
@@ -102,7 +102,7 @@ Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v4.2)
           - [<span class="toc-section-number">7.2.5</span> Comet
             Photometry](#comet-photometry)
       - [<span class="toc-section-number">7.3</span> Using external USB
-        storage](#usb_storage)
+        storage](#using-external-usb-storage)
 
 # Introduction
 
@@ -403,7 +403,7 @@ disk space will be used on the temporary directories.
 
 You may try the AIRTOOLS software using sample data. If you just want to
 get up and running quickly you could follow the instructions provided in
-the [appendix](#sample_project) and skip the rest of chapter 4.
+the [appendix](#sample-data-project) and skip the rest of chapter 4.
 
 For any new project the setup form has to be completed. Select the date
 of observation. This will be used to make initial suggestions for path
@@ -502,11 +502,11 @@ reference for your newly added lines. The columns used are:
   - camchip:  
     Camera and sensor keys used in final ICQ records of a comet
     measurement. Refer to the lists of [camera
-    keys](https://cobs.si/help?page=ccd_type) and [sensor
-    keys](https://cobs.si/help?page=ccd_chip). Both values have to be
-    provided in a single word, using the character `/` as a delimiter.
-    If you for example have used a Canon 6D DSLR for imaging then the
-    correct entry would be `CDS/CFC`.
+    keys](https://cobs.si/help/icq_list/list_camera_types/) and [sensor
+    keys](https://cobs.si/help/icq_list/list_chip_types/). Both values
+    have to be provided in a single word, using the character `/` as a
+    delimiter. If you for example have used a Canon 6D DSLR for imaging
+    then the correct entry would be `CDS/CFC`.
   - flip:  
     Indicate if the image data is flipped top-down (1) or not (0).
     Essentially this describes the order and interpretation of FITS
@@ -589,8 +589,8 @@ folder feature of the VirtualBox software:
     (exported from your host computers file system) and copy them to the
     raw files folder corresponding to your current project.
 
-Refer to the instructions in the [appendix](#usb_storage) if your raw
-images reside on an external USB disk.
+Refer to the instructions in the [appendix](#using-external-usb-storage)
+if your raw images reside on an external USB disk.
 
 You are now going to start the first AIRTOOLS task. By pressing the
 “Extract basic image info” the program reads meta data of all raw
@@ -940,7 +940,7 @@ similar way you would install Linux on a physical computer.
 ### Setup of a Virtual Machine for the Linux OS
 
 At first you need to install the VirtualBox software as described in
-[this chapter](#install_virtualbox).
+[this chapter](#installing-oracle-virtualbox).
 
 Start the Oracle VirtualBox Manager, if not running already. Click on
 the “New” button and fill in the name of the new VM, e.g. xubuntu-vm.
@@ -1060,10 +1060,10 @@ after the AIRTOOLS installation.
 
 ### Xubuntu Desktop Basics
 
-See [this chapter](#xubuntu_basics). Please note that the appearance of
-the desktop might be slightly different from that of the pre-build Linux
-appliance, e.g. the panel applet for choosing another keyboard language
-is not visible.
+See [this chapter](#xubuntu-desktop-basics). Please note that the
+appearance of the desktop might be slightly different from that of the
+pre-build Linux appliance, e.g. the panel applet for choosing another
+keyboard language is not visible.
 
 ### Installing VirtualBox Guest Additions
 
@@ -1103,7 +1103,7 @@ VirtualBox guest menu bar on the top of the window.
 
 ### Installing the AIRTOOLS software
 
-see [this chapter](#install_airtools)
+see [this chapter](#installing-the-airtools-software)
 
 ## Sample data project
 
