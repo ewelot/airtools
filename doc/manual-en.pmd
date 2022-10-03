@@ -88,7 +88,7 @@ described in detail in the appendix.
 
 ## Installation on Linux
 
-### Installing the AIRTOOLS software {#install_airtools}
+### Installing the AIRTOOLS software {#installing-the-airtools-software}
 
 The AIRTOOLS project is hosted at <https://github.com/ewelot/airtools> where
 you can find the latest source code and documentation. Pre-compiled binary
@@ -149,7 +149,7 @@ The AIRTOOLS software can be uninstalled by running
 
 ## Installation on Windows using a Linux/AIRTOOLS appliance
 
-### Installing Oracle VirtualBox {#install_virtualbox}
+### Installing Oracle VirtualBox {#installing-oracle-virtualbox}
 VirtualBox (<http://www.virtualbox.org>) is a free and powerful virtualization
 software for enterprise and home users. Get the software appropriate for your
 host operating system from the
@@ -202,7 +202,7 @@ simply "guest" computer.
   integration and alike) which you can savely ignore.
 
 
-### Xubuntu Desktop Basics {#xubuntu_basics}
+### Xubuntu Desktop Basics {#xubuntu-desktop-basics}
 
 The desktop of the virtual Linux computer is displayed within the window
 of the Oracle VM VirtualBox software. The menu bar at the top is part of
@@ -304,7 +304,7 @@ space will be used on the temporary directories.
 
 You may try the AIRTOOLS software using sample data. If you just want to get
 up and running quickly you could follow the instructions provided in the
-[appendix](#sample_project) and skip the rest of chapter 4.
+[appendix](#sample-data-project) and skip the rest of chapter 4.
 
 For any new project the setup form has to be completed. Select the
 date of observation. This will be used to make initial suggestions for path
@@ -405,8 +405,8 @@ camera:
 
 camchip:
 :   Camera and sensor keys used in final ICQ records of a comet measurement.
-    Refer to the lists of [camera keys](https://cobs.si/help?page=ccd_type)
-    and [sensor keys](https://cobs.si/help?page=ccd_chip). Both values have to
+    Refer to the lists of [camera keys](https://cobs.si/help/icq_list/list_camera_types/)
+    and [sensor keys](https://cobs.si/help/icq_list/list_chip_types/). Both values have to
     be provided in a single word, using the character `/` as a delimiter. If
     you for example have used a Canon 6D DSLR for imaging then the correct
     entry would be `CDS/CFC`.
@@ -490,7 +490,7 @@ of the VirtualBox software:
   file share (exported from your host computers file system) and copy them to
   the raw files folder corresponding to your current project.
 
-Refer to the instructions in the [appendix](#usb_storage) if your raw images
+Refer to the instructions in the [appendix](#using-external-usb-storage) if your raw images
 reside on an external USB disk.
 
 You are now going to start the first AIRTOOLS task. By pressing the
@@ -841,7 +841,7 @@ in a similar way you would install Linux on a physical computer.
 
 ### Setup of a Virtual Machine for the Linux OS
 At first you need to install the VirtualBox software as described in
-[this chapter](#install_virtualbox).
+[this chapter](#installing-oracle-virtualbox).
 
 Start the Oracle VirtualBox Manager, if not running already.
 Click on the "New" button and fill in the name of the new VM, e.g. xubuntu-vm.
@@ -951,7 +951,7 @@ about available updates of currently installed packages. Again, those updates
 are not required right now but should be completed after the AIRTOOLS installation.
 
 ### Xubuntu Desktop Basics
-See [this chapter](#xubuntu_basics). Please note that the appearance of the
+See [this chapter](#xubuntu-desktop-basics). Please note that the appearance of the
 desktop might be slightly different from that of the pre-build Linux appliance,
 e.g. the panel applet for choosing another keyboard language is not visible.
 
@@ -991,11 +991,11 @@ menu bar on the top of the window.
 
 
 ### Installing the AIRTOOLS software
-see [this chapter](#install_airtools)
+see [this chapter](#installing-the-airtools-software)
 
 \pagebreak
 
-## Sample data project {#sample_project}
+## Sample data project {#sample-data-project}
 
 Sample data files are provided to test and experiment with the AIRTOOLS
 software. The following steps must be completed within a running Linux
@@ -1092,7 +1092,7 @@ all tasks to calibrate and stack images automatically.
 
 \pagebreak
 
-## Using external USB storage {#usb_storage}
+## Using external USB storage {#using-external-usb-storage}
 
 This chapter describes the file transfer from USB pen drive or USB disk to
 the virtual Linux operating system or vice versa.

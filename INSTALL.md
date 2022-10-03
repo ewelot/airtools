@@ -1,35 +1,14 @@
 
 
-## Installation of binary packages
+## Installation on Linux
 
-Binary packages are provided for the following Linux distributions:
+Please refer to [this chapter](https://github.com/ewelot/airtools/blob/master/doc/manual-en.md#installation-on-linux)
+in the user manual.
 
-  - Ubuntu 20.04 "Focal" 
-  - Debian 10 "Buster"
-  - Debian 11 "Bullseye"
+## Installation on Windows
 
-Ubuntu packages are tested on Xubuntu LTS distributions and should work on
-any Ubuntu desktop flavour (e.g. native Ubuntu, Kubuntu, Lubuntu). 
-
-Adding the binary package repository of the AIRTOOLS software is done by
-adding an entry to the package managment sources.
-If e.g. your distribution is based on Ubuntu 20.04 "Focal" you should run the
-following commands in a terminal:
-
-    DIST=focal
-    REPO=http://fg-kometen.vdsastro.de/airtools/debian
-    SRCFILE=/etc/apt/sources.list.d/airtools.list
-    sudo bash -c "echo deb [trusted=yes] $REPO $DIST main > $SRCFILE"
-
-If you are running a different distribution, you must replace the setting of
-DIST by using your distributions code name (e.g. bullseye) in the command
-sequence above.
-
-Installation (or any later update) is done by invoking the following commands:
-
-    sudo apt update
-    sudo apt install airtools
-
+Please refer to [this chapter](https://github.com/ewelot/airtools/blob/master/doc/manual-en.md#installation-on-windows-using-a-linuxairtools-appliance)
+in the user manual.
 
 ## Compiling and Installing from source code
 
