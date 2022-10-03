@@ -208,6 +208,16 @@ $if(institute)$
 $endif$
 \date{$date$}
 
+%% TL: section added to use fixed position of figures
+\usepackage{float}
+\let\origfigure\figure
+\let\endorigfigure\endfigure
+\renewenvironment{figure}[1][2] {
+    \expandafter\origfigure\expandafter[H]
+} {
+    \endorigfigure
+}
+
 \begin{document}
 $if(title)$
 %% TL: line added
