@@ -46,6 +46,10 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.prefs.BackingStoreException;
+import java.util.prefs.NodeChangeListener;
+import java.util.prefs.PreferenceChangeListener;
+import java.util.prefs.Preferences;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.SimpleIntegerProperty;
 import javafx.beans.property.SimpleStringProperty;
@@ -193,6 +197,8 @@ public class MainController implements Initializable {
     private final IntegerProperty tzoff = new SimpleIntegerProperty();
     private Observer observer;
     
+    private Preferences prefWindowPos;
+    
     /**
      * Initializes the controller class.
      */
@@ -300,6 +306,7 @@ public class MainController implements Initializable {
                 }
             }, projectDir));
 
+        //prefWindowPos = new Preferences;
     }
 
     public SimpleLogger getLogger() {

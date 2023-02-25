@@ -6,6 +6,7 @@
 import sys
 import os
 import math
+import re
 from tempfile import NamedTemporaryFile
 from collections import defaultdict
 from csv import DictReader
@@ -315,23 +316,27 @@ def datarange(param):
 #   - subtract dark image
 #   - divide by flat image
 #   - clean hot pixel
+#   - crop image
+#   - post rotate (180 degrees)
 #   - multiply by mult (array for different bands)
 #   - add offset value add (array for different bands)
 #   - optionally convert from rgb to gray
-# syntax: pnmccdred [-f] [-g] [-preadd val] [-premult val] [-bpat bayerpattern] [-tb] [-r180] \
-#   inpnm outpnm dark flat bad mult add
+# syntax: pnmccdred [-fmt outfmt|pnm] [-gray] [-preadd val] [-premult val] [-flip] [-prerot]
+#   [-bpat bayerpattern] [-cgeom wxh+x+y ] [-rot] inpnm outpnm dark flat bad mult add
 def pnmccdred(param):
     outfmt='pnm'
     outgray=False
     preadd=0
     premult=1
-    bayerpattern=""
+    bayerpattern="" # only used if bad is provided
+    cgeom=""
     flip=False
+    prerot=False
     rot=False
-    if(param[0]=='-f'):
-        outfmt='fits'
-        del param[0]
-    if(param[0]=='-g'):
+    if(param[0]=='-fmt'):
+        outfmt=param[1]
+        del param[0:2]
+    if(param[0]=='-gray'):
         outgray=True
         del param[0]
     if(param[0]=='-preadd'):
@@ -340,13 +345,19 @@ def pnmccdred(param):
     if(param[0]=='-premult'):
         premult=float(param[1])
         del param[0:2]
+    if(param[0]=='-flip'):
+        flip=True
+        del param[0]
+    if(param[0]=='-prerot'):
+        prerot=True
+        del param[0]
     if(param[0]=='-bpat'):
         bayerpattern=param[1]
         del param[0:2]
-    if(param[0]=='-tb'):
-        flip=True
-        del param[0]
-    if(param[0]=='-r180'):
+    if(param[0]=='-cgeom'):
+        cgeom=param[1]
+        del param[0:2]
+    if(param[0]=='-rot'):
         rot=True
         del param[0]
     infilename = param[0]
@@ -375,8 +386,8 @@ def pnmccdred(param):
         code += """.linear(premult, 0)"""
     if flip:
         code += """.flip('vertical')"""
-    if rot:
-        code += """.rotate(180)"""
+    if prerot:
+        code += """.rot180()"""
     if dark:
         if (dark != '-'):
             darkimg = pyvips.Image.new_from_file(dark)
@@ -391,6 +402,11 @@ def pnmccdred(param):
             source = pyvips.Source.new_from_descriptor(sys.stdin.fileno())
             flatimg = pyvips.Image.new_from_source(source, "")
         code += """.divide(flatimg)"""
+    if cgeom:
+        x=re.split('x|\\+', cgeom)
+        code += """.crop(x[2], x[3], x[0], x[1])"""
+    if rot:
+        code += """.rot180()"""
     if mult:
         if add:
             code += """.linear(mult, add)"""
@@ -403,13 +419,10 @@ def pnmccdred(param):
         code += """.linear(channelmult, 0).bandmean().copy(interpretation='grey16')"""
 
     code += """.rint().cast('ushort')"""
-    # workaround for fitssave which otherwise creates FITS cube
-    # HAS NO EFFECT!
-    #if (inimg.bands == 1 and outfmt == 'fits'):
-    #    code += """.bandmean().copy(interpretation='grey16')"""
 
     if bad:
         tmpimg = eval(code)
+        # TODO: parameters cgeom and rot must be applied to bad as well 
         if (bayerpattern):
             cleanhotpixel(["-b", bayerpattern, tmpimg, bad, outfilename])
         else:
@@ -611,12 +624,12 @@ def regstat(param):
     histimg=inimg.multiply(maskimg).hist_find()
     # remove pixel counts outside mask
     histimg2=histimg.draw_rect([x-outcnt for x in histimg.getpoint(0, 0)], 0, 0, 1, 1)
-    
-    ramp = pyvips.Image.new_from_array(range(histimg2.width))
+
+    ramp = pyvips.Image.new_from_array(list(range(histimg2.width)))
     # mean value for each band: sum(hist*ramp)/area
     statsimg = histimg2.multiply(ramp).stats()
     mean = [statsimg.getpoint(2, i+1)[0]/incnt for i in range(ncol)]
-    # determine max value for each band
+    # determine min value for each band
     statsimg = (histimg2 > 0).ifthenelse(ramp, ramp.width).stats()
     minval = [statsimg.getpoint(0, i+1)[0] for i in range(ncol)]
     # determine max value for each band
@@ -669,7 +682,7 @@ def regstat(param):
     exit()
 
 def pnmcombine(param):
-    mode='mean'
+    mode='mean' # sum, mean, median, stddev
     outfmt='pnm'
     if(param[0]=='-m'):
         mode=param[1]
@@ -695,6 +708,11 @@ def pnmcombine(param):
         for i in range(1,len(inimgarray)):
             outimg = outimg.add(inimgarray[i]);
         outimg = outimg.linear(1/len(inimgarray), 0).rint()
+    elif mode=="sum":
+        outimg = inimgarray[0]
+        for i in range(1,len(inimgarray)):
+            outimg = outimg.add(inimgarray[i]);
+        outimg = outimg.rint()
     else:
         meanimg = inimgarray[0]
         for i in range(1,len(inimgarray)):
@@ -715,7 +733,7 @@ def pnmcombine(param):
 # clean bad pixels in image according to mask (bilinear interpolation)
 # usage: cleanhotpixel [-b bayerpattern] <image> <badmask> [outimage]
 # default: write result to stdout (pgm format)
-# note: bayerpattern is filter at lower left corner
+# note: bayerpattern is filter pattern at lower left corner
 def cleanhotpixel(param):
     bayerpattern=""
     outfilename="-"
@@ -879,12 +897,79 @@ def imbgsub(param):
     exit()
 
 
+# subtract column- or row-pattern
+# syntax: impatsub [-r] [-f] [-a add] infile [outfile]
+def impatsub(param):
+    pattern='column'
+    outfmt='pnm'
+    outadd=0
+    if(param[0]=='-r'):
+        pattern='row'
+        del param[0]
+    if(param[0]=='-f'):
+        outfmt='fits'
+        del param[0]
+    if(param[0]=='-a'):
+        outadd=float(param[1])
+        del param[0:2]
+    #if(param[0]=='-m'):
+    #    outmult=float(param[1])
+    #    del param[0:2]
+    infilename = param[0]
+    outfilename = param[1]
+
+    # reading input image
+    if (infilename and infilename != '-'):
+        inimg = pyvips.Image.new_from_file(infilename)
+    else:
+        source = pyvips.Source.new_from_descriptor(sys.stdin.fileno())
+        inimg = pyvips.Image.new_from_source(source, "")
+
+    w=inimg.width
+    h=inimg.height
+    n=inimg.bands
+    print("bands=", n, file=sys.stderr)
+
+    # check outfmt
+    if ((n==2 or n>3) and outfmt != 'fits'):
+        print("ERROR: bands=", n, "is supported only by FITS file output format (use option -f)", file=sys.stderr)
+        exit(-1)
+
+    if (n>10):
+        n=10
+    for i in range(n):
+        imslice=inimg.extract_band(i)
+        x=inimg.avg()
+        print("i=", i, " avg=", imslice.avg(), file=sys.stderr)
+        if (pattern == 'column'):
+            index=int(w/2)
+            rankimg=imslice.rank(w, 1, index).crop(index, 0, 1, h).replicate(w,1)
+        else:
+            index=int(h/2)
+            rankimg=imslice.rank(1, h, index).crop(0, index, w, 1).replicate(1,h)
+        if (i==0):
+            outimg=imslice.subtract(rankimg).linear(1,outadd)
+        else:
+            outimg=outimg.bandjoin(imslice.subtract(rankimg).linear(1,outadd))
+
+    # output
+    # writing output image
+    writeimage(["-f", outfmt, outimg, outfilename])
+
+    exit()
+
+
 # write image to file or stdout (default: PNM file)
-# syntax: writeimage [-f format] image [outfilename]
+# syntax: writeimage [-16] [-f format] image [outfilename]
+# supported output file formats: PBM PGM PPM PNM TIF PNG FITS
 def writeimage(param):
     fmt='pnm'
+    depth=None
     strip=None
     filename=None
+    if(param[0]=='-16'):
+        depth=16
+        del param[0]
     if(param[0]=='-f'):
         # TODO: lowercase
         fmt=param[1]
@@ -898,11 +983,27 @@ def writeimage(param):
 
     if (fmt == "pnm" or fmt == "ppm" or fmt == "pgm" or fmt == "pbm"):
         strip=True
-    if (fmt == "fits" or fmt == "tif"):
+    if (fmt == "fits" or fmt == "tif" or fmt == "tiff" or fmt == "png"):
         strip=False
     if (strip == None):
         print("ERROR: unsupported output image file format", file=sys.stderr)
         exit(-1)
+
+    if (depth == 16 or image.max() > 255):
+        if (image.bands == 1):
+            image=image.cast('ushort').copy(interpretation="grey16")
+        else:
+            image=image.cast('ushort').copy(interpretation="rgb16")
+
+    if (pyvips.base.at_least_libvips(8,14)):
+        # target format pnm is recognized and chooses the smallest possible
+        # output format
+        pass
+    else:
+        if (image.bands == 1):
+            if (fmt == "pnm"): fmt="pgm"
+        else:
+            if (fmt == "pnm"): fmt="ppm"
 
     if (filename and filename != '-'):
         if (fmt=='fits'):
@@ -910,25 +1011,24 @@ def writeimage(param):
         else:
             # workaraound for ppmsave in libvips 8.12.1 (Ubuntu 22.04)
             # were format determines the output image format
-            if (pyvips.base.at_least_libvips(8,12)):
+            if (False and pyvips.base.at_least_libvips(8,12)):
+                print("WARNING: using fallback in writeimage", file=sys.stderr)
                 if (image.bands == 1):
                     if (fmt == "pnm" or fmt == "ppm"): fmt="pgm"
                 else:
                     if (fmt == "pnm"): fmt="ppm"
                 tmpfile=NamedTemporaryFile(delete=False)
                 image.ppmsave(tmpfile.name, format=fmt, strip=1)
-                os.rename(tmpfile.name, filename)
+                #os.rename(tmpfile.name, filename)
+                shutil.move(tmpfile.name, filename)
             else:
                 # output file format is picked from image.bands
                 # format is not used
                 # file extension is ignored
-                image.ppmsave(filename, strip=1)
+                target = pyvips.Target.new_to_file(filename)
+                image.write_to_target(target, "." + fmt, strip=strip)
     else:
         #print("INFO: writing to stdout", file=sys.stderr)
-        if (image.bands == 1):
-            if (fmt == "pnm" or fmt == "ppm"): fmt="pgm"
-        else:
-            if (fmt == "pnm"): fmt="ppm"
         target = pyvips.Target.new_to_descriptor(sys.stdout.fileno())
         image.write_to_target(target, "." + fmt, strip=strip)
     exit()

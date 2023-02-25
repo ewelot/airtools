@@ -55,7 +55,7 @@ public class CometExtractController implements Initializable {
         //cbDelete.setDisable(true);
         
         labelWarning.setText("");
-        cbCoMult.getItems().addAll("1", "10");
+        cbCoMult.getItems().addAll("1", "3", "10");
         cbMaxRadius.getItems().addAll("10", "100");
     }    
     

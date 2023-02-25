@@ -19,8 +19,8 @@
 ########################################################################
 AOVARS="AO_SKIP AO_FLATS AO_LIGHT AO_BGVAR AO_REGIS AO_STACK AO_AMASK AO_ACOOR AO_ABINN"
 
-VERSION="1.4"
-VINFO="T. Lehmann, Jul. 2022"
+VERSION="1.4.2"
+VINFO="T. Lehmann, Feb. 2023"
 PINFO="\
     options:
       -h            show this help text
@@ -34,6 +34,14 @@ PINFO="\
       task          run given task    
 "
 CHANGELOG="
+    1.4.2 22 Feb 2023
+        * darks: recompute dark variations if new dark set has been added
+
+    1.4.1 10 Dec 2022
+        * astrometry:
+            - do not rely on star stack image (only when using AO_MASK)
+            - prefer GAIA catalogs over UCAC-4 for deep images
+
     1.4 - 24 Jul 2022
         * astrometry: sensible parameters for AIwcs are now taken from output
             of guess_wcsparam
@@ -626,6 +634,7 @@ _darks () {
     local x
     local msg
     local bs
+    local has_new_dark
     local popts
     local tmpargs=$(mktemp "/tmp/tmp_args_XXXXXX")
     local tmpsh=$(mktemp "/tmp/tmp_script_XXXXXX.sh")
@@ -779,6 +788,7 @@ EOF
         test "$msg" && echo $msg && msg=""
         AIdark $set
         test $? -ne 0 && return 255
+        has_new_dark=1
     done
     ! match image "$SKIPPARTS" &&
         for set in $slist; do test -f $set.pgm && dklist="$dklist $set.pgm"; done &&
@@ -792,7 +802,7 @@ EOF
     tellist=$(AIsetinfo -b | grep -w d | awk '{printf("%s\n", $11)}' | sort -u)
     ! match proc "$SKIPPARTS" && for tel in $tellist
     do
-        test -f dk.var10.$tel.pgm && continue
+        test -z "$has_new_dark" && continue
         
         # populate $tmpargs to be used by parallel
         rm -f $tmpargs
@@ -1182,7 +1192,7 @@ _bgvar () {
             fi
         done)
     ! match image "$SKIPPARTS" && test "$imlist" &&
-        AIexamine -l -n "Background_Variation" $imlist
+        AIexamine -l -z -n "Background_Variation" $imlist
     return 0
 }
 
@@ -1661,6 +1671,8 @@ _astrometry () {
     local slist
     local set
     local ststack
+    local w
+    local h
     local imcoord
     local ra
     local dec
@@ -1715,12 +1727,21 @@ _astrometry () {
     do
         echo "$msg" && msg=""
         echo "set=$set"
+        test ! -e $set.head &&
+            echo "WARNING: missing header file $set.head" && continue
         ststack=""
         test -f $set.pgm && ststack=$set.pgm
         test -f $set.ppm && ststack=$set.ppm
-        test -z "$ststack" && continue
-        test ! -e $set.head &&
-            echo "WARNING: missing header file $set.head" && continue
+        if [ "$ststack" ]
+        then
+            set - $(imsize $ststack)
+            w=$1; h=$2
+        else
+            set - $(get_header -s $set.head NAXIS1,NAXIS2)
+            w=$1; h=$2
+        fi
+        test -z "$ststack" && test "$AO_AMASK" && is_number $AO_AMASK &&
+            echo "WARNING: missing stacked image (required by adopting AO_MASK)" && continue
         # skip processing if wcs header exists and there is no change in AO_AMASK
         amask=$(get_header -q $set.head AO_AMASK)
         test -f $set.wcs.head &&
@@ -1741,7 +1762,7 @@ _astrometry () {
         test -z "$pixscale" &&
             echo "ERROR: unknown pixscale in $set" && continue
         # FOV diameter in degrees
-        fov=$(imsize $ststack | awk -v p=$pixscale '{
+        fov=$(echo $w $h | awk -v p=$pixscale '{
             d=sqrt($1*$1+$2*$2)*p/3600
             if (d>1.501) {
                 printf("%.1f", d)
@@ -1791,8 +1812,7 @@ _astrometry () {
                 x=1+t/100
                 printf("-L %.2f -H %.2f -u app", $1/x-0.02, $1*x+0.02)}')
             # image dimension and source catalog columns to use
-            set - $(imsize $ststack)
-            opts="$opts -w $1 -e $2 -X XWIN_IMAGE -Y YWIN_IMAGE -s MAG_AUTO -a"
+            opts="$opts -w $w -e $h -X XWIN_IMAGE -Y YWIN_IMAGE -s MAG_AUTO -a"
 
             # select sources from image
             #   determine max fwhm (exclude diffuse sources)
@@ -1800,10 +1820,11 @@ _astrometry () {
             #   operate on green image channel
             test ! -e $set.src.dat && AIsource -q $ststack
             x=""
-            is_ppm $ststack && x="-2"
+            test $(listhead $set.src.dat | grep LDAC_OBJECTS | wc -l) -eq 3 && x="-2"
             rlim=""
             test "$AO_AMASK" && is_number "$AO_AMASK" && rlim=$AO_AMASK
             #   select bright sources
+            echo "sexselect -f $x -fm $fmax $set.src.dat \"\" 0.01 \"$rlim\" "" "" 99" >&2
             sexselect -f $x -fm $fmax $set.src.dat "" 0.01 "$rlim" "" "" 99 > $tmpcat
             stilts tcopy ifmt=fits ofmt=fits-basic in=$tmpcat"#2" out=$tmpxy
             nsrc=$(get_header $tmpxy NAXIS2)
@@ -1902,8 +1923,17 @@ _astrometry () {
         test "$6" != "-" && crossrad=$6
         
         # choose catalog depending on maglim and fov
+        allcats=$(scamp -d | awk '{
+            if ($1=="ASTREF_CATALOG") {ok=1} else {if($0!~/^ [ ]*#/){ok=0}}
+            if (ok==1) {print tolower($0)}}' | cut -d '#' -f2- | tr ', ' '\n' | \
+            grep "[a-z]" | grep -vwE "none|file|or")
         catalog="ucac4"
-        test "$maglim" && test ${maglim%.*} -lt 12 && catalog=ppmx
+        echo $allcats | grep -qw gaia-dr1 && catalog="gaia-dr1"
+        echo $allcats | grep -qw gaia-dr2 && catalog="gaia-dr2"
+        echo $allcats | grep -qw gaia-edr3 && catalog="gaia-edr3"
+        test "$maglim" &&
+            test $(echo $maglim 14.5 | awk '{if($1<$2) print "true"}') &&
+            catalog="ppmx"
         test ${fov%.*} -gt 5 && catalog="ppmx"
 
         # options for AIwcs
@@ -1925,7 +1955,7 @@ _astrometry () {
             else
                 if is_number $AO_AMASK
                 then
-                    imsize $ststack | awk '{printf("center %d %d\n", $1/2, $2/2)}' | \
+                    echo $w $h | awk '{printf("center %d %d\n", $1/2, $2/2)}' | \
                         xy2reg $ststack - "" "" $AO_AMASK > $tmpmask
                     opts="$opts -m $tmpmask"
                     set_header $set.head AO_AMASK=$AO_AMASK
@@ -1957,7 +1987,7 @@ _astrometry () {
     
     # display results parsing $set.wcs.head
     msg="# Summary for astrometry:
-# set  xrms    yrms     nimg  ncat nmatch nhigh  pscale north"
+# set  xrms    yrms     nimg  ncat nmatch nhigh  pscale north catalog   mlim"
     x=""
     for set in $slist
     do
@@ -1965,13 +1995,14 @@ _astrometry () {
         test "$msg" && echo "$msg" && msg=""
         north=$(get_wcsrot $set)
         pixscale=$(get_wcspscale $set)
-        echo $(get_header -s $set.wcs.head ASTRRMS1,ASTRRMS2,NIMG,NCAT,NMATCH,NHIGH) | \
+        echo $(get_header -q -s $set.wcs.head ASTRRMS1,ASTRRMS2,NIMG,NCAT,NMATCH,NHIGH,AREFCAT,AREFMLIM) | \
             awk -v s=$set -v p=$pixscale -v n=$north '{
                 printf("%s:  %.3f\"  %.3f\"", s, $1*3600, $2*3600)
-                if(NF==6) {
-                    printf("  %5d %5d  %5d %5d ", $3, $4, $5, $6)
-                    fmt="%6.3f %6.1f\n"; if (p>=10) fmt="%5.2f  %6.1f\n"
+                if(NF>=6) {
+                    printf("  %5d %5d  %5d %5d", $3, $4, $5, $6)
+                    fmt="%6.3f %6.1f"; if (p>=10) fmt="%5.2f  %6.1f"
                     printf(fmt, p, n)
+                    if(NF==8) printf("  %-9s %4.1f\n", $7, $8); else printf("  %-9s\n", $7)
                 } else {
                     printf("\n")
                 }}'
@@ -2237,9 +2268,10 @@ __load_images () {
     local n
     local retval=0
     local tdir=${AI_TMPDIR:-"/tmp"}
-    local lndir=$(mktemp -d "$tdir/tmp_lndir_XXXXXX")
-    local tmp1=$(mktemp "/tmp/tmp1_$$_XXXXXX.dat")
-    #local tmp2=$(mktemp "/tmp/tmp2_$$_XXXXXX.dat")
+    local tmpfiles=$tdir/ds9.AIRTOOLS.tmpfiles.dat  # list of file names to remove
+                                                    # when closing ds9 AIRTOOLS
+    local tmp1=$(mktemp "$tdir/tmp1_$$_XXXXXX.dat")
+    local tmplinks=$(mktemp "$tdir/tmp_links_XXXXXX.dat")
 
     # checking args
     test $# -eq 0 &&
@@ -2279,8 +2311,12 @@ __load_images () {
             rfile=$(get_rawfile $num 2>&1)
             (test $? -ne 0 || test -z "$rfile") && continue
             # create link to the raw image
-            ln -s $rfile $lndir/${num}_$(basename $rfile)
-            echo $lndir/${num}_$(basename $rfile)
+            test -L ${num}_$(basename $rfile) && test ! -e ${num}_$(basename $rfile) &&
+                rm ${num}_$(basename $rfile)
+            test ! -e ${num}_$(basename $rfile) &&
+                ln -s $rfile ${num}_$(basename $rfile) &&
+                echo ${num}_$(basename $rfile) >> $tmplinks
+            echo ${num}_$(basename $rfile)
         fi
     done > $tmp1
     ! test -s $tmp1 && echo "WARNING: no images found" >&2 &&
@@ -2294,8 +2330,11 @@ __load_images () {
 
     # display images
     AIexamine $imlist
+    
+    # delete temp links after closing ds9 AIRTOOLS
+    cat $tmplinks >> $tmpfiles
 
-    rm -f $tmp1 $tmp2
+    rm -f $tmp1 $tmplinks
     return 0
 }
 

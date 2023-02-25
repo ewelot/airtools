@@ -1,3 +1,10 @@
+airtools (4.2.2-1) experimental; urgency=medium
+
+  * Update to airfun.sh version 5.2.5 and airtools-cli version 1.4.2
+  * Depend on newer versions of libvips and pyvips
+
+ -- Thomas Lehmann <t.lehmann@mailbox.org>  Thu, 23 Feb 2023 20:46:21 +0200
+
 airtools (4.2.1-1) experimental; urgency=medium
 
   * Added workarounds for recent changes in libvips, stilts and GNU find to

@@ -83,12 +83,27 @@ install: all
 
 tarball:
 	make clean
-	(cd ..; \
-	test ! -e $(PACKAGE)-$(VERSION) && ln -s $(PACKAGE) $(PACKAGE)-$(VERSION); \
-	tar czf $(PACKAGE)_$(VERSION).orig.tar.gz -h --exclude="*/.git" \
-		$(PACKAGE)-$(VERSION))
+	test ! -d build && mkdir build || true
+	(cd build; \
+	rm -rf $(PACKAGE)-$(VERSION) && ln -s .. $(PACKAGE)-$(VERSION); \
+	tar czf $(PACKAGE)_$(VERSION).orig.tar.gz -h \
+		--exclude="*/.git*" --exclude="old" --exclude="doc/unused" --exclude="build" \
+		$(PACKAGE)-$(VERSION); \
+	rm -rf $(PACKAGE)-$(VERSION))
 
-source:	tarball
-	debuild -i -us -uc -S
-	rm ../$(PACKAGE)_$(VERSION)*_source.*
-	rm debian/files
+source:
+	test ! -e build/$(PACKAGE)_$(VERSION).orig.tar.gz && make tarball || true
+	(cd build; \
+	tar xf $(PACKAGE)_$(VERSION).orig.tar.gz; \
+	cd $(PACKAGE)-$(VERSION); \
+	debuild -d -i -us -uc -S; \
+	rm ../$(PACKAGE)_$(VERSION)*_source.*; \
+	rm debian/files)
+	rm -rf build/$(PACKAGE)-$(VERSION)
+	ls -l build
+
+debuild:
+	(cd build && rm -rf $(PACKAGE)-$(VERSION) || true)
+	$(eval DSCFILE := $(shell cd build && ls -t $(PACKAGE)_$(VERSION)-*.dsc | head -1))
+	(cd build && dpkg-source -x $(DSCFILE))
+	(cd build/$(PACKAGE)-$(VERSION) && debuild)
