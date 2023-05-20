@@ -17,9 +17,9 @@
 <?import javafx.scene.layout.RowConstraints?>
 <?import javafx.scene.layout.VBox?>
 
-<AnchorPane fx:id="paneAstrometry" xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="tl.airtoolsgui.controller.AstrometryController">
+<AnchorPane fx:id="paneAstrometry" xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" fx:controller="tl.airtoolsgui.controller.AstrometryController">
    <children>
-      <VBox spacing="16.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
+      <VBox spacing="8.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
          <children>
             <RadioButton fx:id="rbCurrProject" mnemonicParsing="false" selected="true" text="Measure Object in Current Project">
                <toggleGroup>
@@ -40,20 +40,50 @@
                      <children>
                         <Label text="Image Set / Object:" />
                         <ChoiceBox fx:id="choiceBoxImageSet" maxWidth="1.7976931348623157E308" GridPane.columnIndex="1" />
-                        <Label fx:id="labelSplittedSets" text="Use Splitted Sets:" GridPane.rowIndex="1">
+                        <Label text="Use Splitted Sets:" GridPane.rowIndex="1">
                            <padding>
                               <Insets right="83.0" />
                            </padding>
                         </Label>
-                        <CheckBox fx:id="cbSplittedSets" mnemonicParsing="false" GridPane.columnIndex="1" GridPane.rowIndex="1" />
+                        <CheckBox fx:id="cbUseSplittedSets" mnemonicParsing="false" GridPane.columnIndex="1" GridPane.rowIndex="1">
+                           <padding>
+                              <Insets bottom="2.0" />
+                           </padding></CheckBox>
                      </children>
                   </GridPane>
                </children>
             </VBox>
+            <GridPane fx:id="gridSubSets" hgap="8.0" vgap="8.0">
+              <columnConstraints>
+                <ColumnConstraints hgrow="NEVER" minWidth="200.0" />
+                <ColumnConstraints hgrow="ALWAYS" minWidth="150.0" />
+              </columnConstraints>
+              <rowConstraints>
+                <RowConstraints vgrow="SOMETIMES" />
+                <RowConstraints vgrow="SOMETIMES" />
+              </rowConstraints>
+               <children>
+                  <Label text="Create Stacks for Sub-Sets:" />
+                  <CheckBox fx:id="cbSplitStacks" mnemonicParsing="false" GridPane.columnIndex="1">
+                     <padding>
+                        <Insets bottom="2.0" />
+                     </padding>
+                  </CheckBox>
+                  <Label text="Astrometry on Sub-Sets:" GridPane.rowIndex="1" />
+                  <CheckBox fx:id="cbSplitAstrometry" mnemonicParsing="false" GridPane.columnIndex="1" GridPane.rowIndex="1">
+                     <padding>
+                        <Insets bottom="2.0" />
+                     </padding>
+                  </CheckBox>
+               </children>
+               <VBox.margin>
+                  <Insets />
+               </VBox.margin>
+            </GridPane>
             <RadioButton fx:id="rbMultProject" mnemonicParsing="false" text="Measure Selected Comet in Multiple Projects" toggleGroup="$objectsGroup">
-               <padding>
+               <VBox.margin>
                   <Insets top="24.0" />
-               </padding>
+               </VBox.margin>
             </RadioButton>
             <VBox fx:id="vboxMultProject" spacing="12.0">
                <children>
@@ -110,12 +140,20 @@
               </rowConstraints>
                <children>
                   <Label text="Display Check-Images" />
-                  <CheckBox fx:id="cbShowCheckImages" mnemonicParsing="false" selected="true" GridPane.columnIndex="1" />
+                  <CheckBox fx:id="cbShowCheckImages" mnemonicParsing="false" selected="true" GridPane.columnIndex="1">
+                     <padding>
+                        <Insets bottom="2.0" />
+                     </padding>
+                  </CheckBox>
                   <Label text="Combine all MPC Reports" GridPane.rowIndex="1" />
-                  <CheckBox fx:id="cbCombineResults" mnemonicParsing="false" GridPane.columnIndex="1" GridPane.rowIndex="1" />
+                  <CheckBox fx:id="cbCombineResults" mnemonicParsing="false" GridPane.columnIndex="1" GridPane.rowIndex="1">
+                     <padding>
+                        <Insets bottom="2.0" />
+                     </padding>
+                  </CheckBox>
                </children>
                <VBox.margin>
-                  <Insets top="8.0" />
+                  <Insets top="16.0" />
                </VBox.margin>
             </GridPane>
             <Label fx:id="labelWarning" text="&lt;Warnings&gt;" textFill="#d00000" />
@@ -127,7 +165,7 @@
             </ButtonBar>
          </children>
          <padding>
-            <Insets bottom="8.0" left="8.0" right="8.0" top="8.0" />
+            <Insets bottom="8.0" left="8.0" right="8.0" top="12.0" />
          </padding>
       </VBox>
    </children>

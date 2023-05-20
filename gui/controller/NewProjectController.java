@@ -406,14 +406,14 @@ public class NewProjectController implements Initializable {
                 printWriter.printf("export AI_OBSADDRESS=\"%s\"\n", tfObsAddress.getText());
             }
             if (tfObsEmail.getText().isBlank()) {
-                printWriter.printf("export AI_OBSEMAIL=%s\n", "");
+                printWriter.printf("export AI_OBSEMAIL=\"%s\"\n", "");
             } else {
-                printWriter.printf("export AI_OBSEMAIL=%s\n", tfObsEmail.getText());
+                printWriter.printf("export AI_OBSEMAIL=\"%s\"\n", tfObsEmail.getText());
             }
             if (tfObsIcqID.getText().isBlank()) {
-                printWriter.printf("export AI_OBSICQID=%s\n", "OBSxx");
+                printWriter.printf("export AI_OBSICQID=\"%s\"\n", "OBSxx");
             } else {
-                printWriter.printf("export AI_OBSICQID=%s\n", tfObsIcqID.getText());
+                printWriter.printf("export AI_OBSICQID=\"%s\"\n", tfObsIcqID.getText());
             }
             // placeholder for empty settings
             printWriter.printf("export AI_EXCLUDE=\"\"\n");

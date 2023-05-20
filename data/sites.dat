@@ -1,8 +1,7 @@
 # ID    COD     location        long    lat     alt     # comments
 #                               /deg    /deg    /m
-WEG     D15     Weimar          11.32   +50.98   220    # FSG Weimar, Germany
-MNM     H06     Mayhill       -105.53   +32.90  2225    # iTelescope, NM, USA
-NES     I89     Nerpio           2.33   +38.17  1650    # AstroCamp Nerpio, Spain
-
-# note: a hyphen can be used for an unknown MPC observatory code (COD)
+WEG     D15     Weimar          11.318  +50.983  220    # Weimar, Germany
+NES     I89     Nerpio           2.33   +38.17   1650   # AstroCamp Nerpio, Spain
+UTA     -       Utah          -113.698  +37.738  1570   # iTelescope Utah Desert, USA
+HAK     221     Hakos           16.363  -23.236  400    # SkyGems, Hakos, Namibia
 

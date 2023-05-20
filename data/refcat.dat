@@ -1,8 +1,8 @@
 # id    vname   vid     description     msort   cid cra cde cv  cb  cbv cr  cvr ci
-apass   -       II/336  APASS-DR9_2016  Vmag    0   2   3   11  13  -   17  -   -
-apass10 -       aavso   APASS-DR10_2018 Vmag    0   1   3   6   8   -   12  -   -
 gaia3e  -       I/350   Gaia-EDR3_2020  Gmag    0   39  40  21  -   -   17  -   25
 gaia2   -       I/345   Gaia-DR2_2018   Gmag    1   2   3   22  -   -   18  -   26
+apass   -       II/336  APASS-DR9_2016  Vmag    0   2   3   11  13  -   17  -   -
+apass10 -       aavso   APASS-DR10_2018 Vmag    0   1   3   6   8   -   12  -   -
 gspc2   -       II/272  GSPC2.4_2001    Vmag    1   2   3   8   5   -   11  -   -
 ppmx    ppmx    I/312   PPMX_2008       Cmag    1   2   3   6   -   -   7   -   -
 tycho2  tyc2    I/259   Tycho-2_2000    VTmag   1,2 9   10  7   6   -   -   -   -

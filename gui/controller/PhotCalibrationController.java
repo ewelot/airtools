@@ -71,12 +71,12 @@ public class PhotCalibrationController implements Initializable {
         // add combobox items
         cbChannel.getItems().addAll("1", "2", "3");
         cbCatalog.getItems().addAll(
-                new PhotCatalog("apass",   "APASS DR9",
-                        new String[]{ "B", "B+c(B-V)", "V", "V+c(B-V)", "V+c(V-R)", "R", "R+c(V-R)" },
-                        "V+c(B-V)"),
                 new PhotCatalog("gaia3e",  "Gaia EDR3",
                         new String[]{ "GB", "GB+c(GB-G)", "GB+c(GB-GR)", "G", "G+c(GB-G)", "G+c(GB-GR)"},
                         "GB+c(GB-GR)"),
+                new PhotCatalog("apass",   "APASS DR9",
+                        new String[]{ "B", "B+c(B-V)", "V", "V+c(B-V)", "V+c(V-R)", "R", "R+c(V-R)" },
+                        "V+c(B-V)"),
                 new PhotCatalog("tycho2",  "Tycho2",
                         new String[]{ "BT", "BT+c(BT-VT)", "VT", "VT+c(BT-VT)" },
                         "VT+c(BT-VT)"),

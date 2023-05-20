@@ -1,6 +1,6 @@
 # tel  flen aperture fratio camera     camchip flip rot rawbits satur gain pixscale magzero ttype ctype
-GSO     800    200    4.0   K5IIs      PDS/CAC   0    - 14  55000   0.54    1.22    21.0    L   DSLR
-RASA    620    279    2.2   ASI6200MC  ZCP/IMX   0   -  16  50000   0.8     1.25    21.0    L   RGGB  # RASA 11", cam gain 0
-T14     530    106    5.0   STL11000M  STL/KA1   1 -90  16  30000   0.79    3.5     18.7    R   CCD   # iTelescope.Net, NM, FSQ106
-T68     620    280    2.2   ASI2600C   ZCP/IMX   0 -90  16  50000   0.6     1.26    21.5    L   RGGB  # iTelescope.Net, NM, RASA (since 2021)
+RASA    620    279    2.2   ASI6200MC  ZCP/IMX   0   -  16  55000   0.8     1.25    21.0    L   RGGB  # RASA 11", camera gain 0
+GSO     800    200    4.0   K5IIs      PDS/CAC   0   -  14  55000   0.54    1.22    21.0    L   DSLR  # Pentax K5IIs ISO 200
+T14     530    106    5.0   STL11000M  STL/KA1   1 -90  16  30000   0.79    3.5     18.7    R   CCD   # iTelescope.Net, Utah, FSQ106
+SHF     530    106    5.0   C3-61000   MC3/IMX   1  90  16  55000   0.8     1.46    19.5    R   CMOS  # SkyGems Hakos FSQ106
 SNV     600    200    3.0   SBIGSTF8300 SF8/K83  1   0  16  55000   0.38    1.8     20.0    L   CCD   # SkyGems Nerpio Veloce 200 RH

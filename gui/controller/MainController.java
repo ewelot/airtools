@@ -46,9 +46,6 @@ import java.util.Optional;
 import java.util.Properties;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.prefs.BackingStoreException;
-import java.util.prefs.NodeChangeListener;
-import java.util.prefs.PreferenceChangeListener;
 import java.util.prefs.Preferences;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.SimpleIntegerProperty;
@@ -667,7 +664,7 @@ public class MainController implements Initializable {
         sh.setArgs("");
         sh.runFunction("check");
         exitCode=sh.getExitCode();
-        logger.log("check finished with " + exitCode);
+        //logger.log("check finished with " + exitCode);
     }
     
     
@@ -978,7 +975,7 @@ public class MainController implements Initializable {
         int memtot;
         int memused;
         String author="Thomas Lehmann";
-        String mail="t_lehmann@freenet.de";
+        String mail="t.lehmann@mailbox.org";
         Date compileTime = null;
         //DateFormat fmt = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.mmm'Z'");
         DateFormat fmt = new SimpleDateFormat("yyyy-MM-dd");

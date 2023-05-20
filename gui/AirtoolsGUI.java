@@ -48,8 +48,8 @@ import tl.airtoolsgui.controller.SetupAirtoolsController;
  */
 public class AirtoolsGUI extends Application {
     
-    private final String progVersion = "4.2.2";
-    private final String progDate = "2023-02-23";
+    private final String progVersion = "5.0";
+    private final String progDate = "2023-05-17";
     private final String confFileName = "airtools.conf";
     private final String scriptFileName = "airtools-cli";
     
@@ -250,7 +250,7 @@ public class AirtoolsGUI extends Application {
             InputStream inputStream = new FileInputStream(oldConfDir + "/" + confFileName);
             oldProp.load(inputStream);
             inputStream.close();
-            if (newMajorVersion == 4) {
+            if (newMajorVersion >= 4) {
                 newProp.setProperty("lastProjectDir", oldProp.getProperty("lastProjectDir"));
                 newProp.setProperty("lastRawDir", oldProp.getProperty("lastRawDir"));
                 newProp.setProperty("lastTempDir", oldProp.getProperty("lastTempDir"));

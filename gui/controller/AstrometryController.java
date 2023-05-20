@@ -40,6 +40,7 @@ import javafx.scene.control.RadioButton;
 import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.AnchorPane;
+import javafx.scene.layout.GridPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
@@ -58,13 +59,27 @@ public class AstrometryController implements Initializable {
     @FXML
     private AnchorPane paneAstrometry;
     @FXML
+    private ToggleGroup objectsGroup;
+
+    @FXML
     private RadioButton rbCurrProject;
     @FXML
-    private ToggleGroup objectsGroup;
+    private VBox vboxCurrProject;
     @FXML
     private ChoiceBox<ImageSet> choiceBoxImageSet;
     @FXML
+    private CheckBox cbUseSplittedSets;
+    @FXML
+    private GridPane gridSubSets;
+    @FXML
+    private CheckBox cbSplitStacks;
+    @FXML
+    private CheckBox cbSplitAstrometry;
+
+    @FXML
     private RadioButton rbMultProject;
+    @FXML
+    private VBox vboxMultProject;
     @FXML
     private TextField tfCometName;
     @FXML
@@ -79,6 +94,7 @@ public class AstrometryController implements Initializable {
     private DatePicker dpStart;
     @FXML
     private DatePicker dpEnd;
+
     @FXML
     private CheckBox cbShowCheckImages;
     @FXML
@@ -89,20 +105,14 @@ public class AstrometryController implements Initializable {
     private Button buttonStart;
     @FXML
     private Button buttonCancel;
-    @FXML
-    private VBox vboxMultProject;
-    @FXML
-    private VBox vboxCurrProject;
-    @FXML
-    private Label labelSplittedSets;
-    @FXML
-    private CheckBox cbSplittedSets;
+
 
     private SimpleLogger logger;
     private StringProperty projectDir = new SimpleStringProperty();
     private AirtoolsCLICommand aircliCmd;
     private final String aircliTask = "usercmd";
-    private final String airfunFunc = "AIastrometry";
+    private final String airfunFuncA = "AIastrometry";
+    private final String airfunFuncS = "AIsplitstack";
     private final List<ImageSet> imageSetList = new ArrayList<>();
 
     /**
@@ -137,8 +147,17 @@ public class AstrometryController implements Initializable {
         // show/hide widgets depending on choice of radiobutton
         rbMultProject.selectedProperty().addListener((v, oldValue, newValue) -> {
             vboxCurrProject.setDisable(newValue);
+            gridSubSets.setDisable(newValue);
             vboxMultProject.setDisable(! newValue);
         });
+        cbUseSplittedSets.selectedProperty().addListener((v, oldValue, newValue) -> {
+            gridSubSets.setDisable(! newValue);
+        });
+        rbCurrProject.setSelected(true);
+        cbSplitStacks.setSelected(true);
+        cbSplitAstrometry.setSelected(true);
+        cbUseSplittedSets.setSelected(false);
+        gridSubSets.setDisable(true);
         rbMultProject.setSelected(false);
         vboxMultProject.setDisable(true);
         
@@ -158,7 +177,7 @@ public class AstrometryController implements Initializable {
 
     public void updateWidgets () {
         populateChoiceBoxImageSet();
-        checkForSplittedSets();
+        //checkForSplittedSets();
     }
     
     
@@ -176,11 +195,19 @@ public class AstrometryController implements Initializable {
         System.out.println("checkForSplittedSets()");
         File splitSets = new File(projectDir.getValue() + "/split/set.dat");
         if (splitSets.exists()) {
-            labelSplittedSets.setDisable(false);
-            cbSplittedSets.setDisable(false);
+            cbUseSplittedSets.setDisable(false);
         } else {
-            labelSplittedSets.setDisable(true);
-            cbSplittedSets.setDisable(true);            
+            cbUseSplittedSets.setDisable(true);            
+        }
+    }
+    
+    private boolean hasSplittedSets() {
+        System.out.println("hasSplittedSets()");
+        File splitSets = new File(projectDir.getValue() + "/split/set.dat");
+        if (splitSets.exists()) {
+            return(true);
+        } else {
+            return(false);            
         }
     }
     
@@ -225,42 +252,62 @@ public class AstrometryController implements Initializable {
         String msg="";
         LocalDate ld;
         
-        if (rbMultProject.isSelected() && tfCometName.getText().isBlank()) {
-            msg="ERROR: comet name is missing.";
-            labelWarning.setText(msg);
-            logger.log(msg);
-            return false;
+        if (rbCurrProject.isSelected()) {
+            if (cbUseSplittedSets.isSelected()) {
+                if (! cbSplitStacks.isSelected() && ! hasSplittedSets()) {
+                    msg="ERROR: no stacks of splitted sub-sets found.";
+                    labelWarning.setText(msg);
+                    logger.log(msg);
+                    return false;
+                }
+                if (! cbSplitStacks.isSelected() && ! cbSplitAstrometry.isSelected()) {
+                    msg="ERROR: no action selected on splitted sets.";
+                    labelWarning.setText(msg);
+                    logger.log(msg);
+                    return false;
+                }
+            }
+        } else {
+            if (tfCometName.getText().isBlank()) {
+                msg="ERROR: comet name is missing.";
+                labelWarning.setText(msg);
+                logger.log(msg);
+                return false;
+            }
         }
         
+        
         // format datepicker text entries
-        if (! dpStart.getEditor().getText().isBlank()) {
-            try {
-                ld=dpStart.getConverter().fromString(dpStart.getEditor().getText());
-                dpStart.setValue(ld);
-            } catch (DateTimeParseException ex) {
-                msg="ERROR: entered string of start date does not match date format.";
+        if (rbMultProject.isSelected()) {
+            if (! dpStart.getEditor().getText().isBlank()) {
+                try {
+                    ld=dpStart.getConverter().fromString(dpStart.getEditor().getText());
+                    dpStart.setValue(ld);
+                } catch (DateTimeParseException ex) {
+                    msg="ERROR: entered string of start date does not match date format.";
+                    labelWarning.setText(msg);
+                    logger.log(msg);
+                    return false;
+                }
+            } else dpStart.setValue(null);
+            if (! dpEnd.getEditor().getText().isBlank()) {
+                try {
+                    ld=dpEnd.getConverter().fromString(dpEnd.getEditor().getText());
+                    dpEnd.setValue(ld);
+                } catch (DateTimeParseException ex) {
+                    msg="ERROR: entered string of end date does not match date format.";
+                    labelWarning.setText(msg);
+                    logger.log(msg);
+                    return false;
+                }
+            } else dpEnd.setValue(null);
+            if (dpStart.getValue() != null && dpEnd.getValue() != null &&
+                    dpStart.getValue().isAfter(dpEnd.getValue())) {
+                msg="ERROR: start date is after end date.";
                 labelWarning.setText(msg);
                 logger.log(msg);
                 return false;
             }
-        } else dpStart.setValue(null);
-        if (! dpEnd.getEditor().getText().isBlank()) {
-            try {
-                ld=dpEnd.getConverter().fromString(dpEnd.getEditor().getText());
-                dpEnd.setValue(ld);
-            } catch (DateTimeParseException ex) {
-                msg="ERROR: entered string of end date does not match date format.";
-                labelWarning.setText(msg);
-                logger.log(msg);
-                return false;
-            }
-        } else dpEnd.setValue(null);
-        if (dpStart.getValue() != null && dpEnd.getValue() != null &&
-                dpStart.getValue().isAfter(dpEnd.getValue())) {
-            msg="ERROR: start date is after end date.";
-            labelWarning.setText(msg);
-            logger.log(msg);
-            return false;
         }
         return true;
     }
@@ -341,26 +388,52 @@ public class AstrometryController implements Initializable {
         List<String> aircliCmdOpts = new ArrayList<>();
         List<String> aircliCmdArgs = new ArrayList<>();
         DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyyMMdd");
+        boolean do_splitstack_only = false;
 
         if (! isValidInputs()) return;
 
+        // check if we want to stack splitted image sets only (without astrometry)
+        if (rbCurrProject.isSelected() && cbUseSplittedSets.isSelected() &&
+                cbSplitStacks.isSelected() && ! cbSplitAstrometry.isSelected()) {
+            do_splitstack_only = true;
+        }
+
         // airfun function to call
-        aircliCmdArgs.add(airfunFunc);
+        if (do_splitstack_only) {
+            aircliCmdArgs.add(airfunFuncS);
+        } else {
+            aircliCmdArgs.add(airfunFuncA);
+        }
         
         // add options
-        if (cbShowCheckImages.isSelected()) aircliCmdArgs.add("-i");
-        if (cbCombineResults.isSelected())  aircliCmdArgs.add("-a");
-        if (! cbSplittedSets.isDisabled() && cbSplittedSets.isSelected()) aircliCmdArgs.add("-cs");
+        if (do_splitstack_only) {
+            aircliCmdArgs.add("-n 3");
+        } else {
+            if (cbShowCheckImages.isSelected()) aircliCmdArgs.add("-i");
+            if (cbCombineResults.isSelected())  aircliCmdArgs.add("-a");
+            
+            if (rbCurrProject.isSelected()) {
+                if (cbUseSplittedSets.isSelected()) {
+                    if (cbSplitStacks.isSelected()) {
+                        aircliCmdArgs.add("-ss");
+                    } else {
+                        aircliCmdArgs.add("-s");
+                    }
+                }
+            } else {
+                if (! tfBaseDir1.getText().isBlank()) {
+                    aircliCmdArgs.add("-d " + tfBaseDir1.getText());
+                }
+                if (! tfBaseDir2.getText().isBlank()) {
+                    aircliCmdArgs.add("-d " + tfBaseDir2.getText());
+                }
+            }
+        }
         
         // add positional parameters
-        if (rbMultProject.isSelected()) {
-            if (! tfBaseDir1.getText().isBlank()) {
-                aircliCmdArgs.add("-d " + tfBaseDir1.getText());
-            }
-            if (! tfBaseDir2.getText().isBlank()) {
-                aircliCmdArgs.add("-d " + tfBaseDir2.getText());
-            }
-        
+        if (rbCurrProject.isSelected()) {
+            aircliCmdArgs.add(choiceBoxImageSet.getSelectionModel().getSelectedItem().getSetname());
+        } else {
             aircliCmdArgs.add(tfCometName.getText());
             if (dpStart.getValue() != null) {
                 aircliCmdArgs.add(dpStart.getValue().format(fmt));
@@ -370,8 +443,6 @@ public class AstrometryController implements Initializable {
             if (dpEnd.getValue() != null) {
                 aircliCmdArgs.add(dpEnd.getValue().format(fmt));
             }
-        } else {
-            aircliCmdArgs.add(choiceBoxImageSet.getSelectionModel().getSelectedItem().getSetname());
         }
         
         // run command

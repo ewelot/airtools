@@ -138,7 +138,7 @@ public class WCSCalibController implements Initializable {
         cbDegree.getItems().addAll("2", "3", "4", "5");
         cbDegree.getSelectionModel().select(1);
         cbCatalog.getItems().addAll("GAIA-EDR3", "UCAC-4", "2MASS", "PPMX");
-        cbCatalog.getSelectionModel().select(1);
+        cbCatalog.getSelectionModel().select(0);
 
         tfMask.focusedProperty().addListener((c, oldValue, newValue) -> {
             Platform.runLater(() -> {

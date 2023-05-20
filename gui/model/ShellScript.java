@@ -12,11 +12,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import javafx.concurrent.Task;
 
 /**
  *
@@ -101,6 +97,7 @@ public class ShellScript {
                        synchronized in both log file and textarea
                     */
                     if (saveResult && (! line.startsWith("#"))) output = line;
+                    //System.out.println("redirectLogger: " + line);
                     logLineConsumer.accept(line);
                 }
                 return true;
@@ -126,12 +123,14 @@ public class ShellScript {
         command=envVars + " " + getFileName() + " " + opts + " " + funcName + " " + args;
         System.out.println("ShellScript.runFunction: command = " + command);
         ProcessBuilder pb = new ProcessBuilder("/bin/bash", "-c", command);
+
         Map<String, String> envs = pb.environment();
-        envs.put("PATH", ".:" + envs.get("PATH"));
-        
-        // add current working directory to PATH
-        
+        String path = envs.get("PATH");
+        if (! addPath.isEmpty()) {
+            path = addPath + ':' + path;
+        }
         if (! workingDir.isEmpty()) {
+            // check for existing workingDir
             File file = new File(workingDir);
             if (file.isDirectory()) { 
                 pb.directory(new File(workingDir));
@@ -139,13 +138,13 @@ public class ShellScript {
                 logger.log("ERROR: directory " + workingDir + " does not exist.");
                 return;
             }
+            
+            // add it to the PATH
+            path = workingDir + ':' + path;
         }
-        if (! addPath.isEmpty()) {
-            envs = pb.environment();
-            String path = addPath + ':' + envs.get("PATH");
-            System.out.println("new PATH=" + path);
-            envs.put("PATH", path);
-        }
+        System.out.println("PATH=" + path);
+        envs.put("PATH", path);
+        
         try {
             //pb.inheritIO();
             process = pb.start();

@@ -5,7 +5,7 @@
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <meta name="author" content="Thomas Lehmann" />
-  <title>Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v4.2)</title>
+  <title>Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v5.0)</title>
   <style>
     code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
@@ -17,9 +17,9 @@
 </head>
 <body>
 <header id="title-block-header">
-<h1 class="title">Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v4.2)</h1>
+<h1 class="title">Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v5.0)</h1>
 <p class="author">Thomas Lehmann</p>
-<p class="date">Draft, September 2022</p>
+<p class="date">Draft, May 2023</p>
 </header>
 <nav id="TOC" role="doc-toc">
 <ul>
@@ -102,7 +102,7 @@
 <li><a href="http://tdc-www.harvard.edu/software/wcstools/">WCSTools</a> by J. Mink: Tools to create and manipulate coordinate system information</li>
 <li><a href="https://libvips.github.io/libvips/">libvips</a>: A fast and memory efficient image processing library with bindings to many programming languages</li>
 </ul>
-<p>The AIRTOOLS software is freely available. The project - including source code - is hosted at <a href="https://github.com/ewelot/airtools" class="uri">https://github.com/ewelot/airtools</a>. Pre-compiled binary packages are provided for several Linux distributions. Users of other operating systems can use the software in a virtualized environment.</p>
+<p>The AIRTOOLS software is freely available. The project - including source code - is hosted at <a href="https://github.com/ewelot/airtools" class="uri">https://github.com/ewelot/airtools</a>. Pre-compiled binary packages are provided for a few Linux distributions. Users of other operating systems can use the software in a virtualized environment.</p>
 <p>The AIRTOOLS software has been developed in the hope to proove useful. Its development relies on your feedback, so please do not hesitate to ask any question, e.g. by contacting the author by e-mail at <a href="mailto:t.lehmann@mailbox.org" class="email">t.lehmann@mailbox.org</a>. As well, any suggestion or comment is welcome.</p>
 <p> </p>
 <p>Good luck and clear skies!</p>
@@ -121,12 +121,11 @@
 <ul>
 <li>Ubuntu 20.04 “Focal”</li>
 <li>Ubuntu 22.04 “Jammy”</li>
-<li>Debian 10 “Buster”</li>
 <li>Debian 11 “Bullseye”</li>
 </ul>
 <p>Development is done using a recent Debian Linux distribution. Ubuntu packages are tested on Xubuntu LTS distributions and should work on any Ubuntu desktop flavour (e.g. native Ubuntu, Kubuntu, Lubuntu) or other derivatives like LinuxMint.</p>
-<p>Adding the binary package repository of the AIRTOOLS software is done by adding an entry to the package managment sources list. If e.g. your distribution is based on Ubuntu 20.04 “Focal” you should run the following commands in a terminal:</p>
-<pre><code>DIST=focal
+<p>Adding the binary package repository of the AIRTOOLS software is done by adding an entry to the package managment sources list. If e.g. your distribution is based on Ubuntu 22.04 “Jammy” you should run the following commands in a terminal:</p>
+<pre><code>DIST=jammy
 REPO=http://fg-kometen.vdsastro.de/airtools/debian
 SRCFILE=/etc/apt/sources.list.d/airtools.list
 sudo bash -c &quot;echo deb [trusted=yes] $REPO $DIST main &gt; $SRCFILE&quot;</code></pre>
@@ -149,10 +148,10 @@ sudo apt install airtools</code></pre>
 <p>In the following chapters the physical computer where you have installed the VirtualBox software is sometimes refered to as “host” computer. A virtual computer managed by the VirtualBox software is called a virtual machine or simply “guest” computer.</p>
 <h3 data-number="2.2.2" id="importing-the-linuxairtools-appliance"><span class="header-section-number">2.2.2</span> Importing the Linux/AIRTOOLS appliance</h3>
 <ul>
-<li><p>Download the <a href="http://fg-kometen.vdsastro.de/airtools/vm/xubuntu-airtools.ova">Xubuntu Linux/AIRTOOLS appliance</a></p></li>
+<li><p>Download the <a href="https://fg-kometen.vdsastro.de/airtools/vm/xubuntu-airtools.ova">Xubuntu Linux/AIRTOOLS appliance</a></p></li>
 <li><p>Start the Oracle VM VirtualBox Manager, choose File/Import Appliance and select the local .ova file</p></li>
-<li><p>Make sure there is sufficient free disk space in the virtual machine base folder on your host computer. The .ova file size is only 1.6 GB and will expand to about 6 GB after importing. The virtual disk file will grow from this initial size (containing the Linux OS, AIRTOOLS and all required software compnents) dynamically up to its maximum size of 50 GB upon using the virtual guest system. Therefore you should make sure that you have at least that much of free disk space.</p></li>
-<li><p>Virtual machine settings are choosen to impose low hardware requirements: it uses 3 CPU cores and 4 GB of physical RAM only. This is sufficient to run the AIRTOOLS software even on large images (e.g. 30 Mpix single band images). It is possible to adjust those settings at any time later on within the Oracle VirtualBox Manager.</p></li>
+<li><p>Make sure there is sufficient free disk space in the virtual machine base folder on your host computer. The .ova file size is only 2.5 GB and will expand to about 8 GB after importing. The virtual disk file will grow from this initial size (containing the Linux OS, AIRTOOLS and all required software compnents) dynamically up to its maximum size of 100 GB upon using the virtual guest system. Therefore you should make sure that you have at least that much of free disk space.</p></li>
+<li><p>Virtual machine settings were choosen to impose low hardware requirements: it uses 3 CPU cores and 4 GB of physical RAM only. This is sufficient to run the AIRTOOLS software even on large images (e.g. 30 Mpix single band images). It is possible to adjust those settings at any time later on within the Oracle VirtualBox Manager.</p></li>
 <li><p>Start importing the appliance by clicking the button “Import”.</p></li>
 </ul>
 <h3 data-number="2.2.3" id="starting-the-virtual-linux-os"><span class="header-section-number">2.2.3</span> Starting the virtual Linux OS</h3>
@@ -314,15 +313,16 @@ Used to store individual calibrated images of the project which are used by seve
 <p>The example image is a capture of the night sky under bright urban light pollution, resulting in much higher intensity of red pixels than blue ones. Pixel 1 appears much brighter than pixel 4 which means the red pixel is the first one of the Bayer pattern and the correct entry for “ctype” in the parameter file in this case is therefore RGGB.</p>
 <h2 data-number="4.7" id="image-set-definition"><span class="header-section-number">4.7</span> Image Set Definition</h2>
 <p>An image set is a number of images of the same type and target, e.g. a couple of dark exposures with a given exposure time or a bracketed sequence of exposures of a comet. All image sets of the project are described in a parameter file called <code>set.dat</code> which must be created by yourself. From the AIRTOOLS application’s main menu select “Edit” and “Edit Image Set Definitions”. Here is an example of a typical file which can be used for reference:</p>
-<pre><code># 2021-01-16
-# SkyGems Nerpio Veloce
+<pre><code># 230216
+# Skygems Hakos, Namibia, FSQ106, Moravian C3-61000EC PRO, ts=0
 
-# LT
-# h:m set  target type texp n1 n2   nref dark flat  tel  # notes
-07:39 dk01 dark     d   5 0001 0010 -    -    -     SNV  # 2021-01-10
-21:01 co01 398P     o  60 0011 0018 0014 dk02 sk01  SNV  # green filter
-07:52 sk01 skyflat  f   8 0024 0035 -    dk01 -     SNV  # 2021-01-18
-07:58 dk02 dark     d 120 0036 0050 -    -    -     SNV
+# UT
+# h:m set  target type texp n1 n2   nref dark flat tel
+04:23 sk01 skyflat  f   9 0001 0012 -    dk01 -    SHF
+19:27 co01 2021Y1   o 120 0013 0018 0016 dk02 sk01 SHF
+04:46 dk01 dark     d  10 0019 0030 -    -    -    SHF # ts=0
+04:44 dk02 dark     d 120 0031 0042 -    -    -    SHF
+18:43 co02 2017K2   o 120 0043 0047 0045 dk02 sk01 SHF # 230221
 </code></pre>
 <p>The syntax is as follows: everything after the character <code>#</code> is considered a comment. Each line (uncommented and non-empty) defines an image set using at least 11 fields (words separated by spaces) which are:</p>
 <dl>
@@ -434,7 +434,7 @@ Used to store individual calibrated images of the project which are used by seve
 <img src="images/virtualbox-manager.png" title="virtualbox manager" alt="" /><figcaption>Setup of a virtual machine in the Oracle VirtualBox Manager</figcaption>
 </figure>
 <h3 data-number="7.1.2" id="booting-install-medium-of-the-xubuntu-linux-distribution"><span class="header-section-number">7.1.2</span> Booting Install Medium of the Xubuntu Linux distribution</h3>
-<p>Download the ISO image file of the latest Xubuntu LTS release from <a href="http://xubuntu.org/download" class="uri">http://xubuntu.org/download</a>. Please note the important <strong>LTS</strong> version label, which indicates a “Long Term Support” release. This Linux OS version is well supported by the AIRTOOLS software. Choose a mirror download close to your location and download the 64-bit desktop image. At the time of this writing it is named <code>xubuntu-20.04.4-desktop-amd64.iso</code>.</p>
+<p>Download the ISO image file of the latest Xubuntu LTS release from <a href="http://xubuntu.org/download" class="uri">http://xubuntu.org/download</a>. Please note the important <strong>LTS</strong> version label, which indicates a “Long Term Support” release. This Linux OS version is well supported by the AIRTOOLS software. Choose a mirror download close to your location and download the 64-bit desktop image. At the time of this writing it is named <code>xubuntu-22.04.2-desktop-amd64.iso</code>.</p>
 <p>The ISO image file is used in place of a install medium for the virtual machine. To do so you have to start the VirtualBox software (if not running already) and press the “Settings” button of the selected virtual machine.</p>
 <p>Select the “Storage” tab. Within “Storage Devices” click on the CD symbol (labeled “Empty”) and from “Attributes” click the CD symbol near the right border of the window and select the previously downloaded ISO file. Pressing “OK” will save your modified settings and you are ready to start the virtual machine by pressing the green “Start” button.</p>
 <p>The following boot process is very similar to a regular boot process of a install CD/DVD on a real computer. In addition, the current virtual machine can be used to start a fully functional Linux live session to evaluate or experiment with the Xubuntu Linux OS (but this is not our goal).</p>
@@ -481,7 +481,7 @@ Used to store individual calibrated images of the project which are used by seve
 <h3 data-number="7.2.2" id="get-observations-data-files"><span class="header-section-number">7.2.2</span> Get observations data files</h3>
 <p>Observations data files (raw FITS images) must be placed into the appropriate folder on the virtual Linux computer. Here we describe the use of a shared folder between host and virtual computer to copy those data files. For other methods of data transfer (e.g. using the VirtualBox File Manager or using external USB storage) please refer to the VirtualBox documentation.</p>
 <ul>
-<li><p>Use the provided Firefox browser from the applications menu and download the <a href="http://fg-kometen.vdsastro.de/airtools/testdata/210116_snv_raw.zip">sample data archive</a></p></li>
+<li><p>Use the provided Firefox browser from the applications menu and download the <a href="https://fg-kometen.vdsastro.de/airtools/testdata/230216_shf_raw.zip">sample data archive</a></p></li>
 <li><p>Open the archive and extract files and directories into the raw files folder corresponding to your project</p></li>
 </ul>
 <p>… image …</p>
@@ -491,18 +491,19 @@ Used to store individual calibrated images of the project which are used by seve
 <li><p>Select the first task “Extract basic image info” and run it via the button “Start”</p></li>
 <li><p>Next you need to allocate images to “image sets” of darks, flats and lights: from the menu choose Edit/Edit Image Set Definitions, create an empty file set.dat and copy and paste the following contents:</p></li>
 </ul>
-<pre><code># 2021-01-16
-# SkyGems Nerpio Veloce
+<pre><code># 230216
+# Skygems Hakos, Namibia, FSQ106, Moravian C3-61000EC PRO, ts=0
 
-# LT
-# h:m set  target type texp n1 n2   nref dark flat  tel  # notes
-07:39 dk01 dark     d   5 0001 0010 -    -    -     SNV  # 2021-01-10
-21:01 co01 398P     o  60 0011 0018 0014 dk02 sk01  SNV  # green filter
-07:52 sk01 skyflat  f   8 0024 0035 -    dk01 -     SNV  # 2021-01-18
-07:58 dk02 dark     d 120 0036 0050 -    -    -     SNV
+# UT
+# h:m set  target type texp n1 n2   nref dark flat tel
+04:23 sk01 skyflat  f   9 0001 0012 -    dk01 -    SHF
+19:27 co01 2021Y1   o 120 0013 0018 0016 dk02 sk01 SHF
+04:46 dk01 dark     d  10 0019 0030 -    -    -    SHF # ts=0
+04:44 dk02 dark     d 120 0031 0042 -    -    -    SHF
+18:43 co02 2017K2   o 120 0043 0047 0045 dk02 sk01 SHF # 230221
 </code></pre>
 <ul>
-<li><p>Check for a valid entry of SNV in camera.dat (Edit/Edit Camera Parameters),</p></li>
+<li><p>Check for a valid entry of SHF in camera.dat (Edit/Edit Camera Parameters),</p></li>
 <li><p>Proceed with the image reduction by running every single task in the given order until the comet stack is created: select a task, activate all processing options (Process …, View …, Show …) and press the “Start” button</p></li>
 <li><p>Evaluate results, e.g. new plots and images displayed by each task</p></li>
 <li><p>Note: It is allowed to activate and execute several/all tasks in a single run but it is not recommended for the beginner.</p></li>

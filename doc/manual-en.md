@@ -1,4 +1,4 @@
-Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v4.2)
+Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v5.0)
 ======================================================================
 
   - [<span class="toc-section-number">1</span>
@@ -148,9 +148,9 @@ astronomical image reduction are used as well, e.g.
 
 The AIRTOOLS software is freely available. The project - including
 source code - is hosted at <https://github.com/ewelot/airtools>.
-Pre-compiled binary packages are provided for several Linux
-distributions. Users of other operating systems can use the software in
-a virtualized environment.
+Pre-compiled binary packages are provided for a few Linux distributions.
+Users of other operating systems can use the software in a virtualized
+environment.
 
 The AIRTOOLS software has been developed in the hope to proove useful.
 Its development relies on your feedback, so please do not hesitate to
@@ -199,7 +199,6 @@ Linux distributions:
 
   - Ubuntu 20.04 “Focal”
   - Ubuntu 22.04 “Jammy”
-  - Debian 10 “Buster”
   - Debian 11 “Bullseye”
 
 Development is done using a recent Debian Linux distribution. Ubuntu
@@ -209,10 +208,10 @@ derivatives like LinuxMint.
 
 Adding the binary package repository of the AIRTOOLS software is done by
 adding an entry to the package managment sources list. If e.g. your
-distribution is based on Ubuntu 20.04 “Focal” you should run the
+distribution is based on Ubuntu 22.04 “Jammy” you should run the
 following commands in a terminal:
 
-    DIST=focal
+    DIST=jammy
     REPO=http://fg-kometen.vdsastro.de/airtools/debian
     SRCFILE=/etc/apt/sources.list.d/airtools.list
     sudo bash -c "echo deb [trusted=yes] $REPO $DIST main > $SRCFILE"
@@ -271,21 +270,21 @@ machine or simply “guest” computer.
 ### Importing the Linux/AIRTOOLS appliance
 
   - Download the [Xubuntu Linux/AIRTOOLS
-    appliance](http://fg-kometen.vdsastro.de/airtools/vm/xubuntu-airtools.ova)
+    appliance](https://fg-kometen.vdsastro.de/airtools/vm/xubuntu-airtools.ova)
 
   - Start the Oracle VM VirtualBox Manager, choose File/Import Appliance
     and select the local .ova file
 
   - Make sure there is sufficient free disk space in the virtual machine
-    base folder on your host computer. The .ova file size is only 1.6 GB
-    and will expand to about 6 GB after importing. The virtual disk file
+    base folder on your host computer. The .ova file size is only 2.5 GB
+    and will expand to about 8 GB after importing. The virtual disk file
     will grow from this initial size (containing the Linux OS, AIRTOOLS
     and all required software compnents) dynamically up to its maximum
-    size of 50 GB upon using the virtual guest system. Therefore you
+    size of 100 GB upon using the virtual guest system. Therefore you
     should make sure that you have at least that much of free disk
     space.
 
-  - Virtual machine settings are choosen to impose low hardware
+  - Virtual machine settings were choosen to impose low hardware
     requirements: it uses 3 CPU cores and 4 GB of physical RAM only.
     This is sufficient to run the AIRTOOLS software even on large images
     (e.g. 30 Mpix single band images). It is possible to adjust those
@@ -668,15 +667,16 @@ yourself. From the AIRTOOLS application’s main menu select “Edit” and
 “Edit Image Set Definitions”. Here is an example of a typical file
 which can be used for reference:
 
-    # 2021-01-16
-    # SkyGems Nerpio Veloce
+    # 230216
+    # Skygems Hakos, Namibia, FSQ106, Moravian C3-61000EC PRO, ts=0
     
-    # LT
-    # h:m set  target type texp n1 n2   nref dark flat  tel  # notes
-    07:39 dk01 dark     d   5 0001 0010 -    -    -     SNV  # 2021-01-10
-    21:01 co01 398P     o  60 0011 0018 0014 dk02 sk01  SNV  # green filter
-    07:52 sk01 skyflat  f   8 0024 0035 -    dk01 -     SNV  # 2021-01-18
-    07:58 dk02 dark     d 120 0036 0050 -    -    -     SNV
+    # UT
+    # h:m set  target type texp n1 n2   nref dark flat tel
+    04:23 sk01 skyflat  f   9 0001 0012 -    dk01 -    SHF
+    19:27 co01 2021Y1   o 120 0013 0018 0016 dk02 sk01 SHF
+    04:46 dk01 dark     d  10 0019 0030 -    -    -    SHF # ts=0
+    04:44 dk02 dark     d 120 0031 0042 -    -    -    SHF
+    18:43 co02 2017K2   o 120 0043 0047 0045 dk02 sk01 SHF # 230221
 
 The syntax is as follows: everything after the character `#` is
 considered a comment. Each line (uncommented and non-empty) defines an
@@ -984,7 +984,7 @@ label, which indicates a “Long Term Support” release. This Linux OS
 version is well supported by the AIRTOOLS software. Choose a mirror
 download close to your location and download the 64-bit desktop image.
 At the time of this writing it is named
-`xubuntu-20.04.4-desktop-amd64.iso`.
+`xubuntu-22.04.2-desktop-amd64.iso`.
 
 The ISO image file is used in place of a install medium for the virtual
 machine. To do so you have to start the VirtualBox software (if not
@@ -1138,7 +1138,7 @@ the VirtualBox documentation.
 
   - Use the provided Firefox browser from the applications menu and
     download the [sample data
-    archive](http://fg-kometen.vdsastro.de/airtools/testdata/210116_snv_raw.zip)
+    archive](https://fg-kometen.vdsastro.de/airtools/testdata/230216_shf_raw.zip)
 
   - Open the archive and extract files and directories into the raw
     files folder corresponding to your project
@@ -1159,17 +1159,18 @@ contains all tasks to calibrate and stack images automatically.
 
 <!-- end list -->
 
-    # 2021-01-16
-    # SkyGems Nerpio Veloce
+    # 230216
+    # Skygems Hakos, Namibia, FSQ106, Moravian C3-61000EC PRO, ts=0
     
-    # LT
-    # h:m set  target type texp n1 n2   nref dark flat  tel  # notes
-    07:39 dk01 dark     d   5 0001 0010 -    -    -     SNV  # 2021-01-10
-    21:01 co01 398P     o  60 0011 0018 0014 dk02 sk01  SNV  # green filter
-    07:52 sk01 skyflat  f   8 0024 0035 -    dk01 -     SNV  # 2021-01-18
-    07:58 dk02 dark     d 120 0036 0050 -    -    -     SNV
+    # UT
+    # h:m set  target type texp n1 n2   nref dark flat tel
+    04:23 sk01 skyflat  f   9 0001 0012 -    dk01 -    SHF
+    19:27 co01 2021Y1   o 120 0013 0018 0016 dk02 sk01 SHF
+    04:46 dk01 dark     d  10 0019 0030 -    -    -    SHF # ts=0
+    04:44 dk02 dark     d 120 0031 0042 -    -    -    SHF
+    18:43 co02 2017K2   o 120 0043 0047 0045 dk02 sk01 SHF # 230221
 
-  - Check for a valid entry of SNV in camera.dat (Edit/Edit Camera
+  - Check for a valid entry of SHF in camera.dat (Edit/Edit Camera
     Parameters),
 
   - Proceed with the image reduction by running every single task in the

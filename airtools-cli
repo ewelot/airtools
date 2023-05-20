@@ -19,7 +19,7 @@
 ########################################################################
 AOVARS="AO_SKIP AO_FLATS AO_LIGHT AO_BGVAR AO_REGIS AO_STACK AO_AMASK AO_ACOOR AO_ABINN"
 
-VERSION="1.4.2"
+VERSION="1.5"
 VINFO="T. Lehmann, Feb. 2023"
 PINFO="\
     options:
@@ -34,10 +34,38 @@ PINFO="\
       task          run given task    
 "
 CHANGELOG="
-    1.4.2 22 Feb 2023
+    1.5 - 09 May 2023
+        * imageinfo:
+            - output is written to rawfiles.dat for all types of raw images,
+              including those from DSLR cameras
+            - support more DSLR raw image types (more camera models)
+        * flats: badpix filename is now passed to AIflat via new option
+            -bad <badpix>
+        * badpix: use file name badpix.<telid>.png for resulting (combined)
+            badpix image file
+        * AIstack: now only badpix.<set>.png is selected as badpixel map
+
+    1.5a2 - 30 Apr 2023
+        * darks: statistics is now done after creating master darks and uses
+            image files in $AI_TMPDIR, mstat.dk.dat now contains 16bit scaled
+            data values
+        * lights: badpix filename is now passed to AIccd via new option
+            -bad <badpix>
+        * load_images: be aware of calibrated images in FITS format
+
+    1.5a1 - 13 Apr 2023
+        * bgvar:
+            - output images are now scaled by factor 10 to enhance variations
+              of small amplitude, a difference of 0 is now mapped to the value
+              20000 (instead of 1000)
+            - allow FITS format on input images
+        * lights: handle options -f and -p to force creating FITS or PPM/PGM
+            images (default: PPM for DSLR raw and FITS for anything else)
+
+    1.4.2 - 22 Feb 2023
         * darks: recompute dark variations if new dark set has been added
 
-    1.4.1 10 Dec 2022
+    1.4.1 - 10 Dec 2022
         * astrometry:
             - do not rely on star stack image (only when using AO_MASK)
             - prefer GAIA catalogs over UCAC-4 for deep images
@@ -498,7 +526,7 @@ _test () {
 #   main imred reduction tasks
 #--------------------------------
 _imageinfo () {
-    # DSLR RAW images: must be placed in $AI_RAWDIR, image number is part of file name
+    # DSLR RAW images: must be placed in $AI_RAWDIR, image number is taken from file name
     # FITS images: placed in any subdir of $AI_RAWDIR, arbitrary file names
     # note: files in directory "unused" are ignored
     #       AO_SKIP: path within AI_RAWDIR which is to be ignored
@@ -507,14 +535,13 @@ _imageinfo () {
     local ext
     local msg
     local flist
-    local infofile
     local tel
     local tellist
     local f
     local extargs
     local skipargs
-    local exifdat="exif.dat"        # DSLR RAW images
-    local fitsdat="rawfiles.dat"    # all FITS raw images (CCD, DSLR, bayered CMOS)
+    local rdat="rawfiles.dat"
+    local rawextlist="pef,cr2,cr3,nef,arw,raf,dng"
     
     msg="# Collecting image information ..."
     if [ "$AO_SKIP" ]
@@ -533,23 +560,17 @@ _imageinfo () {
 
         if [ "$OVERWRITE" ]
         then
-            for f in $exifdat $fitsdat
-            do
-                test ! -f $f && continue
-                echo "# deleting $f"
-                rm $f
-                test $? -ne 0 && return 255
-            done
+            test ! -f $rdat && continue
+            echo "# deleting $rdat"
+            rm $rdat
+            test $? -ne 0 && return 255
         fi
 
         # scanning dslr raw images ...
-        # note: use AI_TZOFF=1 if DSLR camera time is MEZ instead of UT
-        #   DSLR camera exif time is exposure end time + 30s
-        infofile=$exifdat
         extlist=$(eval find $AI_RAWDIR/ -type f $skipargs | sed -e 's,.*\.,,' | sort -u | \
-            grep -iwE "pef|cr2|nef|raf")
-        extargs="\( -iname \"*.pef\""
-        for s in cr2 nef raf
+            grep -iwE "${rawextlist//,/|}")
+        extargs="\( -iname \"*.${rawextlist%%,*}\""
+        for s in $(echo ${rawextlist#*,} | tr ',' ' ')
         do
             extargs="$extargs -or -iname \"*.$s\""
         done
@@ -557,17 +578,17 @@ _imageinfo () {
         test "$extlist" && for ext in $extlist
         do
             echo "# scanning $ext files ..."
+            test "$AI_DEBUG" && echo find $AI_RAWDIR/ -type f $extargs $skipargs "..." >&2
             flist=$(eval find $AI_RAWDIR/ -type f $extargs $skipargs \
-                -not -path "$AI_RAWDIR/unused/*")
-            img_info $flist | sort -n -k 2,2 >> $infofile
+                -not -path "$AI_RAWDIR/unused/\*")
+            img_info $flist | sort -n -k 2,2 >> $rdat
             test $? -ne 0 && return 255
         done
-        test -s $infofile && 
-            (mousepad $infofile 3>&1 1>&2 2>&3 | \
+        test -s $rdat && 
+            (mousepad $rdat 3>&1 1>&2 2>&3 | \
             grep -v "Gtk-WARNING .* Theme parsing error" | grep "[[:alnum:]]") 3>&1 1>&2 2>&3 &
         
         # scanning FITS images ...
-        infofile=$fitsdat
         extargs="\( -iname \"*.fit\""
         for s in fits fts fit.gz fits.gz fts.gz fit.zip fits.zip fts.zip
         do
@@ -591,27 +612,28 @@ _imageinfo () {
                 test $tel == "jbl08" && tel=T68
                 test $tel == "T2" && tel=T20
                 echo "# scanning fits files for $tel ..."
+                test "$AI_DEBUG" && echo find $AI_RAWDIR/ -type f $extargs $skipargs "..." >&2
                 flist=$(eval find $AI_RAWDIR/ -type f $extargs $skipargs \
-                    -not -path "$AI_RAWDIR/unused/*" | grep -iw $tel)
+                    -not -path "$AI_RAWDIR/unused/\*" | grep -iw $tel)
                 # TODO: check JD in first file, if it is not plausible then use time
                 # info from log file by providing -l option
-                test "$flist" && map_rawfiles -x $flist >> $infofile
+                test "$flist" && map_rawfiles -x $flist >> $rdat
                 test $? -ne 0 && return 255
             done
         else
             # scanning other FITS images
-            test "$AI_DEBUG" && echo find $AI_RAWDIR/ -type f $extargs $skipargs >&2
+            test "$AI_DEBUG" && echo find $AI_RAWDIR/ -type f $extargs $skipargs "..." >&2
             flist=$(eval find $AI_RAWDIR/ -type f $extargs $skipargs \
-                -not -path "$AI_RAWDIR/unused/*")
+                -not -path "$AI_RAWDIR/unused/\*")
             if [ "$flist" ]
             then
                 echo "# scanning fits files ..."
-                map_rawfiles -x $flist >> $infofile
+                map_rawfiles -x $flist >> $rdat
                 test $? -ne 0 && return 255
             fi
         fi
-        test -s $infofile && 
-            (mousepad $infofile 3>&1 1>&2 2>&3 | \
+        test -s $rdat && 
+            (mousepad $rdat 3>&1 1>&2 2>&3 | \
             grep -v "Gtk-WARNING .* Theme parsing error" | grep "[[:alnum:]]") 3>&1 1>&2 2>&3 &
     fi
     return 0
@@ -635,15 +657,11 @@ _darks () {
     local msg
     local bs
     local has_new_dark
+    local ext
     local popts
+    local flist
     local tmpargs=$(mktemp "/tmp/tmp_args_XXXXXX")
     local tmpsh=$(mktemp "/tmp/tmp_script_XXXXXX.sh")
-    chmod u+x $tmpsh
-    cat <<EOF > $tmpsh
-#!/bin/bash
-. airfun.sh > /dev/null
-_run_parallel \$@
-EOF
     
     #set -x
     slist=$(AIsetinfo -b | awk '{if($4=="d"){print $2}}')
@@ -666,120 +684,6 @@ EOF
         test $? -ne 0 && return 255
     fi
 
-    msg="# Converting dark images ..."
-    tellist=$(AIsetinfo -b | grep -w d | awk '{printf("%s\n", $11)}' | sort -u)
-    ! match proc "$SKIPPARTS" && for tel in $tellist
-    do
-        # get camera dependend parameters
-        # determine intensity scaling factor to stretch to full 16bit range
-        # this is used by AIraw2gray in case of FITS images only
-        scale=$(get_param camera.dat rawbits $tel | awk '{if ($1!="-" && $1<16) print 2^(16-$1)}')
-
-        # check if top-down image flipping is required
-        flip=$(get_param camera.dat flip $tel | awk '{if ($1=="1") print 1}')
-        
-        # options for raw image conversion
-        opts="-c"   # apply AI_CCDREGION
-        test "$scale" && opts=$(echo $opts "-s $scale")
-        test "$flip"  && opts=$(echo $opts "-f")
-
-        # determine images which need to be converted
-        rm -f $tmpargs
-        for set in $(AIsetinfo -b | grep -w d | \
-            awk -v t=$tel '{if($11==t){print $2}}')
-        do
-            echo $slist | grep -q -w $set || continue
-            for num in $(AI_EXCLUDE="" AIimlist -n $set "" raw)
-            do
-                test -f $AI_TMPDIR/$num.pgm && continue
-                x=""
-                test -s mstat.dk.dat &&
-                    fname=$(get_rawfile $num) &&
-                    x=$(grep "^$(basename $fname) " mstat.dk.dat)
-                test "$x" && test -f $set.pgm &&
-                    test -f dk.var10.${tel,,}.pgm && continue
-                echo $num $opts >> $tmpargs
-            done
-        done
-
-        if [ -s $tmpargs ]
-        then
-            test "$msg" && echo $msg && msg="" &&
-                echo "#" $(cat $tmpargs | wc -l) "images"
-            _run_parallel () {
-                num=$1; shift 1
-                opts=$@
-                dcrawopts=""
-                test "$AI_CCDREGION" && dcrawopts="-R $AI_CCDREGION"
-
-                fname=$(get_rawfile $num)
-                echo $num >&2
-                #echo "# AI_DCRAWPARAM=\"$AI_DCRAWPARAM $dcrawopts\" AIraw2gray -c $opts $fname > $AI_TMPDIR/$num.pgm" >&2
-                AI_DCRAWPARAM="$AI_DCRAWPARAM $dcrawopts" \
-                    AIraw2gray $opts $fname $AI_TMPDIR/$num.pgm
-            }
-            #false && (
-            export -f _run_parallel
-            popts=""; test "$AI_MAXPROCS" && popts="-P $AI_MAXPROCS"
-            cat $tmpargs | parallel $popts -k $tmpsh
-            unset -f _run_parallel
-            #)
-            
-            false && cat $tmpargs | while read num opts
-            do
-                dcrawopts=""
-                test "$AI_CCDREGION" && dcrawopts="-R $AI_CCDREGION"
-                fname=$(get_rawfile $num)
-                echo $num >&2
-                #echo "# AI_DCRAWPARAM=\"$AI_DCRAWPARAM $dcrawopts\" AIraw2gray -c $opts $fname > $AI_TMPDIR/$num.pgm" >&2
-                AI_DCRAWPARAM="$AI_DCRAWPARAM $dcrawopts" \
-                    AIraw2gray -c $opts $fname $AI_TMPDIR/$num.pgm
-            done
-        fi
-    done
-    
-    msg="# Computing statistics of dark images ..."
-    if ! match proc "$SKIPPARTS"
-    then
-        # determine list of images for which to estimate statistics
-        rm -f $tmpargs
-        for set in $slist
-        do
-            AI_EXCLUDE="" AIimlist $set "" raw | while read x num fname x
-            do
-                if [ -s mstat.dk.dat ]
-                then
-                    ! grep -q "^$(basename $fname) " mstat.dk.dat &&
-                        echo $num
-                else
-                    echo $num
-                fi
-            done
-        done > $tmpargs
-        
-        # get stats
-        if [ -s $tmpargs ]
-        then
-            test "$msg" && echo $msg && msg=""
-            _run_parallel () {
-                local num=$1
-                local fname=$(get_rawfile $num)
-                AImstat -v -c $fname | awk -v n=$num '{
-                    if ($2=="-") sub(/-/,n,$2)
-                    print $0}'
-            }
-            export -f _run_parallel
-            popts=""; test "$AI_MAXPROCS" && popts="-P $AI_MAXPROCS"
-            cat $tmpargs | parallel $popts -k $tmpsh >> mstat.dk.dat
-            unset -f _run_parallel
-        fi
-    fi
-
-    # plot stats
-    test ! -s mstat.dk.dat && return 255
-    ! match plot "$SKIPPARTS" &&
-        AIplot -o $AI_TMPDIR/x.darkvalue.png -t "Dark value per image" -p mstat.dk.dat 2 5
-
     msg="# Creating Master darks ..."
     ! match proc "$SKIPPARTS" && for set in $slist
     do
@@ -794,6 +698,59 @@ EOF
         for set in $slist; do test -f $set.pgm && dklist="$dklist $set.pgm"; done &&
         test "$dklist" &&
             AIexamine -n MasterDark_and_Flat $dklist
+    
+
+    msg="# Computing statistics of dark images ..."
+    if ! match proc "$SKIPPARTS"
+    then
+        # determine list of images for which to estimate statistics
+        ext="pgm"
+        rm -f $tmpargs
+        for set in $slist
+        do
+            AI_EXCLUDE="" AIimlist $set "" raw | while read x num fname x
+            do
+                if [ -s mstat.dk.dat ]
+                then
+                    ! grep -q "^$(basename $fname) " mstat.dk.dat &&
+                        test -s $AI_TMPDIR/$num.$ext && echo $num
+                else
+                    test -s $AI_TMPDIR/$num.$ext && echo $num
+                fi
+            done
+        done > $tmpargs
+        
+        # get stats
+        if [ -s $tmpargs ]
+        then
+            chmod u+x $tmpsh
+            cat <<EOF > $tmpsh
+#!/bin/bash
+. airfun.sh > /dev/null
+_run_stats_parallel \$@
+EOF
+            test "$msg" && echo $msg && msg=""
+            _run_stats_parallel () {
+                local num=$1
+                local ext="pgm"
+                local fname=$AI_TMPDIR/$num.$ext
+                local rawname=$(get_rawfile $num)
+                AImstat -v -c $fname | awk -v r="$(basename "$rawname")" -v n=$num '{
+                    $1=r
+                    if ($2=="-") sub(/-/,n,$2)
+                    print $0}'
+            }
+            export -f _run_stats_parallel
+            popts=""; test "$AI_MAXPROCS" && popts="-P $AI_MAXPROCS"
+            cat $tmpargs | parallel $popts -k $tmpsh >> mstat.dk.dat
+            unset -f _run_stats_parallel
+        fi
+    fi
+
+    # plot stats
+    test ! -s mstat.dk.dat && return 255
+    ! match plot "$SKIPPARTS" &&
+        AIplot -o $AI_TMPDIR/x.darkvalue.png -t "Dark value per image" -p mstat.dk.dat 2 5
     
     # dark variation (using first dark as reference)
     msg="# Estimate dark variation ..."
@@ -831,22 +788,31 @@ EOF
         then
             test "$msg" && echo $msg && msg="" &&
                 echo "#" $(cat $tmpargs | wc -l) "images"
-            _run_parallel () {
+            chmod u+x $tmpsh
+            cat <<EOF > $tmpsh
+#!/bin/bash
+. airfun.sh > /dev/null
+_run_darkvar_parallel \$@
+EOF
+            _run_darkvar_parallel () {
                 num=$1
                 bs=$2
                 set=$3
                 tel=$4
                 echo "# computing diff for $num ($set $tel)" >&2
-                pnmccdred2 -m 10 -a 1000 -d $set.pgm $AI_TMPDIR/$num.pgm - | pnmsmooth > x.$num.pgm
-                AIbgmap -q x.$num.pgm $bs 1
-                add=$(AIstat x.$num.bgm1.pgm | awk '{printf("%.0f", 1000-$5)}')
-                pnmccdred -a $add x.$num.bgm1.pgm $AI_TMPDIR/$num.dkdiff.pgm
-                rm x.$num.bgm1.pgm x.$num.bg.pgm x.$num.pgm
+                pnmccdred2 -m 10 -a 1000 -d $set.pgm $AI_TMPDIR/$num.pgm - | \
+                    pnmsmooth > $AI_TMPDIR/x.$num.pgm
+                (cd $AI_TMPDIR
+                    AIbgmap -q x.$num.pgm $bs 1
+                    add=$(AIstat x.$num.bgm1.pgm | awk '{printf("%.0f", 1000-$5)}')
+                    pnmccdred2 -a $add x.$num.bgm1.pgm $num.dkdiff.pgm
+                    rm x.$num.bgm1.pgm x.$num.bg.pgm x.$num.pgm
+                )
             }
-            export -f _run_parallel
+            export -f _run_darkvar_parallel
             popts=""; test "$AI_MAXPROCS" && popts="-P $AI_MAXPROCS"
             cat $tmpargs | parallel $popts -k $tmpsh
-            unset -f _run_parallel
+            unset -f _run_var_parallel
         fi
         
         montage -background '#03c003c003c0' -fill '#050005000500' -label '%t' \
@@ -857,7 +823,7 @@ EOF
     # dark noise estimation (per pixel)
     ! match proc "$SKIPPARTS" && for set in $slist
     do
-        test -f n${set}.sd.pgm && continue
+        test -s n${set}.sd.pgm && continue
         nimg=$(AIsetinfo $set | awk '{print $9}')
         test $nimg -lt 9 && continue
         echo "# estimate dark noise in $set, nimg=$nimg"
@@ -879,6 +845,13 @@ EOF
         printf "\n"
     done
 
+    # free disk space by removing individual images
+    ! match proc "$SKIPPARTS" && for set in $slist
+    do
+        flist=$(AIimlist q -f $set)
+        test "$flist" && rm $flist
+    done
+    
     ! match image "$SKIPPARTS" &&
         AIexamine -n "Dark_Variation" -l dk.var10.*pgm
     rm -f $tmpsh $tmpargs
@@ -888,6 +861,7 @@ EOF
 _flats () {
     local slist
     local fflist
+    local ccdopts
     local texp
     local tel
     local cam
@@ -896,6 +870,7 @@ _flats () {
     local ctype
     local opts
     local set
+    local flist
     slist=$(AIsetinfo -b | awk '{if($4=="f"){print $2}}')
     test "$setname" && slist=$setname
     test -z "$slist" &&
@@ -920,29 +895,33 @@ _flats () {
 
     ! match proc "$SKIPPARTS" && for set in $slist
     do
+        ccdopts=""
         texp=$(AIsetinfo $set | awk '{printf("%.0f", $8)}')
         tel=$(AIsetinfo $set | awk '{printf("%s", $12)}')
-        cam=$(get_param camera.dat camera $tel | awk '{print tolower($1)}')
+        cam=$(get_param camera.dat camera $tel | awk '{print $1}')
         ctype=$(get_param camera.dat ctype $tel | awk '{print $1}')
         echo "# tel=$tel  cam=$cam ($ctype)"
-        opts="-b"
-        (test "$ctype" == "CCD" || test "$ctype" == "CMOS") && opts=""
         # check for existing badpix file
         badpix=""
         type=long; test $texp -lt 32 && type=short
-        for badext in png dat
+        for badext in png # dat
         do
-            for f in hotpix.${tel,,}_$type.$badext hotpix.${cam}_$type.$badext \
-                hotpix.${tel,,}.$badext hotpix.${cam}.$badext
+            for f in \
+                badpix.${tel,,}_$type.$badext badpix.${tel,,}.$badext \
+                hotpix.${tel,,}_$type.$badext hotpix.${tel,,}.$badext
             do
                 test -e $f && badpix="$f" && break
             done
             test "$badpix" && break
         done
-        test "$badpix" && echo "# using hotpixel file $badpix"
-        echo "# AI_BADPIX=\"$badpix\" AIflat" $opts $AO_FLATS $set
-        AI_BADPIX="$badpix" AIflat $opts $AO_FLATS $set
+        test "$badpix" && ccdopts="-bad $badpix"
+        echo "# AIflat" $ccdopts $AO_FLATS $set
+        AIflat $ccdopts $AO_FLATS $set
         test $? -ne 0 && return 255
+        
+        # free disk space by removing individual images
+        flist=$(AIimlist q -f $set)
+        test "$flist" && rm $flist
     done
     # statistics
     for set in $slist
@@ -1009,39 +988,34 @@ _lights () {
     ! match proc "$SKIPPARTS" &&
     for set in $slist
     do
-        ccdopts="$AO_LIGHT"
-        if [ -z "$ccdopts" ]
-        then
-            texp=$(AIsetinfo $set | awk '{printf("%.0f", $8)}')
-            tel=$(AIsetinfo $set | awk '{printf("%s", $12)}')
-            cam=$(get_param camera.dat camera $tel | awk '{print tolower($1)}')
-            ctype=$(get_param camera.dat ctype $tel | awk '{print $1}')
-            echo "# tel=$tel  cam=$cam ($ctype)"
-            case "$ctype" in
-                CCD|CMOS)   ccdopts="-a 100";;
-                *)          ccdopts="-a 100 -q 1";;
-            esac
-            is_calibrated=$(AIsetinfo -b $set | awk '{
-                if($9=="cal" && $10=="cal") print 1}')
-            test "$is_calibrated" && ccdopts="-c $ccdopts"
-            # check for existing badpix file
-            badpix=""
-            type=long; test $texp -lt 32 && type=short
-            for badext in png dat
+        ccdopts=""
+        texp=$(AIsetinfo $set | awk '{printf("%.0f", $8)}')
+        tel=$(AIsetinfo $set | awk '{printf("%s", $12)}')
+        cam=$(get_param camera.dat camera $tel | awk '{print $1}')
+        ctype=$(get_param camera.dat ctype $tel | awk '{print $1}')
+        echo "# tel=$tel  cam=$cam ($ctype)"
+        case "$ctype" in
+            CCD|CMOS)   ccdopts="$ccdopts -a 100";;
+            *)          ccdopts="$ccdopts -a 100 -q 1";;
+        esac
+        # check for existing badpix file
+        badpix=""
+        type=long; test $texp -lt 32 && type=short
+        for badext in png # dat
+        do
+            for f in \
+                badpix.${tel,,}_$type.$badext badpix.${tel,,}.$badext \
+                hotpix.${tel,,}_$type.$badext hotpix.${tel,,}.$badext
             do
-                for f in hotpix.${tel,,}_$type.$badext hotpix.${cam}_$type.$badext \
-                    hotpix.${tel,,}.$badext hotpix.${cam}.$badext
-                do
-                    test -e $f && badpix="$f" && break
-                done
-                test "$badpix" && break
+                test -e $f && badpix="$f" && break
             done
-            test "$badpix" && echo "# using hotpixel file $badpix"
-        fi
+            test "$badpix" && break
+        done
+        test "$badpix" && ccdopts="$ccdopts -bad $badpix"
         test -d bgvar || mkdir bgvar
         
-        echo "# running: AI_BADPIX=\"$badpix\" AIccd" $ccdopts $set
-        AI_BADPIX="$badpix" AIccd $ccdopts $set
+        echo "# running: AIccd" $ccdopts $AO_LIGHT $set
+        AIccd $ccdopts $AO_LIGHT $set
         test $? -ne 0 && return 255
     done
     return 0
@@ -1066,6 +1040,9 @@ _bgvar () {
     local ncol
     local title
     local doit
+    local nref
+    local mult
+    local outext
     
     slist=$(AIsetinfo -b | awk '{if($4=="o"){print $2}}')
     test "$setname" && slist=$setname
@@ -1115,15 +1092,14 @@ _bgvar () {
                     return 255
             done
         fi
-    
+        
+        # compute diff images
         if [ "$doit" ]
         then
             for set in $slist
             do                
                 AIbgdiff -k -a -p $AO_BGVAR "$set" >> bgdiff.dat
                 test $? -ne 0 && return 255
-                #AIbgdiff -k -a le01 >> bgdiff.dat
-                #AIbgdiff -k "" 64 >> bgdiff.dat    # small images
             done
         fi
     fi
@@ -1156,40 +1132,51 @@ _bgvar () {
     done
     
     # show changing gradient only
-    #suffix=bgdiff   # result of surface fit to AIbgmap of diff image excl. bad regions
-    suffix=bgm1     # AIbgmap of diff image
+    #suffix=bgdiff   # result of surface fit of diff image excl. bad regions
+    suffix=bgm1     # diff image with respect to average image
     ! match proc "$SKIPPARTS" && for set in $slist
     do
         set - $(AIsetinfo $set)
         test $9 -le 1 && continue
-        inext="pgm"; test -f $AI_TMPDIR/$4.ppm && inext="ppm"
-        bg='#03D003D003D0'
-        fg='#042004200420'
+        inext="pgm"
+        test -f $AI_TMPDIR/$4.ppm && inext="ppm"
+        test -f $AI_TMPDIR/$4.fits && inext="fits"
+        if [ $inext != "fits" ]
+        then
+            outext=$inext
+        else
+            outext="pgm"
+            test "$(get_header -q $AI_TMPDIR/$4.fits NAXIS3)" == "3" &&
+                outext="ppm"
+        fi
         nlist=$(AIimlist -n $set)
         test -z "$nlist" && continue
+        # TODO: determine range of variations, if > 2000 then use mult=1
+        # old: mult=1; newbg=1000
+        mult=10
+        newbg=20000
+        # TODO: run parallel processes, otherwise it is really slow
         for num in $nlist
         do
             f=bgvar/$num.$suffix.$inext
             test -f $f || continue
             imcrop $f 70 > tmp1.$$.$inext
-            add=$(AIstat tmp1.$$.$inext | awk -v m=1000 '{
-                printf("%d",m-$5); if(NF>8) printf(",%d,%d", m-$9, m-$13)}')
-            echo $num $f $add
-            pnmccdred -a $add $f - | pnmscale 4 - > z.$set.$num.$inext
+            add=$(AIstat tmp1.$$.$inext | awk -v m=$mult -v b=$newbg '{
+                printf("%d",b-m*$5); if(NF>8) printf(",%d,%d", b-m*$9, b-m*$13)}')
+            echo $num $f $mult $add
+            pnmccdred2 -a $add -m $mult $f - | pnmscale 4 - > z.$set.$num.$outext
         done
         # note: montage changes intensities when output is 16bit grayscale
-        montage -background $bg -fill $fg -label '%t' \
-            z.$set.????.$inext -geometry +4+2 ppm:- | ppm2gray - 0,1,0 > var$suffix.$set.$inext
-        rm z.$set.????.$inext tmp1.$$.$inext
+        # old: bg='#03D003D003D0'; fg='#042004200420'
+        bg=$(printf "%04x\n" $(($newbg-25*$mult)) | tr '[a-f]' '[A-F]') &&
+        fg=$(printf "%04x\n" $(($newbg+60*$mult)) | tr '[a-f]' '[A-F]')
+        montage -background "#$bg$bg$bg" -fill "#$fg$fg$fg" -label '%t' \
+            z.$set.????.$outext -geometry +4+2 ppm:- | ppm2gray - 0,1,0 > varbgm$mult.$set.$outext
+        rm z.$set.????.$outext tmp1.$$.$inext
     done
     imlist=$(for set in $slist
         do
-            if [ -f var$suffix.$set.ppm ]
-            then
-                echo var$suffix.$set.ppm
-            else
-                test -f var$suffix.$set.pgm && echo var$suffix.$set.pgm
-            fi
+            ls varbgm[0-9]*.$set.p?m 2>/dev/null
         done)
     ! match image "$SKIPPARTS" && test "$imlist" &&
         AIexamine -l -z -n "Background_Variation" $imlist
@@ -1343,7 +1330,7 @@ _badpix () {
     local difflist
     local badlist
     local badpix    # dayly badpix image
-    local hotpix    # combined image used by AIccd (applying interpolation)
+    local badpixall    # combined image used by AIccd (applying interpolation)
     local nref
     local opts
     local xhigh
@@ -1408,20 +1395,20 @@ _badpix () {
     ! match proc "$SKIPPARTS" && for tel in $tellist
     do
         badpix="badpix.${tel,,}.$day.png"
-        hotpix="hotpix.${tel,,}.png"
+        badpixall="badpix.${tel,,}.png"
         camtype=$(get_param camera.dat ctype $tel)
-        #test "$camtype" == "DSLR" && badpix="hotpix.${tel,,}.png" # for use by AIccd/dcraw
+        #test "$camtype" == "DSLR" && badpix="badpixall.${tel,,}.png" # for use by AIccd/dcraw
         test -e $badpix && rm $badpix
-        if [ -e $hotpix ]
+        if [ -e $badpixall ]
         then
-            test ! -e ${hotpix/.png/.old.png} && mv $hotpix ${hotpix/.png/.old.png}
-            # echo "WARNING: reusing existing $hotpix" && continue
+            test ! -e ${badpixall/.png/.old.png} && mv $badpixall ${badpixall/.png/.old.png}
+            # echo "WARNING: reusing existing $badpixall" && continue
         fi
         telsetlist=$(AIsetinfo -b -o | grep -v "^#" | awk -v t=$tel -v sl="$(echo $slist)" '{
             if (tolower($11)==tolower(t) && sl~$2) {print $2}}')
         test -z "$telsetlist" && continue
         echo "# Creating badpixel mask for $tel using" $telsetlist "..."
-        opts="-n 13"    # limit to 13 frames per set
+        opts="-n 12"    # limit to 12 frames per set
         test "$camtype" != "CCD" && test "$camtype" != "CMOS" && opts="$opts -s"   # do subtract bayered background 
         for set in $telsetlist
         do
@@ -1481,7 +1468,7 @@ _badpix () {
         test -e bad.columns.${tel,,}.png && badlist="bad.columns.${tel,,}.png $badlist"
         test -e bad.dust.${tel,,}.png    && badlist="bad.dust.${tel,,}.png    $badlist"
         test -e bad.other.${tel,,}.png   && badlist="bad.other.${tel,,}.png   $badlist"
-        test -e ${badpix/.png/.old.png}  && badlist="${badpix/.png/.old.png}  $badlist"
+        #test -e ${badpix/.png/.old.png}  && badlist="${badpix/.png/.old.png}  $badlist"
         n=$(echo $badlist | wc -w)
         #convert $badlist  -evaluate-sequence max badpix.${tel,,}.png
         vips bandrank "$badlist" $badpix --index $((n-1))
@@ -1496,20 +1483,20 @@ _badpix () {
         n=$(echo $badlist | wc -w)
         if [ $n -gt 1 ]
         then
-            echo "# combining $n daily badpix images to create $hotpix ..."
+            echo "# combining $n daily badpix images to create $badpixall ..."
         else
-            echo "# creating $hotpix ..."
+            echo "# creating $badpixall ..."
         fi
-        vips bandrank "$badlist" $hotpix --index $((n-1))
+        vips bandrank "$badlist" $badpixall --index $((n-1))
     done
 
     msg="# Displaying badpixel masks and check images ..."
     ! match image "$SKIPPARTS" && for tel in $tellist
     do
         badpix="badpix.${tel,,}.$day.png"
-        hotpix="hotpix.${tel,,}.png"
+        badpixall="badpix.${tel,,}.png"
         camtype=$(get_param camera.dat ctype $tel)
-        #test "$camtype" == "DSLR" && badpix="hotpix.${tel,,}.png" # for use by AIccd
+        #test "$camtype" == "DSLR" && badpix="badpixall.${tel,,}.png" # for use by AIccd
         telsetlist=$(AIsetinfo -b -o | grep -v "^#" | awk -v t=$tel -v sl="$(echo $slist)" '{
             if (tolower($11)==tolower(t) && sl~$2) {print $2}}')
         test -z "$telsetlist" && continue
@@ -1517,9 +1504,10 @@ _badpix () {
         test "$msg" && echo $msg && msg=""
         difflist=$(for s in $telsetlist; do ls bad.$s.diff.pgm 2>/dev/null; done)
         # identify clusters of bad pixels
-        convert $hotpix -define convolve:scale=0.00392 -morphology Convolve Disk:3.5 \
+        # TODO: replace command to avoid imagemagick (possibly running out of memory)
+        convert $badpixall -define convolve:scale=0.00392 -morphology Convolve Disk:3.5 \
             pgm:- | pnmccdred2 -a -2 - - | convert - -morphology Dilate Disk:5 bad.${tel,,}.clust.png
-        AIexamine -n $tel $badpix $hotpix bad.${tel,,}.clust.png $difflist
+        AIexamine -n $tel $badpix $badpixall bad.${tel,,}.clust.png $difflist
     done
 }
 
@@ -1527,8 +1515,6 @@ _badpix () {
 _stack () {
     # GUI program options may be passed by env variable AO_STACK
     local stackopts
-    local ctype="average"
-    local rtype="bilinear"
     local retval=0
     local tellist
     local tel
@@ -1588,12 +1574,14 @@ _stack () {
         test -e badpix.$set.png &&
             bopts="$bopts -bad badpix.$set.png" &&
             echo "# using badpix.$set.png"
-        test -z "$bopts" && test -e badpix.$tel.png &&
+        # old program version might use badpix.$tel.png
+        test $(vcomp $VERSION 1.4.999) -eq 2 && test -z "$bopts" &&
+            test -e badpix.$tel.png &&
             bopts="$bopts -bad badpix.$tel.png" &&
             echo "# using badpix.$tel.png"
         stackopts="$AO_STACK"
-        echo "# running: AIstack" $stackopts $bopts "-t $ctype -r $rtype $set"
-        AIstack $stackopts $bopts -t $ctype -r $rtype $set
+        echo "# running: AIstack" $stackopts $bopts $set
+        AIstack $stackopts $bopts $set
         test $? -ne 0 && retval=255
         test "$stackopts" && set_header $set.head AO_STACK="$stackopts"
         # note: as of airtools-cli version 1.3 we always add pedestal to
@@ -1607,7 +1595,7 @@ _stack () {
     echo "#set   object   telid  exp   n bin  bgg  bgoff fwhm/pix  rms  site"
     for set in $slist
     do
-        stackproperties -u $set || return 255
+        stackproperties -u -f $set || return 255
     done
 
     # evaluate fwhm across full image
@@ -2081,14 +2069,13 @@ _costack () {
             echo "ERROR: missing astrometric calibration for $set" && retval=255 && continue
 
         params=""
-        val=$(get_header $set.head BADPIX);   test "$val" && params="-bad $val"
+        val=$(get_header -q $set.head BADPIX); test "$val" && params="-bad $val"
         val=$(get_header $set.head RESAMPT1); test "$val" && params="$params -r $val"
         set - $(get_header -q -s $set.head AI_CORA,AI_CODEC,AI_OMOVE) xx
         test $# -ne 4 &&
             echo "# skipping $set (missing comet header keywords)" >&2 && continue
         oxy=$(echo $set $1 $2 | rade2xy - $set.wcs.head | awk '{printf("%.0f,%.0f", $2, $3)}')
         omove=$3
-        # if necessary add -bz 5000
         stackopt=$(get_header -q $set.head AO_STACK)
         echo "# running: AIstack" $stackopt $params -o \"_m\" -c $set.$ext -m $omove@$oxy $set
         AIstack $stackopt $params -o "_m" -c $set.$ext -m $omove@$oxy $set
@@ -2303,6 +2290,8 @@ __load_images () {
     do
         if [ -z "$raw" ]
         then
+            test -s $AI_TMPDIR/$num.fits &&
+                echo $AI_TMPDIR/$num.fits && continue
             test -s $AI_TMPDIR/$num.ppm &&
                 echo $AI_TMPDIR/$num.ppm && continue
             test -s $AI_TMPDIR/$num.pgm &&
@@ -2391,17 +2380,28 @@ _remove () {
     # per image result files
     for num in $nlist
     do
+        if match darks "$plist"
+        then
+            f=$AI_TMPDIR/$num.pgm;      test -e $f && echo "rm $f"
+        fi
+        if match flats "$plist"
+        then
+            f=$AI_TMPDIR/$num.pgm;      test -e $f && echo "rm $f"
+        fi
         if match calib "$plist"
         then
-            f=$AI_TMPDIR/$num.ppm;   test -e $f && echo "rm $f"
-            f=$AI_TMPDIR/$num.pgm;   test -e $f && echo "rm $f"
+            f=$AI_TMPDIR/$num.fits;     test -e $f && echo "rm $f"
+            f=$AI_TMPDIR/$num.ppm;      test -e $f && echo "rm $f"
+            f=$AI_TMPDIR/$num.pgm;      test -e $f && echo "rm $f"
         fi
         if match bgvar "$plist"
         then
-            f=bgvar/$num.bgm1.ppm;   test -e $f && echo "rm $f"
-            f=bgvar/$num.bgm1.pgm;   test -e $f && echo "rm $f"
-            f=bgvar/$num.bgdiff.ppm; test -e $f && echo "rm $f"
-            f=bgvar/$num.bgdiff.pgm; test -e $f && echo "rm $f"
+            f=bgvar/$num.bgm1.fits;     test -e $f && echo "rm $f"
+            f=bgvar/$num.bgm1.ppm;      test -e $f && echo "rm $f"
+            f=bgvar/$num.bgm1.pgm;      test -e $f && echo "rm $f"
+            f=bgvar/$num.bgdiff.fits;   test -e $f && echo "rm $f"
+            f=bgvar/$num.bgdiff.ppm;    test -e $f && echo "rm $f"
+            f=bgvar/$num.bgdiff.pgm;    test -e $f && echo "rm $f"
         fi
         if match reg "$plist"
         then
@@ -2456,7 +2456,7 @@ _remove () {
         fi
         if match badpix "$plist"
         then
-            flist=$(ls bad.$set.* 2>/dev/null)
+            flist=$(ls bad.$set.{diff,high,low}* bad.$set.*{dat,reg} 2>/dev/null)
             test "$flist" && for f in $flist
             do
                 test -f $f && echo "rm $f"
@@ -2464,7 +2464,7 @@ _remove () {
         fi
         if match stack "$plist"
         then
-            flist=$(ls $set.*{pgm,ppm,head,src.dat,fits.gz} 2>/dev/null)
+            flist=$(ls $set.*{fits,ppm,pgm,head,src.dat,fits.gz} 2>/dev/null)
             test "$flist" && for f in $flist
             do
                 test $f == $set.wcs.head && continue
@@ -2483,7 +2483,7 @@ _remove () {
         fi
         if match costack "$plist"
         then
-            flist=$(ls ${set}_m.*{pgm,ppm,head,fits.gz} 2>/dev/null)
+            flist=$(ls ${set}_m.*{fits,ppm,pgm,head,fits.gz} 2>/dev/null)
             test "$flist" && for f in $flist
             do
                 test $f == ${set}_m.head && backup -e ${set}_m.head
