@@ -1119,9 +1119,9 @@ installed.
   - If this is the first start of the application then you are prompted
     with the Airtools setup dialog. You can accept default directories.
 
-  - Create a new project choosing 2021 January 16th as the date of
+  - Create a new project choosing 2023 February 16th as the date of
     observations by using the calendar date picker and the observatory
-    site “Nerpio” from the appropriate dropdown list.
+    site “Hakos” from the appropriate dropdown list.
 
   - Optionally fill in your observer details
 
