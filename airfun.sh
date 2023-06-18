@@ -14,9 +14,26 @@
 # - in order to use SAOImage DS9 analysis tasks (via AIexamine) you must
 #   have installed files airds9.ana and aircmd.sh
 ########################################################################
-AI_VERSION="5.3"
+AI_VERSION="5.3.1"
 : << '----'
 CHANGELOG
+    5.3.1 - 18 Jun 2023
+        * AIcomet:
+            - force new star subtraction if <set>.starphot.dat is newer then
+              <set>.newphot.dat (e.g. due to flagging false star identification)
+            - increase image bluring in case of very small pixscale
+        * AIcheck_ok: add some version info about java installation
+        * AIdisplay: redirect stdout and stderr to unblock log output
+        * AIbgmap: improved output formatting of measurements
+        * AIfwhm:
+            - added parameter -s <minSN> to filter objects in source catalog
+            - added parameter -p <pdegree>, if not given then choose it
+              based on the number of valid sources
+        * aphot: enhanced to support FITS images
+        * icqplot: deal better with long comet name
+        * check_new_version: add time limit for metadata retrival from repo
+        * new function: python_info
+        
     5.3 - 17 May 2023
         * note: this is a major update of the program even though the major
             version number has not changed in AI_VERSION, instead we aimed
@@ -2539,12 +2556,12 @@ AIcheck_ok () {
         locale
         echo
         
-        filter="imagemagick|graphicsmagick|libraw|libvips|gnuplot|plplot|parallel "
+        filter="imagemagick|graphicsmagick|libraw|libvips|gnuplot|openjdk.*jre|plplot|parallel "
         filter="$filter|^....python3 |python3-numpy|python3-ephem|python3-pyvips|python3-rawpy"
         filter="$filter|saods9 |xpa-tools|wcstools|aladin|libcfitsio"
         filter="$filter|missfits|scamp|sextractor|skymaker|stiff|swarp|cfitsio|stilts |airtools"
         echo "# installed packages:"
-        dpkg -l | grep -E "$filter" | grep -vwE "libieee1284-3|libraw1394|startpar|i386|dev" | \
+        dpkg -l | grep -E "$filter" | grep -vwE "headless|libieee1284-3|libraw1394|startpar|i386|dev" | \
             awk '{printf("%-4s %-32s %s\n", $1, $2, $3)}'
         echo
     fi >&2
@@ -2604,6 +2621,7 @@ AIcheck_ok () {
         echo "# airfun.sh:" $AI_VERSION
         echo "# airfun.py:" $(airfun.py -v)
         echo "# dcraw-tl: " $(dcraw-tl | grep -i v | lines 1)
+        echo "# java:     " $(java --version | head -1)
         echo "# ds9:      " $(ds9 -version | grep ds9)
         echo "# stilts:   " $(stilts -version | grep -i "STILTS.*version")
         echo "# missfits: " $(missfits -v)
@@ -2629,6 +2647,33 @@ AIcheck_ok () {
     test ! -f refcat.dat &&
         echo "WARNING: missing reference catalog database (refcat.dat)." >&2
     return $retval
+}
+
+
+python_info () {
+    # show info about currently installed python modules
+    local p
+    local result
+    local size
+    
+    echo "# Directories to search for modules:"
+    echo "# PYTHONPATH=$PYTHONPATH"
+    for p in $(python3 -c "import sys; print('\n'.join(sys.path))")
+    do
+        result="missing: -      $p"
+        size=""
+        test -e $p && result="exists: " && size=$(du -hs $p)
+        echo "$result $size"
+    done
+    
+    echo
+    echo "# Module list:"
+    echo "# using" $(pip --version)
+    pip list -v
+    
+    echo
+    echo "# Python packages:"
+    dpkg -l | grep -i python | awk '{print $1" "$2" "$3}' | column -t
 }
 
 
@@ -2751,6 +2796,7 @@ check_new_version () {
     local srcdist
     local vold
     local vnew
+    local msg
     local tmppkg=$(mktemp /tmp/tmp_pkg_XXXXXX)
     
     (test "$showhelp" || test $# -ne 0) &&
@@ -2781,7 +2827,7 @@ the name of your Linux distribution. Continue at your own risk!"
     fi
     
     # download Packages file
-    curl -s -o $tmppkg http://$repo/debian/dists/$srcdist/main/binary-amd64/Packages
+    curl -s -m 10 -o $tmppkg http://$repo/debian/dists/$srcdist/main/binary-amd64/Packages
     vnew=$(grep -A2 "^Package: airtools$" $tmppkg | grep Version | \
         while read x v
         do
@@ -2789,15 +2835,15 @@ the name of your Linux distribution. Continue at your own risk!"
             test $(vcomp $v $vv) -eq 1 && vv=$v
             echo $vv
         done | tail -1)
+    test -z "$vnew" &&
+        echo "WARNING: unable to get package information from repository." >&2 && return 255
     vcurr=$(dpkg-query -W airtools | awk '{printf("%s", $2)}')
     test "$verbose" &&
         echo "# current version: $vcurr" >&2 &&
         echo "# newest version:  $vnew" >&2
     test $(vcomp $vnew $vcurr) -eq 1 &&
-        echo "\
-##############################################
-A new program version is available: ${vnew}
-##############################################" >&2
+        msg="##  New AIRTOOLS version ${vnew%-1} is available!  ##" && echo &&
+        echo -e "$msg\n$msg\n$msg" | sed -e '2!s,.,#,g'
     test "$AI_DEBUG" && echo $tmppkg >&2 && return
     rm -f $tmppkg
 }
@@ -3447,7 +3493,9 @@ aphot () {
     xi=$(echo $x $bsize | awk '{print int($1-$2/2)}')
     yi=$(echo $y $bsize | awk '{print int($1-$2/2)}')
     #AIval -c $img $bsize $bsize $xi $yi > $tmp1
-    gm convert $img -crop ${bsize}x${bsize}+${xi}+${yi} - | pnmnoraw | \
+    #gm convert $img -crop ${bsize}x${bsize}+${xi}+${yi} - | pnmnoraw | \
+    
+    airfun.py imcrop $img - $bsize $bsize $xi $yi | pnmnoraw | \
         awk -v cw=$bsize -v cx=$xi -v cy=$yi 'BEGIN{row=1; col=1; skip=3}{
             if((NR==1) && ($0=="P3")) {isppm=1}
             if((NR==1) && ($0=="P1")) {skip=2}
@@ -8958,6 +9006,8 @@ comet2icq () {
     then
         printf "%3d        " $name
     else
+        # TODO: handle names longer than 8 characters like 2014UN271
+        test "$name" == "2014UN271" && name="2014UNR1"
         if is_integer ${name:0:1}
         then
             printf "   %-8s" $name
@@ -10550,19 +10600,18 @@ gpsurfit () {
     # note: x,y values are subtracted by mean
     # input data: x y z
     local showhelp
-    local mode="poly2"      # fitting function type
+    local pdegree=2         # degree of polynomial to fit (0-constant, 1-plane,
+                            #   2-quadratic, 2c-centered quadratic, 3-cubic, 4-4th degree)
+    #local mode="poly2"      # fitting function type
     local outfile="x.surfit.dat" # file to store fitted data grid x y z
     local samples="50:30"   # sampling points of fitted data (nx:ny)
     local quiet
     local i
-    for i in $(seq 1 6)
+    for i in $(seq 1 5)
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-q" && quiet=1 && shift 1
-        test "$1" == "-p" && mode="plane" && shift 1
-        test "$1" == "-p2" && mode="poly2" && shift 1
-        test "$1" == "-p3" && mode="poly3" && shift 1
-        test "$1" == "-p4" && mode="poly4" && shift 1
+        test "$1" == "-p" && pdegree=$2 && shift 2
         test "$1" == "-o" && outfile="$2" && shift 2
         test "$1" == "-s" && samples="$2" && shift 2
     done
@@ -10583,7 +10632,7 @@ gpsurfit () {
     local tmplog=$(mktemp "/tmp/tmp_gpout_$$.XXXXXX.log")
     
     (test "$showhelp" || test $# -ne 1) &&
-        echo "usage: gpsurfit [-q] [-p|-p3|-p4] [-o outfile|$outfile] [-s samples|$samples] <data>" >&2 &&
+        echo "usage: gpsurfit [-q] [-p pdegree|$pdegree] [-o outfile|$outfile] [-s samples|$samples] <data>" >&2 &&
         return 255
 
     gpversion=$(gnuplot -V | awk '{printf("%s", $2)}')
@@ -10594,8 +10643,16 @@ gpsurfit () {
             return 255
     esac
 
+    case $pdegree in
+        0|1|2|2c|3|4)   ;;
+        *)  echo "ERROR: unsupported pdegree=$pdegree." >&2
+            return 255
+            ;;
+    esac
+    
+    # some statistics used to eliminate bias from x and y
+    # get mean and range in x,y
     cat $dat > $tmp1
-    # range in x,y
     xm=$(mean $tmp1 1)
     set - $(minmax $tmp1 1)
     xmin=$1
@@ -10610,53 +10667,68 @@ gpsurfit () {
     # determine number of useful digits from uncertainty
     # echo "l($2)/l(10)" | bc -l
     test -z "$quiet" && printf "# mean: %.${ndig}f +-%.${ndig}f\n" $1 $2 >&2
+
     
-    # plane
-    test "$mode" == "plane" &&
-        fitfun="a + b1*(x-$xm) + b2*(y-$ym); c1=0; c2=0; c3=0; xoff=0; yoff=0" &&
-        fitvars="a, b1, b2"
-    # centered bi-quadratic
-    test "$mode" == "center" &&
-        fitfun="a + b1*(x-$xm) + b2*(y-$ym) \
-        + c1*(x-$xm+xoff)*(x-$xm+xoff) + c2*(y-$ym+yoff)*(y-$ym+yoff) + c3*(x-$xm+xoff)*(y-$ym+yoff)" &&
-        fitvars="a, b1, b2, c1, c2, c3, xoff, yoff"
-    # bi-quadratic
-    test "$mode" == "poly2" &&
-        fitfun="a + b1*(x-$xm) + b2*(y-$ym) \
-        + c1*(x-$xm)*(x-$xm) + c2*(y-$ym)*(y-$ym) + c3*(x-$xm)*(y-$ym)"
-    fitvars="a, b1, b2, c1, c2, c3"
-    # polynome of 3. degree
-    fitfun="a + b1*(x-$xm) + b2*(y-$ym) \
-        + c1*(x-$xm)*(x-$xm) + c2*(y-$ym)*(y-$ym) + c3*(x-$xm)*(y-$ym) \
-        + d1*(x-$xm)**3 + d2*(x-$xm)**2*(y-$ym) + d3*(x-$xm)*(y-$ym)**2 + d4*(y-$ym)**3"
-    fitvars="a, b1, b2, c1, c2, c3, d1, d2, d3, d4"
-    # polynome of 4. degree
-    fitfun="a + b1*(x-$xm) + b2*(y-$ym) \
-        + c1*(x-$xm)*(x-$xm) + c2*(y-$ym)*(y-$ym) + c3*(x-$xm)*(y-$ym) \
-        + d1*(x-$xm)**3 + d2*(x-$xm)**2*(y-$ym) + d3*(x-$xm)*(y-$ym)**2 + d4*(y-$ym)**3 \
-        + e1*(x-$xm)**4 + e2*(x-$xm)**3*(y-$ym) + e3*(x-$xm)**2*(y-$ym)**2 + e4*(x-$xm)*(y-$ym)**3 + e5*(y-$ym)**4"
-    fitvars="a, b1, b2, c1, c2, c3, d1, d2, d3, d4, e1, e2, e3, e4, e5"
+    case $pdegree in
+        0)  # constant
+            ;;
+        1)  # plane
+            fitfun="a + b1*(x-$xm) + b2*(y-$ym); c1=0; c2=0; c3=0"
+            fitvars="a, b1, b2"
+            ;;
+        2cold) # centered bi-quadratic (old: mode=center)
+            fitfun="a + b1*(x-$xm) + b2*(y-$ym) \
+            + c1*(x-$xm+xoff)*(x-$xm+xoff) + c2*(y-$ym+yoff)*(y-$ym+yoff) + c3*(x-$xm+xoff)*(y-$ym+yoff)" &&
+            fitvars="a, b1, b2, c1, c2, c3, xoff, yoff"
+            ;;
+        2c) # centered bi-quadratic (old: mode=center)
+            fitfun="a + b1*(x-$xm) + b2*(y-$ym) \
+            + c1*(x-$xm)*(x-$xm) + c2*(y-$ym)*(y-$ym)" &&
+            fitvars="a, b1, b2, c1, c2"
+            ;;
+        2)  # bi-quadratic
+            fitfun="a + b1*(x-$xm) + b2*(y-$ym) \
+            + c1*(x-$xm)*(x-$xm) + c2*(y-$ym)*(y-$ym) + c3*(x-$xm)*(y-$ym)"
+            fitvars="a, b1, b2, c1, c2, c3"
+            ;;
+        3)  # polynome of 3. degree
+            fitfun="a + b1*(x-$xm) + b2*(y-$ym) \
+            + c1*(x-$xm)*(x-$xm) + c2*(y-$ym)*(y-$ym) + c3*(x-$xm)*(y-$ym) \
+            + d1*(x-$xm)**3 + d2*(x-$xm)**2*(y-$ym) + d3*(x-$xm)*(y-$ym)**2 + d4*(y-$ym)**3"
+            fitvars="a, b1, b2, c1, c2, c3, d1, d2, d3, d4"
+            ;;
+        4)  # polynome of 4. degree
+            fitfun="a + b1*(x-$xm) + b2*(y-$ym) \
+            + c1*(x-$xm)*(x-$xm) + c2*(y-$ym)*(y-$ym) + c3*(x-$xm)*(y-$ym) \
+            + d1*(x-$xm)**3 + d2*(x-$xm)**2*(y-$ym) + d3*(x-$xm)*(y-$ym)**2 + d4*(y-$ym)**3 \
+            + e1*(x-$xm)**4 + e2*(x-$xm)**3*(y-$ym) + e3*(x-$xm)**2*(y-$ym)**2 + e4*(x-$xm)*(y-$ym)**3 + e5*(y-$ym)**4"
+            fitvars="a, b1, b2, c1, c2, c3, d1, d2, d3, d4, e1, e2, e3, e4, e5"
+            ;;
+        *)  echo "ERROR: unsupported pdegree=$pdegree." >&2
+            return 255
+            ;;
+    esac
 
     echo "\
     # gather statistics
     stats '$tmp1' using 3 noout
     a=STATS_mean
     # data fitting" > $tmpgp
-    test -z "$AI_DEBUG" && echo "        set fit quiet" >> $tmpgp
+    test -z "$AI_DEBUG" && echo "    set fit quiet" >> $tmpgp
     echo "\
     # until 171228: b1=0.1; b2=0.1; c1=0.1; c2=0.1; c3=0.1
     b1=100; b2=100; c1=100; c2=100; c3=100
     d1=10; d2=10; d3=10; d4=10
-    e1=1; e2=1; e3=1; e4=1; e5=1
-    xoff=1; yoff=1
-    f(x,y) = $fitfun" >> $tmpgp
-    test ${mode:0:4} == "poly" && echo "xoff=0; yoff=0" >> $tmpgp
+    e1=1; e2=1; e3=1; e4=1; e5=1" >> $tmpgp
+    test $pdegree != "2c" && echo "    xoff=0; yoff=0" >> $tmpgp
+    test $pdegree == "2c" && echo "    xoff=1; yoff=1" >> $tmpgp
+    echo "    f(x,y) = $fitfun" >> $tmpgp
     case "$gpversion" in
         4*)
-            echo "       " \
+            echo "   " \
             "fit f(x,y) '$tmp1' using 1:2:3:(1) via $fitvars" >> $tmpgp
             ;;
-        5*) echo "       " \
+        5*) echo "   " \
             "fit f(x,y) '$tmp1' using 1:2:3 via $fitvars" >> $tmpgp
             ;;
     esac
@@ -11099,7 +11171,8 @@ icqplot () {
     # TODO: take type (plottype) into account
     fields="utime,date,source,obsid,mag,coma,method,filter,soft"
     echo "$fields" > $tmpobs
-    cname=${comet%P}
+    #cname=${comet%P}
+    cname=$(comet2icq $comet)
     
     for f in $flist
     do
@@ -19890,7 +19963,7 @@ AIdisplay () {
     
     if [ ! "$single" ]
     then
-        $viewer $imglist &
+        $viewer $imglist >/dev/null 2>/dev/null &
         return
     fi
     
@@ -19933,7 +20006,7 @@ AIdisplay () {
                 ;;
         esac
     else
-        $viewer $imglist 2>/dev/null &
+        $viewer $imglist >/dev/null 2>/dev/null &
     fi
 
 }
@@ -23397,21 +23470,25 @@ AIfwhm () {
     # TODO: implement rejection of outliers
     local showhelp
     local outfile=x.fwhm.png    # output PNG file
+    local minSN=40  # minimum photometric S/N for objects in source catalog
+    local pdegree   # degree of polynomial fit (0-constant, 1-plane, 2-quadratic, ...)
     local range     # plot range of fwhm, either low:high or dfwhm or "full"
     local nodisplay # do not display image of fwhm distribution
     local boxsize   # limit to center box of given size width:high
     local keep      # if set then keep fwhm data used by fit (xfits,yfits,fwhm,mag)
-    local verbose
+    local verbose=0
     local sopts="-dbn 2 -dbc 0.2"
     local i
-    for i in 1 2 3 4 5 6 7
+    for i in $(seq 1 8)
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
+        test "$1" == "-p" && pdegree="$2" && shift 2
+        test "$1" == "-s" && minSN="$2" && shift 2
         test "$1" == "-r" && range="$2" && shift 2
         test "$1" == "-o" && outfile="$2" && shift 2
         test "$1" == "-n" && nodisplay=1 && shift 1
         test "$1" == "-k" && keep=1 && shift 1
-        test "$1" == "-v" && verbose=1 && shift 1
+        test "$1" == "-v" && verbose=$((verbose+1)) && shift 1
         test "$1" == "-b" && boxsize="$2" && shift 2
     done
     local set=$1    # image set or sextractor catalog or image
@@ -23420,9 +23497,11 @@ AIfwhm () {
     local w
     local h
     local x
+    local nsrc
     local fmax
     local xrange
     local yrange
+    local merrlim
     local opts
     local retval
     local imgname
@@ -23433,9 +23512,9 @@ AIfwhm () {
     local tmpfit=$(mktemp "$tdir/tmp_fit_$$.XXXXXX.dat")
 
     (test "$showhelp" || test $# -ne 1) &&
-        echo "usage: AIfwhm [-n] [-k] [-v] [-o outfile|$outfile] [-b w:h] [-r low:high | -r dfwhm] <set|srcdat>" >&2 && return 1
+        echo "usage: AIfwhm [-n] [-k] [-v] [-s minSN|$minSN] [-p pdegree] [-o outfile|$outfile] [-b w:h] [-r low:high | -r dfwhm] <set|srcdat>" >&2 && return 1
 
-    test "$AI_DEBUG" && verbose=1
+    test "$AI_DEBUG" && test $verbose -eq 0 && verbose=1
     if [ -s $set ]
     then
         if is_pnm $set
@@ -23445,8 +23524,8 @@ AIfwhm () {
                 src=${set%.*}.src.dat
             else
                 echo "# extracting sources ..."
-                is_ppm $set && AIsource -q $sopts -2 -o $tmpsrc $set
-                is_pgm $set && AIsource -q $sopts -o $tmpsrc $set
+                is_ppm $set && AI_MAGZERO="25" AIsource -q $sopts -2 -o $tmpsrc $set
+                is_pgm $set && AI_MAGZERO="25" AIsource -q $sopts -o $tmpsrc $set
                 test -s $tmpsrc && src=$tmpsrc
             fi
         fi
@@ -23457,7 +23536,7 @@ AIfwhm () {
                 src=$set
             else
                 # FITS image
-                AIsource -q $sopts -o $tmpsrc $set
+                AI_MAGZERO="25" AIsource -q $sopts -o $tmpsrc $set
                 test -s $tmpsrc && src=$tmpsrc
             fi
         fi
@@ -23485,14 +23564,15 @@ AIfwhm () {
     fi
     
     # identify bright sources (FITS coordinates)
-    sexselect $src "" 0.05 "" "" "NUMBER,X*,Y*,A*,FWHM_IMAGE,MAG_AUTO,MAGERR_AUTO,FLAGS" 0 | \
+    merrlim=$(echo $minSN | awk '{print 1/$1}')
+    sexselect $src "" $merrlim "" "" "NUMBER,X*,Y*,A*,FWHM_IMAGE,MAG_AUTO,MAGERR_AUTO,FLAGS" 0 | \
         sort -n -k6,6 | grep -v "^#" | lines 500 > $tmp1
     # determine median fwhm from bright sources
     set - $(cat $tmp1 | lines 100 | kappasigma -n - 5)
     fwhm=$(echo $1 | awk '{printf("%.2f", $1)}')
     x=$(echo $2 | awk '{printf("%.2f", $1)}')
     fmax=$(printf "%.2f" $(echo "1+1.5*$fwhm+3*x" | bc -l))
-    test $verbose &&
+    test $verbose -gt 0 &&
         echo "# fwhm($3)=$fwhm"+-"$x, reject fwhm>$fmax" >&2
     cat $tmp1 | awk -v fmax=$fmax -v w=$w -v h=$h '{
         if ($1~/^#/) {print $0; next}
@@ -23515,10 +23595,21 @@ AIfwhm () {
     set - $(cat $tmp2 | kappasigma - 3)
     fwhm=$(echo $1 | awk '{printf("%.2f", $1)}')
     x=$(echo $2 | awk '{printf("%.2f", $1)}')
-    echo "# fwhm=$fwhm"+-"$x (n=$(cat $tmp2 | wc -l))" >&2
+    nsrc=$(cat $tmp2 | wc -l)
     
+    # set fit function according to nsrc
+    if [ -z "$pdegree" ]
+    then
+        pdegree=4
+        test $nsrc -lt 150 && pdegree=3 &&
+            test $nsrc -lt 80 && pdegree=2 &&
+            test $nsrc -lt 40 && pdegree=1 &&
+            test $nsrc -lt 20 && pdegree=0
+    fi
+    echo "# fwhm=$fwhm"+-"$x  nsrc=$nsrc  pdeg=$pdegree" >&2
+
     # median in each section
-    if [ "$verbose" ]
+    if [ $verbose -gt 0 ]
     then
         printf "+------------+\n"
         printf "|%4.1f    %4.1f|\n" $(grep "ul$" $tmp2 | median - 3) $(grep "ur$" $tmp2 | median - 3)
@@ -23530,7 +23621,12 @@ AIfwhm () {
     # if requested save tmp2
     test "$keep" && cp $tmp2 x.fwhm.dat
     
-    gpsurfit -q -p4 -o $tmpfit $tmp2   
+    if [ $verbose -lt 2 ]
+    then
+        gpsurfit -q -p $pdegree -o $tmpfit $tmp2   
+    else
+        gpsurfit -p $pdegree -o $tmpfit $tmp2   
+    fi
     retval=$?
     if [ $retval -eq 0 ]
     then
@@ -23545,7 +23641,7 @@ AIfwhm () {
         plot2d $opts -o $outfile -t "FWHM ($imgname: $fwhm +-$x px)" $tmpfit
         retval=$?
     else
-        echo "ERROR: gpsurfit $tmp2 has failed" >&2
+        echo "ERROR: gpsurfit -p $pdegree $tmp2 has failed" >&2
     fi
     if [ $retval -eq 0 ] && [ -z "$nodisplay" ]
     then
@@ -24385,7 +24481,14 @@ AIbgmap () {
         else
             rgb=$(pnmccdred2 -fmt $outfmt -a $((-1*bgoff*mult)) $outsmall $tmp1 &&
                 AIstat $tmp1 | awk '{
-                if(NF>8) {printf("%.1f,%.1f,%.1f", $5, $9, $13)} else {printf("%.1f", $5)}}')
+                    fmt="%.1f"
+                    if(NF>8) {
+                        if ($9>1000) fmt="%.0f"
+                        printf(fmt","fmt","fmt, $5, $9, $13)
+                    } else {
+                        if ($5>1000) fmt="%.0f"
+                        printf(fmt, $5)
+                    }}')
         fi
         size=$(imsize $outsmall)
         ampl=$(AIval -c -a $outsmall | \
@@ -29664,8 +29767,10 @@ AIcomet () {
     #       if cosubmult -nt $newphot then do not create stsub and cosub
     cosubmult=$codir/$sname.cosub$comult.$ext
     test "$comult" == "1" && cosubmult=$codir/$sname.cosub.$ext
-    test -s $cosubmult && test -s $newphot && test -s $coreg && test -s $bgreg &&
-        ! test $newphot -nt $cosubmult &&
+    test -s $cosubmult && test -s $newphot && test -s $starphot &&
+        test -s $coreg && test -s $bgreg &&
+        test $cosubmult -nt $newphot &&
+        test $newphot -nt $starphot &&
         skip_cosub=1
 
     # check for change of parameters (rlim/AC_RLIM, comult/AC_COMUL, bgfit10/AC_BGSUB) then unset skip_cosub
@@ -29711,7 +29816,15 @@ AIcomet () {
     test -z "$fwhm" &&
         echo "ERROR: missing AI_FWHM in $hdr." >&2 && return 255
     # set blur value used by imblur
-    blur=$(echo $fwhm | awk '{printf("%.1f", sqrt(0.4-0.07*$1+0.06*$1*$1))}')
+    blur=$(echo $fwhm $(get_wcspscale $wcshdr) | awk '{
+        x=sqrt(0.4-0.07*$1+0.06*$1*$1)
+        m=1
+        if ($2 < 1.05) m=1.1
+        if ($2 < 0.90) m=1.2
+        if ($2 < 0.77) m=1.3
+        if ($2 < 0.67) m=1.4
+        if ($2 < 0.6) m=1.5
+        printf("%.1f", m*x)}')
     echo "# blur=$blur"
 
     texp=""     # exposure time in sec

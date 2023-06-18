@@ -53,6 +53,7 @@ import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
 import javafx.event.Event;
 import javafx.fxml.FXMLLoader;
+import javafx.scene.Cursor;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
@@ -68,6 +69,7 @@ import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.stage.Modality;
+import tl.airtoolsgui.model.AirtoolsCLICommand;
 import tl.airtoolsgui.model.Observer;
 import tl.airtoolsgui.model.SitesList;
 
@@ -210,6 +212,7 @@ public class MainController implements Initializable {
         // "File" menu actions
         menuNewProject.setOnAction((event) -> {
             showNewProjectDialog();
+            checkNewProgramVersion();
         });
         menuOpenProject.setOnAction((event) -> {
             openExistingProject();
@@ -407,7 +410,8 @@ public class MainController implements Initializable {
     
     private void onProjectDirChange() {
         System.out.println("onProjectDirChange()");
-        logger.log("Project Directory = " + projectDir.getValue());
+        System.out.println("Project Directory changed to " + projectDir.getValue());
+        //logger.log("");
         
         // get rawDir and tempDir from config file of the new project dir
         String [] shellCmd;
@@ -749,9 +753,9 @@ public class MainController implements Initializable {
             stage.showAndWait();
 
             // handle new site entered by the user
+            Alert alert = new Alert(Alert.AlertType.INFORMATION);
             if (isNewSite(site.getValue())) {
                 logger.log("# new site = " + site.getValue());
-                Alert alert = new Alert(Alert.AlertType.INFORMATION);
                 alert.setTitle("New Observatory Site");
                 alert.setHeaderText("New site not known to sites parameter file.");
                 alert.setContentText("You requested to use a new site. Please edit the\n"
@@ -761,16 +765,25 @@ public class MainController implements Initializable {
                 // TODO: add line to sites.dat
             }
             
-            /* check for new program version */
-            System.out.println("running check_new_version ...");
-            sh.setOpts("-q -c");
-            sh.setArgs("");
-            sh.runFunction("check_new_version");
-            System.out.println("check_new_version finished");
-
         } catch (IOException ex) {
             Logger.getLogger(MainController.class.getName()).log(Level.SEVERE, null, ex);
         }
+    }
+    
+    
+    public void checkNewProgramVersion () {
+        /* check for new program version */
+        /* note: log message does not appear immediately */
+        Alert busy = new Alert(Alert.AlertType.INFORMATION);            
+        busy.setTitle("New Project");
+        busy.setHeaderText("Initializing new project, please wait ...");
+        busy.show();
+        // note: alert is not shown
+
+        AirtoolsCLICommand aircliCmd = new AirtoolsCLICommand("check_update", logger, sh);
+        aircliCmd.setOpts(new String[] { "-q" });
+        aircliCmd.run();
+        busy.close();
     }
     
     

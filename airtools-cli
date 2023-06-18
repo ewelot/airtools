@@ -19,8 +19,8 @@
 ########################################################################
 AOVARS="AO_SKIP AO_FLATS AO_LIGHT AO_BGVAR AO_REGIS AO_STACK AO_AMASK AO_ACOOR AO_ABINN"
 
-VERSION="1.5"
-VINFO="T. Lehmann, Feb. 2023"
+VERSION="1.5.1"
+VINFO="T. Lehmann, Jun. 2023"
 PINFO="\
     options:
       -h            show this help text
@@ -34,6 +34,11 @@ PINFO="\
       task          run given task    
 "
 CHANGELOG="
+    1.5.1 - 17 Jun 2023
+        * imageinfo: bugfix to call mousepad only once and redirect stdout
+            and stderr
+        * new function: has_current_info
+
     1.5 - 09 May 2023
         * imageinfo:
             - output is written to rawfiles.dat for all types of raw images,
@@ -362,6 +367,37 @@ error ()
     exit 1
 }
 
+has_current_info ()
+{
+    # check log file if the version information is up to date
+    local vash=$1   # current version of airfun.sh
+    local vapy=$2   # current version of airfun.py
+    local lnum
+    local last_vash
+    local last_vapy
+    test ! -s $log && return -1
+    # last header line
+    lnum=$(grep -n "starting airtools-cli" $log | tail -1 | cut -d ':' -f1)
+    test -z "$lnum" && return -1
+    
+    # check for log entry of the same day
+    txt="starting $(basename $0) v$VERSION at $(date +'%Y-%m-%d')"
+    cat airtools.log | sed -n "$lnum"',$p' | grep -q "$txt" || return -1
+    
+    # compare airfun.sh version
+    last_vash=$(cat airtools.log | sed -n "$lnum"',$p' | head | \
+        grep "airfun.sh:" | awk '{printf("%s", $NF)}')
+    test "$vash" != "$last_vash" && return -1
+
+    # compare airfun.py version
+    last_vapy=$(cat airtools.log | sed -n "$lnum"',$p' | head | \
+        grep "airfun.py:" | awk '{printf("%s", $NF)}')
+    test "$vapy" != "$last_vapy" && return -1
+    
+    # all test have passed which means the header has not changed
+    return 0
+}
+
 is_equal () {
     # compare two (float) numbers
     local x=$1
@@ -584,9 +620,6 @@ _imageinfo () {
             img_info $flist | sort -n -k 2,2 >> $rdat
             test $? -ne 0 && return 255
         done
-        test -s $rdat && 
-            (mousepad $rdat 3>&1 1>&2 2>&3 | \
-            grep -v "Gtk-WARNING .* Theme parsing error" | grep "[[:alnum:]]") 3>&1 1>&2 2>&3 &
         
         # scanning FITS images ...
         extargs="\( -iname \"*.fit\""
@@ -632,9 +665,7 @@ _imageinfo () {
                 test $? -ne 0 && return 255
             fi
         fi
-        test -s $rdat && 
-            (mousepad $rdat 3>&1 1>&2 2>&3 | \
-            grep -v "Gtk-WARNING .* Theme parsing error" | grep "[[:alnum:]]") 3>&1 1>&2 2>&3 &
+        test -s $rdat && mousepad $rdat >/dev/null 2>/dev/null &
     fi
     return 0
 }
@@ -2540,6 +2571,11 @@ _remove () {
     return 0
 }
 
+_check_update () {
+    check_new_version
+}
+
+
 _usercmd () {
     local msg="# Execute: $usercmd"
     # quote arguments with special characters
@@ -2750,15 +2786,46 @@ then
 fi
 
 # start logging
+
 # next two lines keep stdin/stdout separated but the order of messages on
 # tty gets messed up, therefore we combine both streams here and try to
 # always start messages on stderr using "#" character
 #exec  > >(tee -ia $log)
 #exec 2> >(tee -ia $log >&2)
 exec &> >(tee -ia $log)
+test ! -s $log && quiet=""
 test -s $log && echo -e "\n" >> $log
+
+# sourcing project environment
+source $rcfile
+
+# loading functions
+airfun=$(which airfun.sh)
+if [ -z "$airfun" ]
+then
+    error "missing function definition file airfun.sh
+    (PATH=$PATH)"
+fi
+. $airfun > /dev/null
+
+# version info
+has_current_info $AI_VERSION $(airfun.py -v) && quiet=1
 test ! "$quiet" &&
     echo "#### starting $(basename $0) v$VERSION at $(date +'%Y-%m-%d %H:%M')" >&2
+
+if [ "$airfun" == "./airfun.sh" ]
+then
+    echo "# PWD=$PWD" >&2
+    echo "# PATH=$PATH" >&2
+    echo "WARNING: loading functions from local file airfun.sh ..." >&2
+    sleep 10
+else
+    test ! "$quiet" && echo "# PATH=$PATH" >&2 && echo "# loading $airfun" >&2
+fi
+
+test ! "$quiet" &&
+    echo "# airfun.sh:" $AI_VERSION >&2 &&
+    echo "# airfun.py:" $(airfun.py -v) >&2
 
  
 # check presence of required parameter files
@@ -2768,7 +2835,8 @@ do
 done
 
 # check presence of required environment variables
-source $rcfile
+! AIcheck_ok &&
+    error "Unable to initialize AIRTOOLS functions."
 for var in day AI_SITE AI_TMPDIR AI_RAWDIR
 do
     test -z "$var" && error "Variable $var undefined."
@@ -2800,29 +2868,6 @@ do
         exit 255
 done
 
-airfun=$(which airfun.sh)
-if [ -z "$airfun" ]
-then
-    error "missing function definition file airfun.sh
-    (PATH=$PATH)"
-fi
-if [ "$airfun" == "./airfun.sh" ]
-then
-    echo "# PWD=$PWD" >&2
-    echo "# PATH=$PATH" >&2
-    echo "WARNING: loading functions from local file airfun.sh ..." >&2
-    sleep 10
-else
-    test ! "$quiet" && echo "# PATH=$PATH" >&2 && echo "# loading $airfun" >&2
-fi
-
-. $airfun > /dev/null
-test ! "$quiet" &&
-    echo "# AI_VERSION=$AI_VERSION" >&2 &&
-    echo "# dcraw-tl $(dcraw-tl | grep "[0-9]" | head -1 | awk '{print $NF}')" >&2
-! AIcheck_ok &&
-    error "Unable to initialize AIRTOOLS functions."
-
 # check structure of parameter files
 # TODO: make the check depend on parameter file format version
 case $AI_VERSION in
@@ -2832,6 +2877,12 @@ esac
 checkparamdat camera.dat 15 || error "Check of camera.dat failed."
 test -s "set.dat" && ! checkparamdat -s set.dat 11 && error "Check of set.dat failed."
 
+# check for update if requested
+if [ "$task" == "check_update" ]
+then
+    _check_update
+    exit 0
+fi
 
 #-----------------------
 #   program start

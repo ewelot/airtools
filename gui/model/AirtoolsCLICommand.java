@@ -53,6 +53,10 @@ public class AirtoolsCLICommand {
         this("usercmd", btn, logger, sh);
     }
 
+    public AirtoolsCLICommand(String cmdName, SimpleLogger logger, ShellScript sh) {
+        this(cmdName, null, logger, sh);
+    }
+
     public void setCmdName(String cmdName) {
         this.cmdName = cmdName;
     }

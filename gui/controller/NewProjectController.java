@@ -374,7 +374,7 @@ public class NewProjectController implements Initializable {
             // create temp directory
             newDir = new File(tfTempDir.getText());
             if (newDir.exists()) {
-                logger.log("WARNING: the temp directory already exists");
+                System.out.println("WARNING: the temp directory already exists");
             } else {
                 if (! newDir.mkdirs()) {
                     tfErrorMsg.setText("ERROR: cannot create the temp directory");
@@ -383,7 +383,7 @@ public class NewProjectController implements Initializable {
             }
             // check raw directory
             newDir = new File(tfRawDir.getText());
-            if (! newDir.exists()) logger.log("WARNING: raw files directory does not yet exist");
+            if (! newDir.exists()) System.out.println("WARNING: raw files directory does not yet exist");
 
             // create .airtoolsrc
             fileWriter = new FileWriter(rcFileName);
