@@ -385,13 +385,13 @@ has_current_info ()
     cat airtools.log | sed -n "$lnum"',$p' | grep -q "$txt" || return -1
     
     # compare airfun.sh version
-    last_vash=$(cat airtools.log | sed -n "$lnum"',$p' | head | \
-        grep "airfun.sh:" | awk '{printf("%s", $NF)}')
+    last_vash=$(cat airtools.log | sed -n "$lnum"',$p' | \
+        grep "airfun.sh:" | awk '{if (NR==1) printf("%s", $NF)}')
     test "$vash" != "$last_vash" && return -1
 
     # compare airfun.py version
-    last_vapy=$(cat airtools.log | sed -n "$lnum"',$p' | head | \
-        grep "airfun.py:" | awk '{printf("%s", $NF)}')
+    last_vapy=$(cat airtools.log | sed -n "$lnum"',$p' | \
+        grep "airfun.py:" | awk '{if (NR==1) printf("%s", $NF)}')
     test "$vapy" != "$last_vapy" && return -1
     
     # all test have passed which means the header has not changed
