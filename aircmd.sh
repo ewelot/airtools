@@ -11,4 +11,8 @@ test $? -ne 0 &&
 
 # execute commands
 test -z "$AI_LOG" && AI_LOG=airtask.log
+test -s $AI_LOG && case "$1" in
+    dcontrast|regswitch|imflip|imload|usermanual) ;;
+    *) echo "  " && echo >> $AI_LOG;;
+esac
 ds9cmd "$@" 2>&1 | tee -a $AI_LOG

@@ -1143,8 +1143,6 @@ the VirtualBox documentation.
   - Open the archive and extract files and directories into the raw
     files folder corresponding to your project
 
-… image …
-
 ### Image reduction
 
 The “Image Reduction” tab of the AIRTOOLS graphical user interface

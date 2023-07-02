@@ -398,8 +398,8 @@ public class CometPhotometryController implements Initializable {
 
         if (task == null) {
             // ready for new task
-            logger.log("");
-            logger.log("# " + "Running ds9cmd " + taskName + " " + args);
+            //logger.log("");
+            System.out.println("# " + "Running ds9cmd " + taskName + " " + args);
             logger.statusLog("Running task " + taskName + " ...");
             btn.setText("Stop " + btn.getText());
             btn.setStyle("-fx-text-fill: " + colorStopBtn);

@@ -411,7 +411,6 @@ public class MainController implements Initializable {
     private void onProjectDirChange() {
         System.out.println("onProjectDirChange()");
         System.out.println("Project Directory changed to " + projectDir.getValue());
-        //logger.log("");
         
         // get rawDir and tempDir from config file of the new project dir
         String [] shellCmd;
@@ -714,6 +713,7 @@ public class MainController implements Initializable {
         if (file != null) {
             // TODO: check for file .airtoolsrc, if missing show a warning message
             projectDir.set(file.getAbsolutePath());
+            logger.log("Project directory changed to " + projectDir.getValue());
         }
     }
     

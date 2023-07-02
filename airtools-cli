@@ -19,7 +19,7 @@
 ########################################################################
 AOVARS="AO_SKIP AO_FLATS AO_LIGHT AO_BGVAR AO_REGIS AO_STACK AO_AMASK AO_ACOOR AO_ABINN"
 
-VERSION="1.5.1"
+VERSION="1.5.2"
 VINFO="T. Lehmann, Jun. 2023"
 PINFO="\
     options:
@@ -34,6 +34,10 @@ PINFO="\
       task          run given task    
 "
 CHANGELOG="
+    1.5.2 - 30 Jun 2023
+        * badpix: add return value
+        * has_current_info: minimize parsing of logfile
+
     1.5.1 - 17 Jun 2023
         * imageinfo: bugfix to call mousepad only once and redirect stdout
             and stderr
@@ -375,28 +379,33 @@ has_current_info ()
     local lnum
     local last_vash
     local last_vapy
-    test ! -s $log && return -1
+    local tmpout=$(mktemp /tmp/tmp_out_XXXXXX.log)
+    
+    test ! -s $log && rm -f $tmpout && return -1
+    
     # last header line
     lnum=$(grep -n "starting airtools-cli" $log | tail -1 | cut -d ':' -f1)
     test -z "$lnum" && return -1
     
+    # crop output starting at line lnum
+    cat airtools.log | awk -v n=$lnum '{if(NR>=n) print $0}' > $tmpout
+    
     # check for log entry of the same day
     txt="starting $(basename $0) v$VERSION at $(date +'%Y-%m-%d')"
-    cat airtools.log | sed -n "$lnum"',$p' | grep -q "$txt" || return -1
+    grep -q "$txt" $tmpout || return -1
     
     # compare airfun.sh version
-    last_vash=$(cat airtools.log | sed -n "$lnum"',$p' | \
-        grep "airfun.sh:" | awk '{if (NR==1) printf("%s", $NF)}')
+    last_vash=$(grep "airfun.sh:" $tmpout | awk '{if (NR==1) printf("%s", $NF)}')
     test "$vash" != "$last_vash" && return -1
 
     # compare airfun.py version
-    last_vapy=$(cat airtools.log | sed -n "$lnum"',$p' | \
-        grep "airfun.py:" | awk '{if (NR==1) printf("%s", $NF)}')
+    last_vapy=$(grep "airfun.py:" $tmpout | awk '{if (NR==1) printf("%s", $NF)}')
     test "$vapy" != "$last_vapy" && return -1
     
     # all test have passed which means the header has not changed
     return 0
 }
+
 
 is_equal () {
     # compare two (float) numbers
@@ -539,8 +548,8 @@ _sexselect () {
         cat $sdat | sexselect -f - "" 0.02 | \
             addldacwcs - $head > x.fits
         sexselect $sdat "" "" 300 | sort -n -k7,7 | \
-            grep -v "^#" | head -100 > x.xyref
-        head x.xyref
+            grep -v "^#" | lines 100 > x.xyref
+        lines 10 x.xyref
     }
     for i in $(seq 1 10)
     do
@@ -1251,7 +1260,7 @@ _register () {
     do
         # TODO: check if all images have been processed
         # make first guess of fwhm
-        num=$(AIsetinfo -b $set | head -1 | awk '{printf("%s", $8)}')
+        num=$(AIsetinfo -b $set | lines 1 | awk '{printf("%s", $8)}')
         img=$(AIimlist -q | awk -v n=$num '{if($2==n)print $3}')
         test -z "$img" &&
             echo "ERROR: unable to find calibrated image for nref=$num." &&
@@ -1393,7 +1402,7 @@ _badpix () {
                 n=$(get_nraw -q $s | wc -l)
                 test $n -gt 4 && echo $s $n
             done | \
-                sort -nr -k2,2 | head -4 | cut -d ' ' -f1)
+                sort -nr -k2,2 | lines 4 | cut -d ' ' -f1)
             
             test "$xlist" && slist=$(echo $slist $xlist)
             test -z "$xlist" &&
@@ -1540,6 +1549,7 @@ _badpix () {
             pgm:- | pnmccdred2 -a -2 - - | convert - -morphology Dilate Disk:5 bad.${tel,,}.clust.png
         AIexamine -n $tel $badpix $badpixall bad.${tel,,}.clust.png $difflist
     done
+    return 0
 }
 
 
@@ -2794,7 +2804,6 @@ fi
 #exec 2> >(tee -ia $log >&2)
 exec &> >(tee -ia $log)
 test ! -s $log && quiet=""
-test -s $log && echo -e "\n" >> $log
 
 # sourcing project environment
 source $rcfile
@@ -2809,24 +2818,22 @@ fi
 . $airfun > /dev/null
 
 # version info
-has_current_info $AI_VERSION $(airfun.py -v) && quiet=1
-test ! "$quiet" &&
-    echo "#### starting $(basename $0) v$VERSION at $(date +'%Y-%m-%d %H:%M')" >&2
-
-if [ "$airfun" == "./airfun.sh" ]
+if ! has_current_info $AI_VERSION $(airfun.py -v)
 then
-    echo "# PWD=$PWD" >&2
+    test -s $log && echo -e "\n" >> $log
+    echo "#### starting $(basename $0) v$VERSION at $(date +'%Y-%m-%d %H:%M')" >&2
     echo "# PATH=$PATH" >&2
-    echo "WARNING: loading functions from local file airfun.sh ..." >&2
-    sleep 10
-else
-    test ! "$quiet" && echo "# PATH=$PATH" >&2 && echo "# loading $airfun" >&2
-fi
-
-test ! "$quiet" &&
+    if [ "$airfun" == "./airfun.sh" ]
+    then
+        echo "# PWD=$PWD" >&2
+        echo "WARNING: loading functions from local file airfun.sh ..." >&2
+        sleep 10
+    else
+        echo "# loading $airfun" >&2
+    fi
     echo "# airfun.sh:" $AI_VERSION >&2 &&
     echo "# airfun.py:" $(airfun.py -v) >&2
-
+fi
  
 # check presence of required parameter files
 for f in sites.dat camera.dat
