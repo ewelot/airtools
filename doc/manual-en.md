@@ -533,8 +533,8 @@ reference for your newly added lines. The columns used are:
   - gain:  
     Number of electrons per ADU. Use a value of 1 if it is not known.
   - pixscale:  
-    Approximate value of the size of a pixel on the sky in seconds of
-    arc.
+    Approximate value of the size of a (unbinned) pixel on the sky in
+    seconds of arc.
   - magzero:  
     Zeropoint of the non-calibrated instrumental magnitude scale. This
     is the magnitude of a star which yields a signal of 1 count (ADU) in
@@ -1141,7 +1141,11 @@ the VirtualBox documentation.
     archive](https://fg-kometen.vdsastro.de/airtools/testdata/230216_shf_raw.zip)
 
   - Open the archive and extract files and directories into the raw
-    files folder corresponding to your project
+    files folder corresponding to your project. After extraction the raw
+    folder will look like the following screenshot when using default
+    directory names during initial setup.
+
+![Raw images folder](images/sample_rawfolder.png "rawfolder")
 
 ### Image reduction
 

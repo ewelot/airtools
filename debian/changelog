@@ -1,3 +1,9 @@
+airtools (5.0.3-1) experimental; urgency=medium
+
+  * Update to airfun.sh version 5.3.3 and airtools-cli version 1.5.3
+
+ -- Thomas Lehmann <t.lehmann@mailbox.org>  Sat, 30 Sep 2023 17:07:53 +0200
+
 airtools (5.0.2-1) experimental; urgency=medium
 
   * Update to airfun.sh version 5.3.2 and airtools-cli version 1.5.2

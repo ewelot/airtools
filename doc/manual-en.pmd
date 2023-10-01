@@ -434,7 +434,7 @@ gain:
 :   Number of electrons per ADU. Use a value of 1 if it is not known.
 
 pixscale:
-:   Approximate value of the size of a pixel on the sky in seconds of arc.
+:   Approximate value of the size of a (unbinned) pixel on the sky in seconds of arc.
 
 magzero:
 :   Zeropoint of the non-calibrated instrumental magnitude scale. This is the
@@ -529,6 +529,11 @@ determines the value for the "flip" parameter, using a setting of 1 if the
 image is flipped.
 
 ![Raw image preview (fliped image) and Bayer matrix pattern](images/rawfile_bayer2.png "rawfile_bayer2")
+
+[//]: # (NOTE: the following description is valid for flip=0, the reference)
+[//]: # (pixel 1 corresponds to the lower left corner. In case of flip=1)
+[//]: # (the reference pixel is upper left corner in the raw image which means)
+[//]: # (the y coordinate is an even number)
 
 Special care must be taken when dealing with images from one-shot-color cameras
 with a Bayer matrix filter. The parameter "ctype" must be used
@@ -1028,7 +1033,10 @@ or using external USB storage) please refer to the VirtualBox documentation.
   the [sample data archive](https://fg-kometen.vdsastro.de/airtools/testdata/230216_shf_raw.zip)
 
 - Open the archive and extract files and directories into the raw files folder
-  corresponding to your project
+  corresponding to your project. After extraction the raw folder will look like
+  the following screenshot when using default directory names during initial setup.
+
+![Raw images folder](images/sample_rawfolder.png "rawfolder")
 
 ### Image reduction
 

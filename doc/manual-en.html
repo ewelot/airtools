@@ -277,7 +277,7 @@ Used to store individual calibrated images of the project which are used by seve
 <dd>Number of electrons per ADU. Use a value of 1 if it is not known.
 </dd>
 <dt>pixscale:</dt>
-<dd>Approximate value of the size of a pixel on the sky in seconds of arc.
+<dd>Approximate value of the size of a (unbinned) pixel on the sky in seconds of arc.
 </dd>
 <dt>magzero:</dt>
 <dd>Zeropoint of the non-calibrated instrumental magnitude scale. This is the magnitude of a star which yields a signal of 1 count (ADU) in a 1 second exposure. Initially you can use an arbitrary value but it is useful to refine it to something close to the zeropoint of the calibrated scale (see log output of your first photometric calibration later on)
@@ -482,8 +482,11 @@ Used to store individual calibrated images of the project which are used by seve
 <p>Observations data files (raw FITS images) must be placed into the appropriate folder on the virtual Linux computer. Here we describe the use of a shared folder between host and virtual computer to copy those data files. For other methods of data transfer (e.g. using the VirtualBox File Manager or using external USB storage) please refer to the VirtualBox documentation.</p>
 <ul>
 <li><p>Use the provided Firefox browser from the applications menu and download the <a href="https://fg-kometen.vdsastro.de/airtools/testdata/230216_shf_raw.zip">sample data archive</a></p></li>
-<li><p>Open the archive and extract files and directories into the raw files folder corresponding to your project</p></li>
+<li><p>Open the archive and extract files and directories into the raw files folder corresponding to your project. After extraction the raw folder will look like the following screenshot when using default directory names during initial setup.</p></li>
 </ul>
+<figure>
+<img src="images/sample_rawfolder.png" title="rawfolder" alt="" /><figcaption>Raw images folder</figcaption>
+</figure>
 <h3 data-number="7.2.3" id="image-reduction-1"><span class="header-section-number">7.2.3</span> Image reduction</h3>
 <p>The “Image Reduction” tab of the AIRTOOLS graphical user interface contains all tasks to calibrate and stack images automatically.</p>
 <ul>

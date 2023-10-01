@@ -19,8 +19,8 @@
 ########################################################################
 AOVARS="AO_SKIP AO_FLATS AO_LIGHT AO_BGVAR AO_REGIS AO_STACK AO_AMASK AO_ACOOR AO_ABINN"
 
-VERSION="1.5.2"
-VINFO="T. Lehmann, Jun. 2023"
+VERSION="1.5.3"
+VINFO="T. Lehmann, Aug. 2023"
 PINFO="\
     options:
       -h            show this help text
@@ -34,6 +34,12 @@ PINFO="\
       task          run given task    
 "
 CHANGELOG="
+    1.5.3 - 19 Aug 2023
+        * astrometry:
+            - limit number of sources in solve-field to 500
+            - if AIwcs fails evaluate nimg and ncat to decide if the catalog
+              magnitude limit should be increased or decreased
+
     1.5.2 - 30 Jun 2023
         * badpix: add return value
         * has_current_info: minimize parsing of logfile
@@ -603,9 +609,8 @@ _imageinfo () {
     then
         echo $msg
 
-        if [ "$OVERWRITE" ]
+        if [ "$OVERWRITE" ] && [ -f $rdat ]
         then
-            test ! -f $rdat && continue
             echo "# deleting $rdat"
             rm $rdat
             test $? -ne 0 && return 255
@@ -659,7 +664,7 @@ _imageinfo () {
                     -not -path "$AI_RAWDIR/unused/\*" | grep -iw $tel)
                 # TODO: check JD in first file, if it is not plausible then use time
                 # info from log file by providing -l option
-                test "$flist" && map_rawfiles -x $flist >> $rdat
+                test "$flist" && map_rawfiles -x "$flist" >> $rdat
                 test $? -ne 0 && return 255
             done
         else
@@ -670,7 +675,7 @@ _imageinfo () {
             if [ "$flist" ]
             then
                 echo "# scanning fits files ..."
-                map_rawfiles -x $flist >> $rdat
+                map_rawfiles -x "$flist" >> $rdat
                 test $? -ne 0 && return 255
             fi
         fi
@@ -752,7 +757,7 @@ _darks () {
             do
                 if [ -s mstat.dk.dat ]
                 then
-                    ! grep -q "^$(basename $fname) " mstat.dk.dat &&
+                    ! grep -q "^$(basename "$fname" | tr ' ' '_') " mstat.dk.dat &&
                         test -s $AI_TMPDIR/$num.$ext && echo $num
                 else
                     test -s $AI_TMPDIR/$num.$ext && echo $num
@@ -767,18 +772,18 @@ _darks () {
             cat <<EOF > $tmpsh
 #!/bin/bash
 . airfun.sh > /dev/null
-_run_stats_parallel \$@
+eval _run_stats_parallel \$@
 EOF
             test "$msg" && echo $msg && msg=""
             _run_stats_parallel () {
                 local num=$1
                 local ext="pgm"
                 local fname=$AI_TMPDIR/$num.$ext
-                local rawname=$(get_rawfile $num)
-                AImstat -v -c $fname | awk -v r="$(basename "$rawname")" -v n=$num '{
-                    $1=r
+                local rawname=$(get_rawfile $num | tr ' ' '_')
+                AImstat -v -c $fname | awk -v n=$num '{
+                    $1=""
                     if ($2=="-") sub(/-/,n,$2)
-                    print $0}'
+                    print $0}' | sed -e "s,^,$(basename $rawname),g"
             }
             export -f _run_stats_parallel
             popts=""; test "$AI_MAXPROCS" && popts="-P $AI_MAXPROCS"
@@ -799,7 +804,7 @@ EOF
     tellist=$(AIsetinfo -b | grep -w d | awk '{printf("%s\n", $11)}' | sort -u)
     ! match proc "$SKIPPARTS" && for tel in $tellist
     do
-        test -z "$has_new_dark" && continue
+        test -s dk.var10.$tel.pgm && test -z "$has_new_dark" && continue
         
         # populate $tmpargs to be used by parallel
         rm -f $tmpargs
@@ -815,8 +820,10 @@ EOF
             test $x -lt 3000 && bs=32
             test $x -lt 2000 && bs=24
             test $x -lt 1400 && bs=18
-            for num in $(AI_EXCLUDE="" AIimlist -n $set "" raw)
+            #for num in $(AI_EXCLUDE="" AIimlist -n $set "" raw)
+            for num in $(AIimlist -n $set "" raw)
             do
+                # TODO: create missing dark images
                 test ! -f $AI_TMPDIR/$num.pgm &&
                     echo "ERROR: file $AI_TMPDIR/$num.pgm is missing." >&2 &&
                     return 255
@@ -1716,7 +1723,6 @@ _astrometry () {
     local maglim
     local thres
     local maxoff
-    local ncat
     local aratio
     local x
     local str
@@ -1730,6 +1736,9 @@ _astrometry () {
     local sstart
     local stime
     local failed
+    local nimg
+    local ncat
+    local nsat
     local wcslog=wcs/wcscalib.log
     local errval
     local retval=0
@@ -1844,8 +1853,8 @@ _astrometry () {
             opts="$opts -w $w -e $h -X XWIN_IMAGE -Y YWIN_IMAGE -s MAG_AUTO -a"
 
             # select sources from image
-            #   determine max fwhm (exclude diffuse sources)
-            fmax=$(printf "%.2f" $(echo "1+1.5*$fwhm+3*x" | bc -l))
+            #   determine max fwhm (exclude very diffuse sources)
+            fmax=$(printf "%.2f" $(echo "3+1.5*$fwhm" | bc -l))
             #   operate on green image channel
             test ! -e $set.src.dat && AIsource -q $ststack
             x=""
@@ -1853,8 +1862,14 @@ _astrometry () {
             rlim=""
             test "$AO_AMASK" && is_number "$AO_AMASK" && rlim=$AO_AMASK
             #   select bright sources
-            echo "sexselect -f $x -fm $fmax $set.src.dat \"\" 0.01 \"$rlim\" "" "" 99" >&2
+            echo "sexselect -f $x -fm $fmax $set.src.dat \"\" 0.01 \"$rlim\" \"\" \"\" 99" >&2
             sexselect -f $x -fm $fmax $set.src.dat "" 0.01 "$rlim" "" "" 99 > $tmpcat
+            #sexselect -f $x -fm $fmax $set.src.dat "" 0.002 "$rlim" "" "" 99 > $tmpcat
+
+            ####
+            #cp $tmpcat x.tmpcat.dat
+            #return 255
+            
             stilts tcopy ifmt=fits ofmt=fits-basic in=$tmpcat"#2" out=$tmpxy
             nsrc=$(get_header $tmpxy NAXIS2)
             str="merrlim=0.01, fwhm<$fmax"
@@ -1879,10 +1894,10 @@ _astrometry () {
 
             # run solve-field
             tmpsolve="tmp_${set}_solve_$RANDOM"
-            echo "# running: solve-field -O -p -l $cpulim $opts $tmpxy" | tee -a $wcslog
+            echo "# running: solve-field -O -p --objs 500 -l $cpulim $opts $tmpxy" | tee -a $wcslog
             sleep 1
             rm -f $tmpcancel
-            solve-field -O -C $tmpcancel -o $tmpsolve -p -l $cpulim $opts $tmpxy >> $wcslog
+            solve-field -O -C $tmpcancel -o $tmpsolve -p --objs 500 -l $cpulim $opts $tmpxy >> $wcslog
             errval=$?
             test $errval -ne 0 &&
                 echo "# solve-field returns with errval=$errval" >&2
@@ -1891,7 +1906,7 @@ _astrometry () {
             
             # cancel solve-field process if failed
             test $errval -ne 0 &&
-                echo "# first attempt failed" | tee -a $wcslog &&
+                echo "# solve-field failed (imcoord=$imcoord)" | tee -a $wcslog &&
                 touch $tmpcancel
             
             # if required try second time using comet coordinates
@@ -1899,21 +1914,22 @@ _astrometry () {
                 get_mpcephem -w $set 2>/dev/null &&
                 get_jplcoord -w $set 2>/dev/null
             then
+                echo "# trying solve-field near comet coordinates ..."
                 radius=$(echo $fov | awk '{print 0.5+0.5*$1}')
                 cpulim=60
                 imcoord=$(imcoord -c $set 2>/dev/null)
                 set - $imcoord
                 opts="--ra $1 --dec $2 --radius $radius $opts"
-                echo "# running: solve-field -O -p -l $cpulim $opts $tmpxy" | tee -a $wcslog
+                echo "# running: solve-field -O -p --objs 500 -l $cpulim $opts $tmpxy" | tee -a $wcslog
                 sleep 1
                 return 255
                 rm -f $tmpcancel
-                solve-field -O -C $tmpcancel -o $tmpsolve -p -l $cpulim $opts $tmpxy >> $wcslog   
+                solve-field -O -C $tmpcancel -o $tmpsolve -p --objs 500 -l $cpulim $opts $tmpxy >> $wcslog   
                 errval=$?
                 # solve-field might fail (no solution) but not return an error
                 test ! -s $tdir/$tmpsolve.wcs && errval=255
                 test $errval -ne 0 &&
-                    echo "# second attempt failed" | tee -a $wcslog
+                    echo "# solve field failed (imcoord=$imcoord)" | tee -a $wcslog
             fi
             
             # get ra dec north from solve-field solution
@@ -1999,8 +2015,16 @@ _astrometry () {
         AIwcs $opts $set $catalog "$maglim" $thres >> $wcslog 2>&1
         if [ $? -ne 0 ]
         then
-            tail -1 $wcslog
-            maglim=$(echo $maglim 16 | awk '{print $1-1.0}')
+            nsat=$(sexselect $set.src.dat "" "" "" "" "" 99 | grep -v "^#" | awk '{if(and($NF,4)) print $0}' | wc -l)
+            echo "$(tail -1 $wcslog | cut -d ')' -f1), nsat=$nsat)"
+            nimg=$(tail -1 $wcslog | tr ' ,)' '\n' | grep nimg= | cut -d '=' -f2)
+            ncat=$(tail -1 $wcslog | tr ' ,)' '\n' | grep ncat= | cut -d '=' -f2)
+            if [ $ncat -lt $((nimg * 15/10)) ] && [ $ncat -lt 5000 ]
+            then
+                maglim=$(echo $maglim 16 | awk '{print $1+1.0}')
+            else
+                maglim=$(echo $maglim 16 | awk '{print $1-1.0}')
+            fi
             echo "# running: AIwcs" $opts "$set $catalog \"$maglim\" $thres" | tee -a $wcslog
             AIwcs $opts $set $catalog "$maglim" $thres >> $wcslog 2>&1
         fi
@@ -2293,6 +2317,7 @@ __load_images () {
     local num
     local imlist
     local rfile
+    local lfile
     local n
     local retval=0
     local tdir=${AI_TMPDIR:-"/tmp"}
@@ -2341,12 +2366,11 @@ __load_images () {
             rfile=$(get_rawfile $num 2>&1)
             (test $? -ne 0 || test -z "$rfile") && continue
             # create link to the raw image
-            test -L ${num}_$(basename $rfile) && test ! -e ${num}_$(basename $rfile) &&
-                rm ${num}_$(basename $rfile)
-            test ! -e ${num}_$(basename $rfile) &&
-                ln -s $rfile ${num}_$(basename $rfile) &&
-                echo ${num}_$(basename $rfile) >> $tmplinks
-            echo ${num}_$(basename $rfile)
+            lfile=$tdir/${num}_$(basename "$rfile" | tr ' ' '_')
+            test -L $lfile && test ! -e $lfile && rm $lfile
+            test ! -e $lfile &&
+                ln -s "$rfile" $lfile && echo $lfile >> $tmplinks
+            echo $lfile
         fi
     done > $tmp1
     ! test -s $tmp1 && echo "WARNING: no images found" >&2 &&
