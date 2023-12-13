@@ -2,8 +2,8 @@ Source: airtools
 Section: science
 Priority: optional
 Maintainer: Thomas Lehmann <t.lehmann@mailbox.org>
-Build-Depends: debhelper (>= 9), javahelper (>=0.25), libnetpbm10-dev,
- libjpeg-dev, dh-strip-nondeterminism, inkscape
+Build-Depends: debhelper (>= 9), javahelper (>=0.25), dh-strip-nondeterminism,
+ libnetpbm-dev | libnetpbm10-dev, libjpeg-dev, inkscape
 Standards-Version: 3.9.8
 Homepage: https://github.com/ewelot/airtools
 

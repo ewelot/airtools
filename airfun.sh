@@ -14,9 +14,28 @@
 # - in order to use SAOImage DS9 analysis tasks (via AIexamine) you must
 #   have installed files airds9.ana and aircmd.sh
 ########################################################################
-AI_VERSION="5.3.3"
+AI_VERSION="5.3.4"
 : << '----'
 CHANGELOG
+    5.3.4 - 16 Nov 2023
+        * new function del_header replacing delwcs and delhead because they are
+            unreliable (sometimes causing double END keyword fooling the start
+            byte of image data, sometimes segmentation fault on Debian 12)
+        * automatically limit number of processes spawned by GNU parallel
+            if AI_MAXPROCS is not set
+        * new functions: findcluster get_maxprocs
+
+    5.3.4a2 - 02 Nov 2023
+        * AIstack: avoid delwcs -b which causes seg fault in wcstools 3.9.7
+        * deal with changes of newer netpbm versions:
+            - pnmsmooth parameters changed in version >=10.32
+            - pgmhist output format changed
+        * sexselect: delete temporary columns to avoud duplicated column names
+            (which would issue a warning in stilts >=3.4.7)
+        
+    5.3.4a1 - 16 Oct 2023
+        * parangle: added alt/az info to output
+        
     5.3.3 - 13 Sep 2023
         * afrho: deal with photometric calibrations using GAIA color bands
         * ds9cmd nostars: trigger new star subtraction in comet extraction
@@ -2598,7 +2617,7 @@ AIcheck_ok () {
         locale
         echo
         
-        filter="imagemagick|graphicsmagick|libraw|libvips|gnuplot|openjdk.*jre|plplot|parallel "
+        filter="imagemagick|graphicsmagick|netpbm|libraw|libvips|gnuplot|openjdk.*jre|plplot|parallel "
         filter="$filter|^....python3 |python3-numpy|python3-ephem|python3-pyvips|python3-rawpy"
         filter="$filter|saods9 |xpa-tools|wcstools|aladin|libcfitsio"
         filter="$filter|missfits|scamp|sextractor|skymaker|stiff|swarp|cfitsio|stilts |airtools"
@@ -2620,7 +2639,7 @@ AIcheck_ok () {
              ds9 xpaget xpaset parallel \
              pnmcombine pnmccdred pnmtomef pnmrowsort \
              imcopy imarith imlist imstat fitscopy listhead \
-             imhead sethead sky2xy xy2sky newfits delhead delwcs \
+             imhead sethead sky2xy xy2sky newfits \
              stilts sex scamp swarp stiff sky missfits vips \
              python3 airfun.py
     do
@@ -2931,6 +2950,57 @@ check_imresources () {
 }
 
 
+get_maxprocs () {
+    local verbose
+    test "$1" == "-v" && verbose=1 && shift 1
+    local nproc
+    local mem
+    local npix=30
+    local w
+    local h
+    local mlimit
+    
+    # limit due to memory and image size
+    mem=$(cat /proc/meminfo | grep "MemTotal:" | awk '{printf("%.0f", $2/1024)}')
+    if [ -e rawfiles.dat ]
+    then
+        w=$(minmax rawfiles.dat 6 | cut -d ' ' -f2)
+        h=$(minmax rawfiles.dat 7 | cut -d ' ' -f2)
+        npix=$(echo $w $h | awk '{printf("%.0f", $1*$2/1000000)}')
+        test $npix -lt 10 && npix=10
+    fi
+    mlimit=$(((mem-1000)/(npix+9)/20))
+    
+    nproc=$(cat /proc/cpuinfo | grep processor | wc -l)
+    test $verbose && echo "mem=$mem nproc=$nproc npix=$npix mlimit=$mlimit" >&2
+    nproc=$((nproc - 1))
+    test $mlimit -lt $nproc && nproc=$mlimit
+    test $nproc -gt 4 && nproc=4
+    test $nproc -eq 0 && nproc=1
+    
+    echo $nproc
+}
+
+
+grepcmd () {
+    # search for given command string
+    local cmd=$1
+    local file=$2
+    test -z "$file" && file=$(type -p airfun.sh) &&
+        echo "# file = $file"
+    false && cat $file | awk 'BEGIN{skip=0}{
+        if ($0~/^CHANGELOG/) {skip=1} else {
+            if (skip==1 && ($0~/^[0-9a-zA-Z]/ || $0~/^----/)) skip=0}
+        if (skip==0) print $0
+        }'
+    grep -wEn "$cmd|\(\) \{|^CHANGELOG" $file | awk 'BEGIN{skip=0}{
+        if ($0~/^[0-9]*:CHANGELOG/) {skip=1} else {
+            if (skip==1 && $0~/^[0-9]*:[0-9a-zA-Z]/) skip=0}
+        if (skip==0) print $0
+        }' | grep -v "^[0-9]*:[ ]*#"
+}
+
+
 #------------------------
 #   low level functions
 #------------------------
@@ -3163,7 +3233,7 @@ is_mask () {
         rm -f $tmphist &&
         return 255
 
-    gm convert $img -depth 16 pgm:- | pgmhist | grep "^[0-9]" > $tmphist
+    gm convert $img -depth 16 pgm:- | pgmhist | grep "^[ ]*[0-9]" > $tmphist
     ncol=$(cat $tmphist | wc -l)
     test $ncol -ne 2 &&
         echo "ERROR: $img is not b/w image." >&2 &&
@@ -3180,7 +3250,7 @@ is_mask () {
     fi
     
     npix=$(imsize $img | tr ' ' '*' | bc)
-    fgpercent=$(grep "^$val" $tmphist | \
+    fgpercent=$(grep "^[ ]*$val" $tmphist | \
         awk -v n=$npix '{if (NF>2) printf("%.0f", $2*100/n)}')
     test "$AI_DEBUG" && echo "$img: $fgpercent% $fgcolor." >&2
     test -z "$fgpercent" &&
@@ -4419,6 +4489,28 @@ set_header () {
     done
     return
 }
+
+del_header () {
+    # delete header keyword(s) (cards) from FITS image
+    local fits=$1
+    local kw
+    local tdir=${AI_TMPDIR:-"/tmp"}
+    local tmppy=$(mktemp "$tdir/tmp_prog_XXXXXX.py")
+    shift 1
+echo "from astropy.io import fits
+hdul = fits.open('$fits', mode='update')
+hdr = hdul[0].header
+kwlist = list(hdr.keys())" > $tmppy
+    for kw in $@
+    do
+        echo "if '$kw' in kwlist: del hdr['$kw']" >> $tmppy
+    done
+echo "hdul.close()" >> $tmppy
+    #cat $tmppy
+    python3 $tmppy
+    rm $tmppy
+}
+
 
 get_exclude () {
     # read AI_EXCLUDE by evaluating last definition in imred_$day.txt
@@ -13757,10 +13849,19 @@ parangle () {
     local long
     
     # decide about first parameter
-    test $# -eq 1 && num=$par1
-    test $# -eq 3 && ra=$par1
-    test $# -ne 1 && test $# -ne 3 &&
-        echo "usage: parangle <num> | <ra_deg> <dec_deg> <st_hr>" >&2 && return 255
+    case $# in
+        1)  if is_setname $par1
+            then
+                set - $(AIsetinfo -b $par1)
+                test "$8" != "-" && num=$8
+                test "$8" == "-" && num=$6
+            else
+                num=$par1
+            fi;;
+        3)  ra=$par1;;
+        *)  echo "usage: parangle <set> | <num> | <ra_deg> <dec_deg> <st_hr>" >&2
+            return 255;;
+    esac
     
     # get coordinates (degrees)
     if [ "$num" ]
@@ -13793,7 +13894,8 @@ parangle () {
             printf("%.4f", x)}')
         echo "# ra=$ra  dec=$dec  jd=$jd  st=$st" >&2
     fi
-    echo $ra $dec $st $lat >&2
+    echo $ra $dec | rade2altaz $jd - | awk '{print "# az="$1" alt="$2" am="$3}'
+    # echo $ra $dec $st $lat >&2
     echo $ra $dec $st $lat | awk 'BEGIN{r=3.14159/180}{
         x=sin($4*r)/cos($4*r)*cos($2*r)-sin($2*r)*cos(($3*15-$1)*r)
         x=sin(($3*15-$1)*r)/x
@@ -14556,10 +14658,11 @@ sexselect () {
     test "$verbose" && echo "# $filter && r<$rmax && r>=$rmin" >&2
     
     echo 'select "'"$filter"'"
-        addcol DX "'$xcol'-'$xc'"
-        addcol DY "'$ycol'-'$yc'"
-        addcol R "sqrt(DX*DX+DY*DY)"
-        select "R<'$rmax' && R>='$rmin'"
+        addcol tmpDX "'$xcol'-'$xc'"
+        addcol tmpDY "'$ycol'-'$yc'"
+        addcol tmpR "sqrt(tmpDX*tmpDX+tmpDY*tmpDY)"
+        select "tmpR<'$rmax' && tmpR>='$rmin'"
+        delcols "tmpDX tmpDY tmpR"
         keepcols "'"${columns//,/ }"'"' > $cmds
     test "$verbose" && cat $cmds >&2
     if [ "$outstats" ]
@@ -15161,12 +15264,11 @@ ppm2gray () {
         if [ $(get_header $tmp1 NAXIS) -eq 3 ]
         then
             set_header $tmp1 NAXIS=2
-            delhead $tmp1 NAXIS3
+            del_header $tmp1 NAXIS3
         fi
         
         # strip off COMMENT keywords
-        listhead $tmp1 | grep -w "^COMMENT" | cut -c 1-8 | \
-            while read key; do delhead $tmp1 $key; done
+        listhead $tmp1 | grep -wq "^COMMENT" && del_header $tmp1 COMMENT
 
         if [ -f "$head" ]
         then
@@ -15197,7 +15299,7 @@ ppm2gray () {
             do
                 # grep "^${key}=" $tmpkeys
                 echo "WARNING: deleting key: $key" >&2
-                delhead $tmp1 $key
+                del_header $tmp1 $key
             done
             #delwcs $tmp1
         fi
@@ -15226,7 +15328,7 @@ ppm2gray () {
             do
                 # grep "^${key}=" $tmpkeys
                 echo "WARNING: deleting key: $key" >&2
-                delhead $tmp1 $key
+                del_header $tmp1 $key
             done
         fi
         cat $tmp1
@@ -15538,7 +15640,7 @@ whead2fits () {
     do
         # grep "^${key}=" $tmpkeys
         echo "WARNING: deleting key: $key" >&2
-        delhead $fits $key
+        del_header $fits $key
     done
     
     rm -f $tmpkeys
@@ -15845,7 +15947,7 @@ imslice () {
 		
 		num=$(echo $slicenum | awk '{printf("%03d", $1)}')
 		tfits=$wdir/$(basename $img | sed -e 's/\.[^.]*$//')".$num.miss.fits"
-		#delhead $tfits CTYPE3
+        #delhead $tfits CTYPE3
 		cat $tfits
 	fi
     
@@ -16418,7 +16520,7 @@ immedian () {
     if is_raw "$fname"
     then
         stat=$(airfun.py rawtogray "$fname" - | \
-            pgmhist "$fname" | grep "^[0-9]" | tr -d '%' | awk '{
+            pgmhist "$fname" | grep "^[ ]*[0-9]" | tr -d '%' | awk '{
                 if ($3>=50) {print $1; nextfile}}')
     else
         type=$(pnmfile $fname | awk '{print $2}')
@@ -16430,29 +16532,29 @@ immedian () {
                         #    pgmhist | grep "^[0-9]" | tr -d '%' | awk '{
                         #        if ($3>=50) {print $1; nextfile}}')
                         c00=$(gm convert $fname -roll +0+0 -filter point -resize 50% - | \
-                            pgmhist | grep "^[0-9]" | tr -d '%' | awk '{
+                            pgmhist | grep "^[ ]*[0-9]" | tr -d '%' | awk '{
                                 if ($3>=50) {print $1; nextfile}}')
                         c10=$(gm convert $fname -roll +0-1 -filter point -resize 50% - | \
-                            pgmhist | grep "^[0-9]" | tr -d '%' | awk '{
+                            pgmhist | grep "^[ ]*[0-9]" | tr -d '%' | awk '{
                                 if ($3>=50) {print $1; nextfile}}')
                         c01=$(gm convert $fname -roll -1+0 -filter point -resize 50% - | \
-                            pgmhist | grep "^[0-9]" | tr -d '%' | awk '{
+                            pgmhist | grep "^[ ]*[0-9]" | tr -d '%' | awk '{
                                 if ($3>=50) {print $1; nextfile}}')
                         c11=$(gm convert $fname -roll -1-1 -filter point -resize 50% - | \
-                            pgmhist | grep "^[0-9]" | tr -d '%' | awk '{
+                            pgmhist | grep "^[ ]*[0-9]" | tr -d '%' | awk '{
                                 if ($3>=50) {print $1; nextfile}}')
                         stat="$c00 $c01 $c10 $c11"
                     else
-                        stat=$(pgmhist "$fname" | grep "^[0-9]" | tr -d '%' | awk '{
+                        stat=$(pgmhist "$fname" | grep "^[ ]*[0-9]" | tr -d '%' | awk '{
                             if ($3>=50) {print $1; nextfile}}')
                     fi
                     ;;
             PPM)    cat "$fname" | ppmtorgb3
-                    r=$(pgmhist noname.red | grep "^[0-9]" | tr -d '%' | awk '{
+                    r=$(pgmhist noname.red | grep "^[ ]*[0-9]" | tr -d '%' | awk '{
                         if ($3>=50) {print $1; nextfile}}')
-                    g=$(pgmhist noname.grn | grep "^[0-9]" | tr -d '%' | awk '{
+                    g=$(pgmhist noname.grn | grep "^[ ]*[0-9]" | tr -d '%' | awk '{
                         if ($3>=50) {print $1; nextfile}}')
-                    b=$(pgmhist noname.blu | grep "^[0-9]" | tr -d '%' | awk '{
+                    b=$(pgmhist noname.blu | grep "^[ ]*[0-9]" | tr -d '%' | awk '{
                         if ($3>=50) {print $1; nextfile}}')
                     stat="$r $g $b"
                     rm noname.red noname.grn noname.blu
@@ -16744,6 +16846,14 @@ kmedian () {
     rm -rf $wdir
     return
 
+}
+
+findcluster () {
+    # find clusters of non-zero pixels
+    local inimg=$1
+    local outimg=$2
+    #local dist=$3   # currently not used
+    airfun.py mkcluster -fmt png $inimg $outimg
 }
 
 
@@ -19215,7 +19325,6 @@ AIexamine () {
     local tmpsh=$(mktemp "/tmp/tmp_script_XXXXXX.sh")
     chmod u+x $tmpsh
     
-
     (test "$showhelp" || test $# -lt 1) &&
         echo "usage: AIexamine [-v] [-l] [-c] [-n ds9name] [-w wcshead] [-a ds9anafile] <image1|regfile1> [image2|regfile2 ...]" >&2 &&
         return 1
@@ -19432,7 +19541,9 @@ EOF
             PNG|JPEG)	gm convert $infile pgm:- | ppm2gray -q -f - $hdr > $tfits;;
             *)	        ppm2gray -q -f "$infile" $hdr > $tfits;;
         esac
-        test "$hdr" && delwcs -b $tfits
+        test "$hdr" && del_header $tfits RADESYS \
+            CTYPE1 CUNIT1 CRVAL1 CRPIX1 CD1_1 CD1_2 \
+            CTYPE2 CUNIT2 CRVAL2 CRPIX2 CD2_1 CD2_2
         sethead $tfits AI_IMAGE="$infile"
         if [ "$wcshead" ]
         then
@@ -19448,7 +19559,8 @@ EOF
     }
 
     export -f _imconv_parallel
-    popts=""; test "$AI_MAXPROCS" && popts="-P $AI_MAXPROCS"
+    popts="-P ${AI_MAXPROCS:-$(get_maxprocs)}"
+
     cat $tmpconv | parallel $popts -k $tmpsh
     unset -f _imconv_parallel
     # TODO: error handling
@@ -20225,11 +20337,8 @@ AIpreview () {
     then
         flat=$telid
     fi
-    nproc=$(cat /proc/cpuinfo | grep processor | wc -l)
-    nproc=$((nproc - 1))
-    test $nproc -gt 4 && nproc=4
-    test $nproc -eq 0 && nproc=1
-    
+    nproc=${AI_MAXPROCS:-$(get_maxprocs)}
+
     imlist=$(ls $rdir/*.{pef,PEF,fits,FITS,cr2,CR2,nef,NEF,raf,RAF} \
     	$rdir/*/*.{pef,PEF,fits,FITS,cr2,CR2,nef,NEF,raf,RAF} \
     	2>/dev/null)
@@ -20656,7 +20765,7 @@ AIpublish () {
     # adding border and labels
     #bcolor="#a0a0a0"
     bcolor="gray60"
-    convert $img ppm:- | convert - -bordercolor $bg -border $((bs*4/6))x$((bs*4/6)) \
+    gm convert $img ppm:- | convert - -bordercolor $bg -border $((bs*4/6))x$((bs*4/6)) \
         -bordercolor $bcolor -border 2x2 -bordercolor $bg -border 0x$((bs*5/6)) \
         -background $bg label.tif -append -border $((bs*12/6))x$((bs*4/6)) \
         -quality $quality "$jpg"
@@ -21893,7 +22002,7 @@ EOF
         }
         
         export -f _dark_rawconv_parallel
-        popts=""; test "$AI_MAXPROCS" && popts="-P $AI_MAXPROCS"
+        popts="-P ${AI_MAXPROCS:-$(get_maxprocs)}"
         cat $imlist | parallel $popts -k $tmpsh
         unset -f _dark_rawconv_parallel
 
@@ -22570,7 +22679,7 @@ EOF
             done < $imlist2
         else
             export -f _aiccd_parallel
-            popts=""; test "$AI_MAXPROCS" && popts="-P $AI_MAXPROCS"
+            popts="-P ${AI_MAXPROCS:-$(get_maxprocs)}"
             #cat $imlist2 | parallel $popts -k $tmpsh
             cat $imlist2 | parallel $popts $tmpsh
     		# TODO: error handling
@@ -22989,7 +23098,7 @@ EOF
 			if [ "$nlist" ]
 			then
 				export -f _run_parallel
-                popts=""; test "$AI_MAXPROCS" && popts="-P $AI_MAXPROCS"
+                popts="-P ${AI_MAXPROCS:-$(get_maxprocs)}"
 				parallel $popts -k $tmpsh ::: $nlist
 				unset -f _run_parallel
 			fi
@@ -23616,7 +23725,7 @@ EOF
 		if [ "$nlist" ]
 		then
 			export -f _airegister_parallel
-            popts=""; test "$AI_MAXPROCS" && popts="-P $AI_MAXPROCS"
+            popts="-P ${AI_MAXPROCS:-$(get_maxprocs)}"
 			echo $nlist | tr ' ' '\n' | parallel $popts -k $tmpsh
 			unset -f _airegister_parallel
 		fi
@@ -24255,7 +24364,7 @@ EOF
 
 
         export -f _aibgdiff_parallel
-        popts=""; test "$AI_MAXPROCS" && popts="-P $AI_MAXPROCS"
+        popts="-P ${AI_MAXPROCS:-$(get_maxprocs)}"
         cat $imlist | parallel $popts -k $tmpsh
         unset -f _aibgdiff_parallel
 		# TODO: error handling
@@ -24366,6 +24475,7 @@ AIbgmap () {
     local ym
     local ci
     local val
+    local pvers
 
     (test "$showhelp" || test $# -lt 1) &&
         echo "usage: AIbgmap [-q] [-p|s|c] [-m] [-d] [-sd] [-o pedestal] [-x maxbad|$maxbad]" \
@@ -24442,15 +24552,26 @@ AIbgmap () {
         #   the residual image will show staircase structure, independant of $mult
         #   maybe we should add some random noise proportional to $mult
         # TODO: begin run parallel (takes 45% of time)
+        pvers=$(dpkg -s netpbm | grep "^Version" | cut -d ' ' -f2)
         case $infmt in
             ppm)    clist="red grn blu"
-                    pnmccdred2 -m $mult $img - | pnmsmooth -size 3 3 > $tmp1
+                    if dpkg --compare-versions $pvers lt 2:10.32
+                    then
+                        pnmccdred2 -m $mult $img - | pnmsmooth -size 3 3 > $tmp1
+                    else
+                        pnmccdred2 -m $mult $img - | pnmsmooth -quiet -width=3 -height=3 > $tmp1
+                    fi
                     gm convert $tmp1 -channel Red   - | ppmtopgm | pnmtomef - > $tdir/$b.red.fits
                     gm convert $tmp1 -channel Green - | ppmtopgm | pnmtomef - > $tdir/$b.grn.fits
                     gm convert $tmp1 -channel Blue  - | ppmtopgm | pnmtomef - > $tdir/$b.blu.fits
                     ;;
             pgm)    clist="gray"
-                    pnmccdred2 -m $mult $img - | pnmsmooth -size 3 3 > $tmp1
+                    if dpkg --compare-versions $pvers lt 2:10.32
+                    then
+                        pnmccdred2 -m $mult $img - | pnmsmooth -size 3 3 > $tmp1
+                    else
+                        pnmccdred2 -m $mult $img - | pnmsmooth -quiet -width=3 -height=3 > $tmp1
+                    fi
                     pnmtomef $tmp1 > $tdir/$b.$clist.fits
                     ;;
             fits)   if [ $bands -eq 1 ]
@@ -26985,7 +27106,7 @@ CD2_2   =      0.0003   / Linear projection matrix
         
         export -f _fitsconv_parallel
         i=0
-        popts=""; test "$AI_MAXPROCS" && popts="-P $AI_MAXPROCS"
+        popts="-P ${AI_MAXPROCS:-$(get_maxprocs)}"
         # note: performance is limited by I/O speed, therefore it does not make
         #   sense to run more than 2-3 processes in parallel
         test "$AI_MAXPROCS" && test "$AI_MAXPROCS" -gt 3 && popts="-P 3"
@@ -27126,8 +27247,10 @@ EOF
             if [ "$do_keepfits" ]
             then
                 # strip fake wcs header from FITS
-                delwcs -b $out.fits
-                delhead $out.fits RADESYS CUNIT1 CUNIT2
+                test "$AI_DEBUG" && cp -p $out.fits $out.orig.fits
+                del_header $out.fits RADESYS \
+                    CTYPE1 CUNIT1 CRVAL1 CRPIX1 CD1_1 CD1_2 \
+                    CTYPE2 CUNIT2 CRVAL2 CRPIX2 CD2_1 CD2_2
             fi
         done
             
@@ -32312,7 +32435,7 @@ EOF
         }
         
         export -f _ainoise_parallel
-        popts=""; test "$AI_MAXPROCS" && popts="-P $AI_MAXPROCS"
+        popts="-P ${AI_MAXPROCS:-$(get_maxprocs)}"
         cat $imlist | parallel $popts -k $tmpsh
         unset -f _ainoise_parallel
 		# TODO: error handling
@@ -32573,7 +32696,7 @@ EOF
                 do
                     $tmpsh $REPLY
                 done < $imlist2
-                popts=""; test "$AI_MAXPROCS" && popts="-P $AI_MAXPROCS"
+                popts="-P ${AI_MAXPROCS:-$(get_maxprocs)}"
                 cat $imlist2 | parallel $popts -k $tmpsh
                 unset -f _findbad_parallel
 
@@ -32660,7 +32783,7 @@ EOF
                             -shave $geom -bordercolor black -border $geom $sat
                     fi
                 fi
-                n=$(convert $sat pgm:- | pgmhist | grep -w "^255" | cut -f2)
+                n=$(gm convert $sat pgm:- | pgmhist | grep -w "^[ ]*255" | cut -f2)
                 test -z "$n" && n=0
                 echo "$n saturated pixels" >&2
             fi
@@ -35525,7 +35648,7 @@ AIarchive () {
                 done | sort -u > $tmp1
             else
                 # all data related to single image set
-                flist=$(ls -d .[a-z]* *.{log,txt,sh,dat,env,icq} 2>/dev/null | grep -v ".src.dat$")
+                flist=$(ls -d .[a-z]* *.{log,txt,sh,py,dat,env,icq} 2>/dev/null | grep -v ".src.dat$")
                 flist="$flist "$(ls -d split/*.{log,txt,sh} split/set.dat split/wcs/*log 2>/dev/null)
                 for set in ${slist//,/ }
                 do
@@ -35552,7 +35675,7 @@ AIarchive () {
             fi
             ;;
         results) # most interesting results (excluding large images)
-            flist=$(ls -d .[a-z]* *.{log,txt,dat,sh,env,icq} 2>/dev/null)
+            flist=$(ls -d .[a-z]* *.{log,txt,dat,sh,py,env,icq} 2>/dev/null)
             flist="$flist "$(ls -d split/*.{log,txt,sh} split/set.dat split/wcs/*log 2>/dev/null)
             for set in ${slist//,/ }
             do
@@ -35578,7 +35701,7 @@ AIarchive () {
             done | sort -u > $tmp1
             ;;
         wcs) # most astrometry results
-            flist=$(ls -d .[a-z]* *.{log,txt,dat,sh,env} 2>/dev/null)
+            flist=$(ls -d .[a-z]* *.{log,txt,dat,sh,py,env} 2>/dev/null)
             for set in ${slist//,/ }
             do
                 test "$set" == "all" && set=""
@@ -35596,7 +35719,7 @@ AIarchive () {
             done | sort -u > $tmp1
             ;;
         base) # base files required to examine logs/errors
-            flist=$(ls -d .[a-z]* *.{log,txt,dat,sh,env} 2>/dev/null)
+            flist=$(ls -d .[a-z]* *.{log,txt,dat,sh,py,env} 2>/dev/null)
             for set in ${slist//,/ }
             do
                 test "$set" == "all" && set=""
@@ -35665,7 +35788,7 @@ test -z "$day" &&
     echo "ERROR: day is not defined." >&2 &&
     return 255
 test "$day" && echo $(pwd) | grep -q $day
-test $? -ne 0 &&
+test $? -ne 0 && is_number ${day:0:6} &&
     echo "WARNING: working dir might not belong to day=$day." >&2
 
 # parallel: skip citing note

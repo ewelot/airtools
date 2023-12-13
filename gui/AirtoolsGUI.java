@@ -48,8 +48,8 @@ import tl.airtoolsgui.controller.SetupAirtoolsController;
  */
 public class AirtoolsGUI extends Application {
     
-    private final String progVersion = "5.0.3";
-    private final String progDate = "2023-09-30";
+    private final String progVersion = "5.0.4";
+    private final String progDate = "2023-11-16";
     private final String confFileName = "airtools.conf";
     private final String scriptFileName = "airtools-cli";
     

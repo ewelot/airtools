@@ -19,8 +19,8 @@
 ########################################################################
 AOVARS="AO_SKIP AO_FLATS AO_LIGHT AO_BGVAR AO_REGIS AO_STACK AO_AMASK AO_ACOOR AO_ABINN"
 
-VERSION="1.5.3"
-VINFO="T. Lehmann, Aug. 2023"
+VERSION="1.5.4"
+VINFO="T. Lehmann, Nov. 2023"
 PINFO="\
     options:
       -h            show this help text
@@ -34,6 +34,12 @@ PINFO="\
       task          run given task    
 "
 CHANGELOG="
+    1.5.4 - 16 Nov 2023
+        * badpix: replace imagemagick convert command by function findcluster
+            using pyvips (avoids imagemagick running out of memory)
+        * astrometry: added check for internet connection
+        * pnmsmooth deal with change of parameters on newer version (>=10.32)
+
     1.5.3 - 19 Aug 2023
         * astrometry:
             - limit number of sources in solve-field to 500
@@ -786,7 +792,7 @@ EOF
                     print $0}' | sed -e "s,^,$(basename $rawname),g"
             }
             export -f _run_stats_parallel
-            popts=""; test "$AI_MAXPROCS" && popts="-P $AI_MAXPROCS"
+            popts="-P ${AI_MAXPROCS:-$(get_maxprocs)}"
             cat $tmpargs | parallel $popts -k $tmpsh >> mstat.dk.dat
             unset -f _run_stats_parallel
         fi
@@ -847,8 +853,15 @@ EOF
                 set=$3
                 tel=$4
                 echo "# computing diff for $num ($set $tel)" >&2
-                pnmccdred2 -m 10 -a 1000 -d $set.pgm $AI_TMPDIR/$num.pgm - | \
-                    pnmsmooth > $AI_TMPDIR/x.$num.pgm
+                pvers=$(dpkg -s netpbm | grep "^Version" | cut -d ' ' -f2)
+                if dpkg --compare-versions $pvers lt 2:10.32
+                then
+                    pnmccdred2 -m 10 -a 1000 -d $set.pgm $AI_TMPDIR/$num.pgm - | \
+                        pnmsmooth > $AI_TMPDIR/x.$num.pgm
+                else
+                    pnmccdred2 -m 10 -a 1000 -d $set.pgm $AI_TMPDIR/$num.pgm - | \
+                        pnmsmooth -quiet -width=3 -height=3 > $AI_TMPDIR/x.$num.pgm
+                fi
                 (cd $AI_TMPDIR
                     AIbgmap -q x.$num.pgm $bs 1
                     add=$(AIstat x.$num.bgm1.pgm | awk '{printf("%.0f", 1000-$5)}')
@@ -857,7 +870,7 @@ EOF
                 )
             }
             export -f _run_darkvar_parallel
-            popts=""; test "$AI_MAXPROCS" && popts="-P $AI_MAXPROCS"
+            popts="-P ${AI_MAXPROCS:-$(get_maxprocs)}"
             cat $tmpargs | parallel $popts -k $tmpsh
             unset -f _run_var_parallel
         fi
@@ -1522,7 +1535,7 @@ _badpix () {
         for f in $badlist $badpix
         do
             echo $tel/$f
-            convert $f pbm:- | pgmhist | grep 255
+            gm convert $f pbm:- | pgmhist | grep 255
         done
         
         # combine with badpix images of previous days
@@ -1551,9 +1564,9 @@ _badpix () {
         test "$msg" && echo $msg && msg=""
         difflist=$(for s in $telsetlist; do ls bad.$s.diff.pgm 2>/dev/null; done)
         # identify clusters of bad pixels
-        # TODO: replace command to avoid imagemagick (possibly running out of memory)
-        convert $badpixall -define convolve:scale=0.00392 -morphology Convolve Disk:3.5 \
+        false && convert $badpixall -define convolve:scale=0.00392 -morphology Convolve Disk:3.5 \
             pgm:- | pnmccdred2 -a -2 - - | convert - -morphology Dilate Disk:5 bad.${tel,,}.clust.png
+        findcluster $badpixall bad.${tel,,}.clust.png
         AIexamine -n $tel $badpix $badpixall bad.${tel,,}.clust.png $difflist
     done
     return 0
@@ -1789,6 +1802,10 @@ _astrometry () {
         echo -e "\nset=$set" >> $wcslog
         test "$AO_AMASK" && echo "# AO_AMASK=$AO_AMASK" | tee -a $wcslog
         
+        # check internet connection
+        ! check_url &&
+            echo "ERROR: no internet connection" && return 255
+
         # determine pixscale
         pixscale=""
         binning="$AO_ABINN"

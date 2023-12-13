@@ -1,3 +1,12 @@
+airtools (5.0.4-1) experimental; urgency=medium
+
+  * Update to airfun.sh version 5.3.4 and airtools-cli version 1.5.4
+  * Changed Makefile and pnmccdred.c to deal with newer libnetpbm API
+  * debian/control: modified dependencies to allow alternative names of
+    libnetpbm devel package
+
+ -- Thomas Lehmann <t.lehmann@mailbox.org>  Thu, 16 Nov 2023 18:39:53 +0100
+
 airtools (5.0.3-1) experimental; urgency=medium
 
   * Update to airfun.sh version 5.3.3 and airtools-cli version 1.5.3

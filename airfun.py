@@ -1101,6 +1101,41 @@ def pnmreplaceborder(param):
     writeimage(["-fmt", outfmt, outimg, outfilename])
 
 
+# convolve b/w mask with disk-like mask to find clusters of bad pixels
+def mkcluster(param):
+    outfmt='pnm'
+    if(param[0]=='-fmt'):
+        outfmt=param[1]
+        del param[0:2]
+    infilename = param[0]
+    outfilename = param[1]
+
+    # reading input image
+    if (infilename and infilename != '-'):
+        inimg = pyvips.Image.new_from_file(infilename)
+    else:
+        source = pyvips.Source.new_from_descriptor(sys.stdin.fileno())
+        inimg = pyvips.Image.new_from_source(source, "")
+
+    # convolution kernels
+    # TODO: use mask_ideal(7, 7, 1, optical=True, reject=True, uchar=True)
+    kernel = pyvips.Image.new_from_array(np.asarray([
+        [0,0,1,1,1,0,0],
+        [0,1,1,1,1,1,0],
+        [1,1,1,1,1,1,1],
+        [1,1,1,1,1,1,1],
+        [1,1,1,1,1,1,1],
+        [0,1,1,1,1,1,0],
+        [0,0,1,1,1,0,0]
+        ]) / 255)
+    dilatemask = pyvips.Image.mask_ideal(11, 11, 1, optical=True, reject=True, uchar=True)
+
+    outimg=((inimg.conv(kernel) > 2).ifthenelse(1,0).conv(dilatemask) > 0).ifthenelse(1,0)
+
+    # writing output image
+    writeimage(["-fmt", outfmt, outimg, outfilename])
+
+
 # get statistics on image region defined by mask (svg image)
 # syntax: regstat [-m] image mask badmask
 def regstat(param):

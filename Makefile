@@ -28,10 +28,20 @@ ICONSVG = airtools.svg
 # compiler/linker definitions
 CC = gcc
 CFLAGS = -O4 -Wall
+CFLAGS += -I/usr/include/netpbm
 #LIBDCRAW = -lm -ljasper -ljpeg
 LIBDCRAW = -lm -ljpeg
 LIBPNM = -lm -lnetpbm
 
+# special macro to be used in pnmccdred.c
+LIBNETPBMPKG=$(shell dpkg-query -W -f '$${db:Status-Status} $${binary:Package}\n' libnetpbm*dev | grep "^installed" | cut -d ' ' -f2)
+$(info package is $(LIBNETPBMPKG))
+ifeq ($(LIBNETPBMPKG), libnetpbm10-dev)
+  $(info using LIBNETPBM10)
+  CFLAGS += -DLIBNETPBM10
+else
+  $(info LIBNETPBM10 is not set)
+endif
 
 # rules/targets
 .c.o:
@@ -88,7 +98,7 @@ tarball:
 	rm -rf $(PACKAGE)-$(VERSION) && ln -s .. $(PACKAGE)-$(VERSION); \
 	tar czf $(PACKAGE)_$(VERSION).orig.tar.gz -h \
 		--exclude="*/.git*" --exclude="old" --exclude="doc/unused" --exclude="build" \
-		$(PACKAGE)-$(VERSION); \
+		--exclude="releases" --exclude="debian" $(PACKAGE)-$(VERSION); \
 	rm -rf $(PACKAGE)-$(VERSION))
 
 source:
@@ -96,6 +106,7 @@ source:
 	(cd build; \
 	tar xf $(PACKAGE)_$(VERSION).orig.tar.gz; \
 	cd $(PACKAGE)-$(VERSION); \
+	rsync -au ../../debian ./; \
 	debuild -d -i -us -uc -S; \
 	rm ../$(PACKAGE)_$(VERSION)*_source.*; \
 	rm debian/files)

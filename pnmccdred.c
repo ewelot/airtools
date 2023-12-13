@@ -21,8 +21,8 @@
 void pnmccdred(char **inFileName, char **outFileName, 
                char **dkFileName, char **ffFileName,
                double *mult, double *add,
-               unsigned int *width, unsigned int *height, double *bg,
-	       int *verbose) {
+               int width, int height, double bg,
+               int verbose) {
 
     struct pam inpam, dkpam, ffpam;
     FILE *inFile, *dkFile=NULL, *ffFile=NULL;
@@ -36,22 +36,26 @@ void pnmccdred(char **inFileName, char **outFileName,
     double result;
 
     /* show some parameters */
-    if (*verbose > 0) {
-	for (i=1;i<3;i++) {
-	    printf("%d  m=%.2f  a=%.2f\n", i, mult[i], add[i]);
+    if (verbose > 0) {
+    for (i=1;i<3;i++) {
+        fprintf(stderr, "%d  m=%.2f  a=%.2f\n", i, mult[i], add[i]);
         }
     }
 
     /* open images */
     inFile = pm_openr(*inFileName);
     if (inFile == NULL) {
-        printf("ERROR: cannot open file %s\n", *inFileName);
+        fprintf(stderr, "ERROR: cannot open file %s\n", *inFileName);
         exit(-1);
     }
+#ifdef LIBNETPBM10
     pnm_readpaminit(inFile, &inpam, sizeof(struct pam));
+#else
+    pnm_readpaminit(inFile, &inpam, PAM_STRUCT_SIZE(tuple_type));
+#endif
     outFile = pm_openw(*outFileName);
     if (outFile == NULL) {
-        printf("ERROR: cannot open file %s\n", *outFileName);
+        fprintf(stderr, "ERROR: cannot open file %s\n", *outFileName);
         exit(-1);
     }
     /* initialization of pam structure is done later on */
@@ -59,32 +63,40 @@ void pnmccdred(char **inFileName, char **outFileName,
     if (*dkFileName != NULL) {
         dkFile = pm_openr(*dkFileName);
         if (dkFile == NULL) {
-            printf("ERROR: cannot open file %s\n", *dkFileName);
+            fprintf(stderr, "ERROR: cannot open file %s\n", *dkFileName);
             exit(-1);
         }
+#ifdef LIBNETPBM10
         pnm_readpaminit(dkFile, &dkpam, sizeof(struct pam));
+#else
+        pnm_readpaminit(dkFile, &dkpam, PAM_STRUCT_SIZE(tuple_type));
+#endif
     }
     if (*ffFileName != NULL) {
         ffFile = pm_openr(*ffFileName);
         if (ffFile == NULL) {
-            printf("ERROR: cannot open file %s\n", *ffFileName);
+            fprintf(stderr, "ERROR: cannot open file %s\n", *ffFileName);
             exit(-1);
         }
+#ifdef LIBNETPBM10
         pnm_readpaminit(ffFile, &ffpam, sizeof(struct pam));
+#else
+        pnm_readpaminit(ffFile, &ffpam, PAM_STRUCT_SIZE(tuple_type));
+#endif
     }
 
     /* if width or height were not specified via command line
      * then take the values from input image */
-    if (*width == 0) *width  = inpam.width;
-    if (*height == 0) *height = inpam.height;
-    if (*verbose > 0)
-      printf("  new width = %d   new height = %d\n", *width, *height);
+    if (width == 0)  width  = inpam.width;
+    if (height == 0) height = inpam.height;
+    if (verbose > 0)
+      fprintf(stderr, "  new width = %d   new height = %d\n", width, height);
 
     /* initialize outpam structure */
     outpam = inpam;
     outpam.file   = outFile;
-    outpam.width  = *width;
-    outpam.height = *height;
+    outpam.width  = width;
+    outpam.height = height;
     pnm_writepaminit(&outpam);
 
     /* determine number of rows, columns to discard from input image */
@@ -92,16 +104,16 @@ void pnmccdred(char **inFileName, char **outFileName,
     cskip = 0;
     if (outpam.height < inpam.height) rskip = (inpam.height-outpam.height)/2;
     if (outpam.width  < inpam.width)  cskip = (inpam.width-outpam.width)/2;
-    if (*verbose > 0)
-      printf("  rskip=%d   cskip=%d\n", rskip, cskip);
+    if (verbose > 0)
+      fprintf(stderr, "  rskip=%d   cskip=%d\n", rskip, cskip);
 
     /* determine number of background rows, columns to add to output image */
     rmargin = 0;
     cmargin = 0;
     if (outpam.height > inpam.height) rmargin = (outpam.height-inpam.height)/2;
     if (outpam.width  > inpam.width)  cmargin = (outpam.width-inpam.width)/2;
-    if (*verbose > 0)
-      printf("  rmargin=%d   cmargin=%d\n", rmargin, cmargin);
+    if (verbose > 0)
+      fprintf(stderr, "  rmargin=%d   cmargin=%d\n", rmargin, cmargin);
 
     /* allocate tuplerows */
     inRow  = pnm_allocpamrow(&inpam);
@@ -119,7 +131,7 @@ void pnmccdred(char **inFileName, char **outFileName,
         if ((row < rmargin) || (row >= rmargin+inpam.height)) {
             for (col = 0; col < outpam.width; col++) {
                 for (plane = 0; plane < outpam.depth; plane++) {
-                  outRow[col][plane] = *bg;
+                  outRow[col][plane] = bg;
                 }
             }
         } else {
@@ -129,7 +141,7 @@ void pnmccdred(char **inFileName, char **outFileName,
             for (col = 0; col < outpam.width; col++) {
                 if ((col < cmargin) || (col >= cmargin+inpam.width)) {
                     for (plane = 0; plane < outpam.depth; plane++) {
-                      outRow[col][plane] = *bg;
+                      outRow[col][plane] = bg;
                     }
                 } else {
                     idx = col+cskip-cmargin;
@@ -188,11 +200,15 @@ int main(int argc, char *argv[])
     char *outFileName;
     double bg, mult[3], add[3];
     int opt;
-    unsigned int width, height;
+    int width, height;
     int i, nargs, verbose, err;
 
-    /* eliminate some common netpbm options, e.g. -quiet */
+    /* initialization */
+#ifdef LIBNETPBM10
     pnm_init(&argc, argv);
+#else
+    pm_init(argv[0], 0);
+#endif
 
     /* initialize some variables */
     width=0; height=0;
@@ -239,7 +255,7 @@ int main(int argc, char *argv[])
                 bg=atof(optarg);
                 break;
             case '?':
-                printf("ERROR: unknown option\n");
+                fprintf(stderr, "ERROR: unknown option\n");
                 exit(-1);
                 break;
             default:
@@ -247,10 +263,14 @@ int main(int argc, char *argv[])
         }
     }
     
+#ifdef LIBNETPBM10
+    if (verbose > 0) fprintf(stderr, "# using LIBNETPBM10\n");
+#endif
+
     /* read command line arguments */
     nargs = argc - optind;
     if (nargs != 2) {
-        printf("ERROR: missing arguments, try -u switch to show usage info\n");
+        fprintf(stderr, "ERROR: missing arguments, try -u switch to show usage info\n");
         exit(-1);
     }
 
@@ -266,9 +286,9 @@ int main(int argc, char *argv[])
     
     /* TODO: check all program options and arguments */
     if (verbose > 0)
-        printf("  m=%.2f %.2f %.2f  a=%.2f %.2f %.2f  bg=%.2f\n",
+        fprintf(stderr, "  m=%.2f %.2f %.2f  a=%.2f %.2f %.2f  bg=%.2f\n",
                mult[0], mult[1], mult[2], add[0], add[1], add[2], bg);
     pnmccdred(&inFileName, &outFileName, &dkFileName, &skFileName,
-              &mult[0], &add[0], &width, &height, &bg, &verbose);
+              &mult[0], &add[0], width, height, bg, verbose);
     return (0);
 }
