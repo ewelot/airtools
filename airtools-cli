@@ -4,7 +4,7 @@
 # airtools-cli
 #   AIRTOOLS tasks command-line interface
 #
-# Copyright: Thomas Lehmann, 2018-2022
+# Copyright: Thomas Lehmann, 2018-2023
 # License: GPL v3
 #
 # note: the following environment variables may be used
@@ -19,7 +19,7 @@
 ########################################################################
 AOVARS="AO_SKIP AO_FLATS AO_LIGHT AO_BGVAR AO_REGIS AO_STACK AO_AMASK AO_ACOOR AO_ABINN"
 
-VERSION="1.5.4"
+VERSION="1.5.5"
 VINFO="T. Lehmann, Nov. 2023"
 PINFO="\
     options:
@@ -34,6 +34,9 @@ PINFO="\
       task          run given task    
 "
 CHANGELOG="
+    1.5.5 - 28 Nov 2023
+        * added warning if current directory and day are not matching
+
     1.5.4 - 16 Nov 2023
         * badpix: replace imagemagick convert command by function findcluster
             using pyvips (avoids imagemagick running out of memory)
@@ -2924,6 +2927,17 @@ case $AI_VERSION in
 esac
 checkparamdat camera.dat 15 || error "Check of camera.dat failed."
 test -s "set.dat" && ! checkparamdat -s set.dat 11 && error "Check of set.dat failed."
+
+# check day
+test -z "$day" &&
+    error "ERROR: day is not defined." >&2
+test "$day" && echo $(pwd) | grep -q $day
+if [ $? -ne 0 ]
+then
+    curdir=$(basename $(pwd) | cut -c 1-6)
+    is_number $curdir && test ${#curdir} -eq 6 &&
+    echo "WARNING: working dir might not belong to day=$day." >&2
+fi
 
 # check for update if requested
 if [ "$task" == "check_update" ]

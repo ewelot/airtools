@@ -1,8 +1,17 @@
 #!/usr/bin/python3
 
-VERSION=2.3
+VERSION="2.3.2"
 """
 CHANGELOG
+    2.3.2 - 08 Dec 2023
+        * svgtopbm: bugfix: workaround by setting outfmt=pgm because of
+            strange results when using pbm output
+        * regstat: changed thres from 114 to 128 to match area of old regstat
+            function in airfun.sh
+
+    2.3.1 - 13 Nov 2023
+        * new function: mkcluster
+
     2.3 - 17 May 2023
         * added dependency on rawpy
         * pnmccdred, cleanhotpixel, debayer_malvar, debayer_simple: sanitize
@@ -908,7 +917,7 @@ def svgtopbm(param):
     # convert svg areas (circle/polygon/box) to pbm
     # regions are interpreted as good pixel regions (white, pgm value 255, pbm value 0)
     # TODO: currently output is a bi-level PGM image
-    outfmt='pbm'
+    outfmt='pgm'
     invert=False
     if(param[0]=='-i'):
         invert=True
@@ -931,7 +940,7 @@ def svgtopbm(param):
         outimg = inimg.Colourspace("b-w").relational_const("lesseq", 255*0.5)
     else:
         outimg = inimg.Colourspace("b-w").relational_const("more", 255*0.5)
-
+    #outimg = (inimg.Colourspace("b-w") > 128).ifthenelse(1,0)
     # writing output image
     writeimage(["-fmt", outfmt, outimg, outfilename])
 
@@ -1158,7 +1167,7 @@ def regstat(param):
         inimg = pyvips.Image.new_from_source(source, "")
 
     # convert alpha channel of masks to bilevel
-    thres=114   # matching old regstat
+    thres=128   # matching old regstat
     if (badmaskfilename):
         badmaskimg = pyvips.Image.svgload(badmaskfilename).extract_band(3)
         badmaskimg2 = (badmaskimg > thres).ifthenelse(0, 1)
