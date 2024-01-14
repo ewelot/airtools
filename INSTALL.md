@@ -36,7 +36,8 @@ by compiling/installing them from sources by yourself:
 - xpa-tools (https://hea-www.harvard.edu/RD/xpa)
 - wcstools (http://tdc-www.harvard.edu/software/wcstools)
 - cfitsio-examples (https://heasarc.gsfc.nasa.gov/docs/software/fitsio/cexamples.html)
-- python3-pyvips (https://github.com/libvips/pyvips)
+- pyvips (https://github.com/libvips/pyvips)
+- rawpy (https://github.com/letmaik/rawpy)
 - python3-ephem (https://rhodesmill.org/pyephem)
 
 If you have questions regarding the detailed procedure, do not hesitate to

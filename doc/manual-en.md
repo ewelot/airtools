@@ -1,107 +1,115 @@
 Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v5.0)
 ======================================================================
 
-  - [<span class="toc-section-number">1</span>
+---
+author:
+- Thomas Lehmann
+date: Draft, May 2023
+title: Astronomical Image Reduction and Comet Photometry with AIRTOOLS
+  (v5.0)
+---
+
+-   [<span class="toc-section-number">1</span>
     Introduction](#introduction)
-  - [<span class="toc-section-number">2</span>
+-   [<span class="toc-section-number">2</span>
     Installation](#installation)
-      - [<span class="toc-section-number">2.1</span> Installation on
+    -   [<span class="toc-section-number">2.1</span> Installation on
         Linux](#installation-on-linux)
-          - [<span class="toc-section-number">2.1.1</span> Installing
+        -   [<span class="toc-section-number">2.1.1</span> Installing
             the AIRTOOLS software](#installing-the-airtools-software)
-          - [<span class="toc-section-number">2.1.2</span> Updating the
+        -   [<span class="toc-section-number">2.1.2</span> Updating the
             AIRTOOLS software](#updating-the-airtools-software)
-          - [<span class="toc-section-number">2.1.3</span> Uninstalling
+        -   [<span class="toc-section-number">2.1.3</span> Uninstalling
             the AIRTOOLS software](#uninstalling-the-airtools-software)
-      - [<span class="toc-section-number">2.2</span> Installation on
+    -   [<span class="toc-section-number">2.2</span> Installation on
         Windows using a Linux/AIRTOOLS
         appliance](#installation-on-windows-using-a-linuxairtools-appliance)
-          - [<span class="toc-section-number">2.2.1</span> Installing
+        -   [<span class="toc-section-number">2.2.1</span> Installing
             Oracle VirtualBox](#installing-oracle-virtualbox)
-          - [<span class="toc-section-number">2.2.2</span> Importing the
+        -   [<span class="toc-section-number">2.2.2</span> Importing the
             Linux/AIRTOOLS
             appliance](#importing-the-linuxairtools-appliance)
-          - [<span class="toc-section-number">2.2.3</span> Starting the
+        -   [<span class="toc-section-number">2.2.3</span> Starting the
             virtual Linux OS](#starting-the-virtual-linux-os)
-          - [<span class="toc-section-number">2.2.4</span> Xubuntu
+        -   [<span class="toc-section-number">2.2.4</span> Xubuntu
             Desktop Basics](#xubuntu-desktop-basics)
-  - [<span class="toc-section-number">3</span> The AIRTOOLS Graphical
+-   [<span class="toc-section-number">3</span> The AIRTOOLS Graphical
     User Interface](#the-airtools-graphical-user-interface)
-  - [<span class="toc-section-number">4</span> The first AIRTOOLS
+-   [<span class="toc-section-number">4</span> The first AIRTOOLS
     Project](#the-first-airtools-project)
-      - [<span class="toc-section-number">4.1</span> What is a
+    -   [<span class="toc-section-number">4.1</span> What is a
         Project?](#what-is-a-project)
-      - [<span class="toc-section-number">4.2</span> Setting up the
+    -   [<span class="toc-section-number">4.2</span> Setting up the
         AIRTOOLS software](#setting-up-the-airtools-software)
-      - [<span class="toc-section-number">4.3</span> Setting up the
+    -   [<span class="toc-section-number">4.3</span> Setting up the
         first Project](#setting-up-the-first-project)
-      - [<span class="toc-section-number">4.4</span> Parameter
+    -   [<span class="toc-section-number">4.4</span> Parameter
         Files](#parameter-files)
-      - [<span class="toc-section-number">4.5</span> Raw
+    -   [<span class="toc-section-number">4.5</span> Raw
         Images](#raw-images)
-      - [<span class="toc-section-number">4.6</span> Image orientation,
+    -   [<span class="toc-section-number">4.6</span> Image orientation,
         flip status and Bayer
         pattern](#image-orientation-flip-status-and-bayer-pattern)
-      - [<span class="toc-section-number">4.7</span> Image Set
+    -   [<span class="toc-section-number">4.7</span> Image Set
         Definition](#image-set-definition)
-  - [<span class="toc-section-number">5</span> Image
+-   [<span class="toc-section-number">5</span> Image
     Reduction](#image-reduction)
-      - [<span class="toc-section-number">5.1</span> Master Darks and
+    -   [<span class="toc-section-number">5.1</span> Master Darks and
         Flats](#master-darks-and-flats)
-      - [<span class="toc-section-number">5.2</span> Bad Pixel
+    -   [<span class="toc-section-number">5.2</span> Bad Pixel
         Masks](#bad-pixel-masks)
-      - [<span class="toc-section-number">5.3</span> Image
+    -   [<span class="toc-section-number">5.3</span> Image
         Calibration](#image-calibration)
-      - [<span class="toc-section-number">5.4</span> Background
+    -   [<span class="toc-section-number">5.4</span> Background
         evaluation](#background-evaluation)
-      - [<span class="toc-section-number">5.5</span> Image
+    -   [<span class="toc-section-number">5.5</span> Image
         Registration](#image-registration)
-      - [<span class="toc-section-number">5.6</span> Stacking and
+    -   [<span class="toc-section-number">5.6</span> Stacking and
         Astrometric calibration](#stacking-and-astrometric-calibration)
-  - [<span class="toc-section-number">6</span> Large Aperture Comet
+-   [<span class="toc-section-number">6</span> Large Aperture Comet
     Photometry](#large-aperture-comet-photometry)
-      - [<span class="toc-section-number">6.1</span> Comet
+    -   [<span class="toc-section-number">6.1</span> Comet
         Observation](#comet-observation)
-      - [<span class="toc-section-number">6.2</span> Background Gradient
+    -   [<span class="toc-section-number">6.2</span> Background Gradient
         Removal](#background-gradient-removal)
-      - [<span class="toc-section-number">6.3</span> PSF Extraction and
+    -   [<span class="toc-section-number">6.3</span> PSF Extraction and
         Star Removal](#psf-extraction-and-star-removal)
-      - [<span class="toc-section-number">6.4</span> Comet Extraction
+    -   [<span class="toc-section-number">6.4</span> Comet Extraction
         and Measuring the
         Comet](#comet-extraction-and-measuring-the-comet)
-      - [<span class="toc-section-number">6.5</span> Photometric
+    -   [<span class="toc-section-number">6.5</span> Photometric
         Calibration](#photometric-calibration)
-  - [<span class="toc-section-number">7</span> Appendix](#appendix)
-      - [<span class="toc-section-number">7.1</span> Custom Installation
+-   [<span class="toc-section-number">7</span> Appendix](#appendix)
+    -   [<span class="toc-section-number">7.1</span> Custom Installation
         on Windows](#custom-installation-on-windows)
-          - [<span class="toc-section-number">7.1.1</span> Setup of a
+        -   [<span class="toc-section-number">7.1.1</span> Setup of a
             Virtual Machine for the Linux
             OS](#setup-of-a-virtual-machine-for-the-linux-os)
-          - [<span class="toc-section-number">7.1.2</span> Booting
+        -   [<span class="toc-section-number">7.1.2</span> Booting
             Install Medium of the Xubuntu Linux
             distribution](#booting-install-medium-of-the-xubuntu-linux-distribution)
-          - [<span class="toc-section-number">7.1.3</span> Installing
+        -   [<span class="toc-section-number">7.1.3</span> Installing
             Xubuntu Linux](#installing-xubuntu-linux)
-          - [<span class="toc-section-number">7.1.4</span> Xubuntu
+        -   [<span class="toc-section-number">7.1.4</span> Xubuntu
             Desktop Basics](#xubuntu-desktop-basics-1)
-          - [<span class="toc-section-number">7.1.5</span> Installing
+        -   [<span class="toc-section-number">7.1.5</span> Installing
             VirtualBox Guest
             Additions](#installing-virtualbox-guest-additions)
-          - [<span class="toc-section-number">7.1.6</span> Installing
+        -   [<span class="toc-section-number">7.1.6</span> Installing
             the AIRTOOLS software](#installing-the-airtools-software-1)
-      - [<span class="toc-section-number">7.2</span> Sample data
+    -   [<span class="toc-section-number">7.2</span> Sample data
         project](#sample-data-project)
-          - [<span class="toc-section-number">7.2.1</span> Create
+        -   [<span class="toc-section-number">7.2.1</span> Create
             project](#create-project)
-          - [<span class="toc-section-number">7.2.2</span> Get
+        -   [<span class="toc-section-number">7.2.2</span> Get
             observations data files](#get-observations-data-files)
-          - [<span class="toc-section-number">7.2.3</span> Image
+        -   [<span class="toc-section-number">7.2.3</span> Image
             reduction](#image-reduction-1)
-          - [<span class="toc-section-number">7.2.4</span> SAOImage
+        -   [<span class="toc-section-number">7.2.4</span> SAOImage
             display](#saoimage-display)
-          - [<span class="toc-section-number">7.2.5</span> Comet
+        -   [<span class="toc-section-number">7.2.5</span> Comet
             Photometry](#comet-photometry)
-      - [<span class="toc-section-number">7.3</span> Using external USB
+    -   [<span class="toc-section-number">7.3</span> Using external USB
         storage](#using-external-usb-storage)
 
 # Introduction
@@ -132,17 +140,17 @@ e.g. *ImageMagick*, *GraphicsMagick*, *Netpbm* und *Gnuplot*. Powerful
 and extremely versatile tools well known in the professional area of
 astronomical image reduction are used as well, e.g.
 
-  - [SAOImage DS9](http://ds9.si.edu/site/Home.html): Image viewer with
+-   [SAOImage DS9](http://ds9.si.edu/site/Home.html): Image viewer with
     extensible tools for analysis and catalog access
-  - [Astromatic Software](http://www.astromatic.net) by E. Bertin: Most
+-   [Astromatic Software](http://www.astromatic.net) by E. Bertin: Most
     notably *sextractor* (Object recognitionand extraction), *scamp*
     (astrometry), *swarp* (image transformation and stacking),
     *skymaker* (modelling objects)
-  - [Stilts](http://www.starlink.ac.uk/stilts/) by M. Taylor: Analysis,
+-   [Stilts](http://www.starlink.ac.uk/stilts/) by M. Taylor: Analysis,
     filtering and transforming tabular data (e.g. FITS tables)
-  - [WCSTools](http://tdc-www.harvard.edu/software/wcstools/) by J.
+-   [WCSTools](http://tdc-www.harvard.edu/software/wcstools/) by J.
     Mink: Tools to create and manipulate coordinate system information
-  - [libvips](https://libvips.github.io/libvips/): A fast and memory
+-   [libvips](https://libvips.github.io/libvips/): A fast and memory
     efficient image processing library with bindings to many programming
     languages
 
@@ -159,7 +167,7 @@ ask any question, e.g. by contacting the author by e-mail at
 
  
 
-Good luck and clear skies\!
+Good luck and clear skies!
 
 Thomas Lehmann, Weimar (Germany)
 
@@ -173,10 +181,10 @@ computer environment on Windows (or any other operating sytem).
 The installation procedure therefore depends on the host operating
 system:
 
-  - Installation on a supported Linux distribution, which is as simple
+-   Installation on a supported Linux distribution, which is as simple
     as adding the AIRTOOLS binary package repository to your system
 
-  - Installation on a Windows computer (or OS/X or any non-supported
+-   Installation on a Windows computer (or OS/X or any non-supported
     Linux distribution) by first installing a virtualization software
     and then importing a ready to use appliance containing a Linux
     system with pre-installed AIRTOOLS software (approximately 10
@@ -197,9 +205,10 @@ where you can find the latest source code and documentation.
 Pre-compiled binary packages are build for several Debian/Ubuntu based
 Linux distributions:
 
-  - Ubuntu 20.04 “Focal”
-  - Ubuntu 22.04 “Jammy”
-  - Debian 11 “Bullseye”
+-   Ubuntu 20.04 “Focal”
+-   Ubuntu 22.04 “Jammy”
+-   Debian 11 “Bullseye”
+-   Debian 12 “Bookworm”
 
 Development is done using a recent Debian Linux distribution. Ubuntu
 packages are tested on Xubuntu LTS distributions and should work on any
@@ -207,20 +216,26 @@ Ubuntu desktop flavour (e.g. native Ubuntu, Kubuntu, Lubuntu) or other
 derivatives like LinuxMint.
 
 Adding the binary package repository of the AIRTOOLS software is done by
-adding an entry to the package managment sources list. If e.g. your
-distribution is based on Ubuntu 22.04 “Jammy” you should run the
-following commands in a terminal:
+adding an entry to the package managment sources list. This can be
+accomplished by running the following commands in a terminal:
 
-    DIST=jammy
-    REPO=http://fg-kometen.vdsastro.de/airtools/debian
+    # download and verify key:
+    SRCREPO=https://github.com/ewelot/airtools
+    wget -O airtools.asc $SRCREPO/raw/master/airtools.asc
+    md5sum airtools.asc
+    # which must show: 8b2a22750d677bd92a2ff456160e6b2e
+
+    # convert and register the key:
+    KEY=/usr/share/keyrings/airtools.gpg
+    sudo gpg --yes --output $KEY --dearmor airtools.asc
+
+    # add the package repository
+    DIST=$(lsb_release -s -c)
+    PKGREPO=http://fg-kometen.vdsastro.de/airtools/debian
     SRCFILE=/etc/apt/sources.list.d/airtools.list
-    sudo bash -c "echo deb [trusted=yes] $REPO $DIST main > $SRCFILE"
+    sudo bash -c "echo deb [signed-by=$KEY] $PKGREPO $DIST main > $SRCFILE"
 
-If you are running a different distribution, you must replace the
-setting of DIST by using your distributions code name (lower case,
-e.g. bullseye) in the command sequence above.
-
-Installation is done by invoking the following commands:
+The software installation is done by invoking the following commands:
 
     sudo apt update
     sudo apt install airtools
@@ -244,7 +259,7 @@ you can install an update by issuing the following two commands:
 
 The AIRTOOLS software can be uninstalled by running
 
-    sudo apt remove airtools*
+    sudo apt remove airtools airtools-core airtools-doc
 
 ## Installation on Windows using a Linux/AIRTOOLS appliance
 
@@ -269,13 +284,13 @@ machine or simply “guest” computer.
 
 ### Importing the Linux/AIRTOOLS appliance
 
-  - Download the [Xubuntu Linux/AIRTOOLS
+-   Download the [Xubuntu Linux/AIRTOOLS
     appliance](https://fg-kometen.vdsastro.de/airtools/vm/xubuntu-airtools.ova)
 
-  - Start the Oracle VM VirtualBox Manager, choose File/Import Appliance
+-   Start the Oracle VM VirtualBox Manager, choose File/Import Appliance
     and select the local .ova file
 
-  - Make sure there is sufficient free disk space in the virtual machine
+-   Make sure there is sufficient free disk space in the virtual machine
     base folder on your host computer. The .ova file size is only 2.5 GB
     and will expand to about 8 GB after importing. The virtual disk file
     will grow from this initial size (containing the Linux OS, AIRTOOLS
@@ -284,23 +299,23 @@ machine or simply “guest” computer.
     should make sure that you have at least that much of free disk
     space.
 
-  - Virtual machine settings were choosen to impose low hardware
+-   Virtual machine settings were choosen to impose low hardware
     requirements: it uses 3 CPU cores and 4 GB of physical RAM only.
     This is sufficient to run the AIRTOOLS software even on large images
     (e.g. 30 Mpix single band images). It is possible to adjust those
     settings at any time later on within the Oracle VirtualBox Manager.
 
-  - Start importing the appliance by clicking the button “Import”.
+-   Start importing the appliance by clicking the button “Import”.
 
 ### Starting the virtual Linux OS
 
-  - You are now ready to “boot” the virtual Linux computer from the
+-   You are now ready to “boot” the virtual Linux computer from the
     VirtualBox Manager or create a desktop shortcut (see pop-up menu
     when right-clicking on the machine name) and start from there. It
     will automatically login to the Xubuntu desktop with the user name
     “user” (password is “user” as well).
 
-  - There might be messages written at the top of the window (about
+-   There might be messages written at the top of the window (about
     mouse integration and alike) which you can savely ignore.
 
 ### Xubuntu Desktop Basics
@@ -347,8 +362,8 @@ The second tab is dedicated to the comet extraction and large aperture
 photometry tasks. Finally, a couple of handy tools are placed on a third
 tab.
 
-![The AIRTOOLS user interface tabs](images/airtools-gui.png
-"airtools-gui")
+![The AIRTOOLS user interface
+tabs](images/airtools-gui.png "airtools-gui")
 
 The lower part of the interface will display text output from any
 processing steps. There you can watch progress of the running tasks, see
@@ -374,16 +389,16 @@ name. It is good practice to use the date at the beginning of the night.
 
 The following directories are related to a project:
 
-  - Project directory:  
+-   Project directory:  
     It stores all config files of this project, results from image
     reduction and analysis (images, plots, data tables) and log files.
     After finishing a project this directory should be saved, e.g. to an
     external disk drive.
-  - Raw directory:  
+-   Raw directory:  
     Used for all the individual raw images as created by your image
     asquisition system, both light frames and calibration images related
     to the project.
-  - Temporary directory:  
+-   Temporary directory:  
     Used to store individual calibrated images of the project which are
     used by several different AIRTOOLS analysis tasks as well as
     temporary files created during those tasks. This directory may be
@@ -415,28 +430,32 @@ project and temporary directories for a second project.
 
 Further settings are:
 
-  - Observatory Site:  
-    Enter the name of your observatory site (must be single word) or
-    choose one of the items from the combobox dropdown list (it holds
-    items which are already defined in the parameter file `sites.dat`).
-  - Offset of Camera Time:  
-    Enter the time offset of your camera time with respect to UT in
-    hours. The camera time is found either in RAW images metadata of
-    DSLR cameras or in the header of your FITS images (usually stored in
-    keyword DATE-OBS).
+Observatory Site:  
+Enter the name of your observatory site (must be single word) or choose
+one of the items from the combobox dropdown list (it holds items which
+are already defined in the parameter file `sites.dat`).
+
+Offset of Camera Time:  
+Enter the time offset of your camera time with respect to UT in hours.
+The camera time is found either in RAW images metadata of DSLR cameras
+or in the header of your FITS images (usually stored in keyword
+DATE-OBS).
 
 Optional settings for observer details are used by reports of
 photometric or astrometrc measurements generated by AIRTOOLS for
 submission to COBS or MPC:
 
-  - Full Name:  
-    Observers full name.
-  - Address:  
-    Full contact address.
-  - E-Mail:  
-    Contact e-mail address.
-  - ICQ Observer ID:  
-    ICQ report observer ID as assigned by MPC (or COBS)
+Full Name:  
+Observers full name.
+
+Address:  
+Full contact address.
+
+E-Mail:  
+Contact e-mail address.
+
+ICQ Observer ID:  
+ICQ report observer ID as assigned by MPC (or COBS)
 
 ## Parameter Files
 
@@ -461,23 +480,27 @@ a simple text editor (called *mousepad*). The parameter file should have
 a few entries already, which can be used as reference when adding a new
 line for your site. The column description is as follows:
 
-  - ID:  
-    This is a unique short identifier for your site (three letters)
-  - COD:  
-    Three digit observatory code (IAU code or MPC code) published by the
-    MPC
-  - location:  
-    A unique single word for the name of your observatory location. The
-    previously used entry of the observatory site during project setup
-    must match one of these.
-  - long:  
-    Geographic longitude in degrees, negative for a location east of
-    Greenwich meridian.
-  - lat:  
-    Geographic latitude in degrees, negative for a locations south of
-    the equator.
-  - alt:  
-    Altitude of your observatory in meters.
+ID:  
+This is a unique short identifier for your site (three letters)
+
+COD:  
+Three digit observatory code (IAU code or MPC code) published by the MPC
+
+location:  
+A unique single word for the name of your observatory location. The
+previously used entry of the observatory site during project setup must
+match one of these.
+
+long:  
+Geographic longitude in degrees, negative for a location east of
+Greenwich meridian.
+
+lat:  
+Geographic latitude in degrees, negative for a locations south of the
+equator.
+
+alt:  
+Altitude of your observatory in meters.
 
 Save your edits and close the text editor.
 
@@ -487,68 +510,80 @@ and “Edit Camera Parameters”. Each combination of telescope and camera
 must have a dedicated entry. Use the existing sample entries as a
 reference for your newly added lines. The columns used are:
 
-  - tel:  
-    Unique identifier for the telescope and camera, using 3-6
-    alphanumeric characters.
-  - flen:  
-    Focal length of the telescope or camera lens in mm.
-  - aperture:  
-    Open aperture of the telescope or camera lens in mm.
-  - fratio:  
-    F-ration of the telescope or camera, that is `flen/aperture`.
-  - camera:  
-    Camera model, used for your convenience only
-  - camchip:  
-    Camera and sensor keys used in final ICQ records of a comet
-    measurement. Refer to the lists of [camera
-    keys](https://cobs.si/help/icq_list/list_camera_types/) and [sensor
-    keys](https://cobs.si/help/icq_list/list_chip_types/). Both values
-    have to be provided in a single word, using the character `/` as a
-    delimiter. If you for example have used a Canon 6D DSLR for imaging
-    then the correct entry would be `CDS/CFC`.
-  - flip:  
-    Indicate if the image data is flipped top-down (1) or not (0).
-    Essentially this describes the order and interpretation of FITS
-    data: If the FITS file is organized in such a way that the data of
-    the bottom image row comes first and that of the top-most row latest
-    then it is considered unflipped and the other way it is flipped.
-    More information about checking the image orientation is provided in
-    chapter 4.5.
-  - rot:  
-    Camera rotation with respect to the sky coordinate system. This
-    parameter is left for historical reason but not used in current
-    versions of the software and should be left undefined (using the
-    string “-”).
-  - rawbits:  
-    Original bitdepth or number of bits per pixel in a single color
-    channel. Note that at start of the image reduction the counts (ADU,
-    intensities) are scaled up to the 16-bit range where needed.
-  - satur:  
-    Saturation value. Strictly speeking the upper counts (ADU) for which
-    the camera response is linear (proportional to the illumination
-    intensity) must be provided. We need the value after scaling up to
-    the 16-bit range, e.g. if you are using a consumer DSLR where
-    response is linear up to 2/3 of its dynamic range then you should
-    enter a value of 40000 approximately.
-  - gain:  
-    Number of electrons per ADU. Use a value of 1 if it is not known.
-  - pixscale:  
-    Approximate value of the size of a (unbinned) pixel on the sky in
-    seconds of arc.
-  - magzero:  
-    Zeropoint of the non-calibrated instrumental magnitude scale. This
-    is the magnitude of a star which yields a signal of 1 count (ADU) in
-    a 1 second exposure. Initially you can use an arbitrary value but it
-    is useful to refine it to something close to the zeropoint of the
-    calibrated scale (see log output of your first photometric
-    calibration later on)
-  - ttype:  
-    Telescope type: L=reflector, R=refractor, A=photo lens
-  - ctype:  
-    Sensor type: CCD=monochrome CCD, DSLR=DSLR with native camera model
-    RAW files, CMOS=monochrome CMOS sensor, RGGB or similar pattern for
-    a one-shot-color CMOS sensor with a Bayer filter matrix in the given
-    layout (see also chapter 4.5).
+tel:  
+Unique identifier for the telescope and camera, using 3-6 alphanumeric
+characters.
+
+flen:  
+Focal length of the telescope or camera lens in mm.
+
+aperture:  
+Open aperture of the telescope or camera lens in mm.
+
+fratio:  
+F-ration of the telescope or camera, that is `flen/aperture`.
+
+camera:  
+Camera model, used for your convenience only
+
+camchip:  
+Camera and sensor keys used in final ICQ records of a comet measurement.
+Refer to the lists of [camera
+keys](https://cobs.si/help/icq_list/list_camera_types/) and [sensor
+keys](https://cobs.si/help/icq_list/list_chip_types/). Both values have
+to be provided in a single word, using the character `/` as a delimiter.
+If you for example have used a Canon 6D DSLR for imaging then the
+correct entry would be `CDS/CFC`.
+
+flip:  
+Indicate if the image data is flipped top-down (1) or not (0).
+Essentially this describes the order and interpretation of FITS data: If
+the FITS file is organized in such a way that the data of the bottom
+image row comes first and that of the top-most row latest then it is
+considered unflipped and the other way it is flipped. More information
+about checking the image orientation is provided in chapter 4.5.
+
+rot:  
+Camera rotation with respect to the sky coordinate system. This
+parameter is left for historical reason but not used in current versions
+of the software and should be left undefined (using the string “-”).
+
+rawbits:  
+Original bitdepth or number of bits per pixel in a single color channel.
+Note that at start of the image reduction the counts (ADU, intensities)
+are scaled up to the 16-bit range where needed.
+
+satur:  
+Saturation value. Strictly speeking the upper counts (ADU) for which the
+camera response is linear (proportional to the illumination intensity)
+must be provided. We need the value after scaling up to the 16-bit
+range, e.g. if you are using a consumer DSLR where response is linear up
+to 2/3 of its dynamic range then you should enter a value of 40000
+approximately.
+
+gain:  
+Number of electrons per ADU. Use a value of 1 if it is not known.
+
+pixscale:  
+Approximate value of the size of a (unbinned) pixel on the sky in
+seconds of arc.
+
+magzero:  
+Zeropoint of the non-calibrated instrumental magnitude scale. This is
+the magnitude of a star which yields a signal of 1 count (ADU) in a 1
+second exposure. Initially you can use an arbitrary value but it is
+useful to refine it to something close to the zeropoint of the
+calibrated scale (see log output of your first photometric calibration
+later on)
+
+ttype:  
+Telescope type: L=reflector, R=refractor, A=photo lens
+
+ctype:  
+Sensor type: CCD=monochrome CCD, DSLR=DSLR with native camera model RAW
+files, CMOS=monochrome CMOS sensor, RGGB or similar pattern for a
+one-shot-color CMOS sensor with a Bayer filter matrix in the given
+layout (see also chapter 4.5).
 
 Save your edits and close the text editor. After any modification you
 can choose if the new parameter file is just applied to your current
@@ -571,18 +606,18 @@ handle this file transfer between the host operating system if AIRTOOLS
 is running in a virtualized environment. We suggest using the shared
 folder feature of the VirtualBox software:
 
-  - Locate the VirtualBox menubar (above the virtual Linux Desktop) and
+-   Locate the VirtualBox menubar (above the virtual Linux Desktop) and
     select Devices/Shared Folders/Shared Folder Settings
 
-  - Click the blue folder icon in the right part of the settings window
+-   Click the blue folder icon in the right part of the settings window
     which opens the “Add Share” dialog
 
-  - Select the folder path of the host computer where you collect raw
+-   Select the folder path of the host computer where you collect raw
     images and select Auto-mount and then click OK button
 
-  - Accept the settings for the new shared folder by using the OK button
+-   Accept the settings for the new shared folder by using the OK button
 
-  - Within the virtual Linux computer start the file manager. You will
+-   Within the virtual Linux computer start the file manager. You will
     recognize the new file share in the left panel (default name starts
     with “sf\_”). Locate the raw image files on this file share
     (exported from your host computers file system) and copy them to the
@@ -592,9 +627,9 @@ Refer to the instructions in the [appendix](#using-external-usb-storage)
 if your raw images reside on an external USB disk.
 
 You are now going to start the first AIRTOOLS task. By pressing the
-“Extract basic image info” the program reads meta data of all raw
-image files. At the end an editor window pops up which shows an overview
-of relevant data for each image. Please note the column which holds a
+“Extract basic image info” the program reads meta data of all raw image
+files. At the end an editor window pops up which shows an overview of
+relevant data for each image. Please note the column which holds a
 4-digit image number associated with each image (first column if images
 are in FITS format, second column if images are RAW files from DSLR).
 Individual images are referenced by this number throughout the reduction
@@ -664,12 +699,12 @@ couple of dark exposures with a given exposure time or a bracketed
 sequence of exposures of a comet. All image sets of the project are
 described in a parameter file called `set.dat` which must be created by
 yourself. From the AIRTOOLS application’s main menu select “Edit” and
-“Edit Image Set Definitions”. Here is an example of a typical file
-which can be used for reference:
+“Edit Image Set Definitions”. Here is an example of a typical file which
+can be used for reference:
 
     # 230216
     # Skygems Hakos, Namibia, FSQ106, Moravian C3-61000EC PRO, ts=0
-    
+
     # UT
     # h:m set  target type texp n1 n2   nref dark flat tel
     04:23 sk01 skyflat  f   9 0001 0012 -    dk01 -    SHF
@@ -683,49 +718,57 @@ considered a comment. Each line (uncommented and non-empty) defines an
 image set using at least 11 fields (words separated by spaces) which
 are:
 
-  - h:m  
-    The local time (or UT if you prefer) at start of imaging. This is
-    for personel reference only and not used at all by the program.
-  - set:  
-    The name given to the image set. We do recommend the following
-    scheme: Use the first two letters to denote the image type, where
-    “dk” is for darks (and bias exposures) and “sk” for sky flats,
-    “co” might be used for a comet observation. Any other deep sky
-    target could use two (or three) letters from the constellation it
-    belongs to. After the letters use a two-digit running number, so the
-    image set of the first comet target would be named `co01`, the
-    second `co02` and so on. The set name is used in many places later
-    on, e.g. in the file names of computed stacks and other result
-    files. Therefore a short name using four characters only is
-    recommended.
-  - target:  
-    Short name of the target observed (up to 8 characters). For comets a
-    compact name has to be used, e.g. 2017K2 is recognized as C/2017 K2
-    (PANSTARRS).
-  - type:  
-    Type of images (1 character): d=dark/bias, f=flat, o=lights,
-    a=addition (continuation) of a previously defined image set. If you
-    for some reason would like to exclude a series of images from the
-    analysis (e.g. a focus sequence) but keep the information about
-    those files for your record then use the character `-` in place of
-    the image type.
-  - texp:  
-    Exposure time of a single exposure in seconds.
-  - n1:  
-    Number of the first image of the set.
-  - n2:  
-    Number of the last image of the set.
-  - nref:  
-    Number of the image which is used as a reference image for stacking,
-    typically it should be close to the middle of the bracketed
-    sequence. Not used for darks and flats.
-  - dark:  
-    Name of the master dark (image set name) used for calibration.
-  - flat:  
-    Name of the master flat used for calibration.
-  - tel:  
-    Identifier of the instrument (telescope/camera) used. This must
-    match a valid entry in `camera.dat`.
+h:m:  
+The local time (or UT if you prefer) at start of imaging. This is for
+personel reference only and not used at all by the program.
+
+set:  
+The name given to the image set. We do recommend the following scheme:
+Use the first two letters to denote the image type, where “dk” is for
+darks (and bias exposures) and “sk” for sky flats, “co” might be used
+for a comet observation. Any other deep sky target could use two (or
+three) letters from the constellation it belongs to. After the letters
+use a two-digit running number, so the image set of the first comet
+target would be named `co01`, the second `co02` and so on. The set name
+is used in many places later on, e.g. in the file names of computed
+stacks and other result files. Therefore a short name using four
+characters only is recommended.
+
+target:  
+Short name of the target observed (up to 8 characters). For comets a
+compact name has to be used, e.g. 2017K2 is recognized as C/2017 K2
+(PANSTARRS).
+
+type:  
+Type of images (1 character): d=dark/bias, f=flat, o=lights, a=addition
+(continuation) of a previously defined image set. If you for some reason
+would like to exclude a series of images from the analysis (e.g. a focus
+sequence) but keep the information about those files for your record
+then use the character `-` in place of the image type.
+
+texp:  
+Exposure time of a single exposure in seconds.
+
+n1:  
+Number of the first image of the set.
+
+n2:  
+Number of the last image of the set.
+
+nref:  
+Number of the image which is used as a reference image for stacking,
+typically it should be close to the middle of the bracketed sequence.
+Not used for darks and flats.
+
+dark:  
+Name of the master dark (image set name) used for calibration.
+
+flat:  
+Name of the master flat used for calibration.
+
+tel:  
+Identifier of the instrument (telescope/camera) used. This must match a
+valid entry in `camera.dat`.
 
 A note about master calibration images. It is not required and not
 convenient to capture darks and flats in every night. After you have
@@ -853,16 +896,16 @@ of variation in the sky background has been added to the processing
 pipeline. At first, a downsized background map is created for each image
 and the average intensity level is plotted.
 
-![Background intensity (3 image sets)](images/gsog.bg.png
-"Background intensity")
+![Background intensity (3 image
+sets)](images/gsog.bg.png "Background intensity")
 
 Then an average background image is created for each image set as
 reference and difference images are created for each individual
 exposure. A mosaic of those thumbnail difference images is finally
 displayed.
 
-![Background variation (2 different image sets)](images/bgvar.png
-"Background variation")
+![Background variation (2 different image
+sets)](images/bgvar.png "Background variation")
 
 ## Image Registration
 
@@ -899,8 +942,8 @@ several diagnostic plots are created to show residuals from catalog
 position in different axes, a distortion map showing pixel scale
 variation and a sky chart with detected sources.
 
-![Distortion map (8" Newton f/4, Pentax K-5II)](images/distortion2.png
-"Distortion map")
+![Distortion map (8” Newton f/4, Pentax
+K-5II)](images/distortion2.png "Distortion map")
 
 With the help of the astrometric solution and comet ephemeris data
 fetched from MPC it is possible to predict the comet motion between
@@ -945,8 +988,7 @@ At first you need to install the VirtualBox software as described in
 Start the Oracle VirtualBox Manager, if not running already. Click on
 the “New” button and fill in the name of the new VM, e.g. xubuntu-vm.
 Depending on the name you have choosen you might have to select
-Type=“Linux” and Version=“Ubuntu (64-bit)”. Continue by pressing
-“Next”.
+Type=“Linux” and Version=“Ubuntu (64-bit)”. Continue by pressing “Next”.
 
 Set the memory size to \>=2 GB (recommended 4 GB or up to 75% of
 physical RAM) and press “Next”.
@@ -963,10 +1005,10 @@ virtual machine is created.
 It is recommended to tweak some additional parameters for improved
 performance. Click the “Settings” button to access the following tabs:
 
-  - Tab System/Processor: increase number of CPU to \>=2 (up to number
+-   Tab System/Processor: increase number of CPU to \>=2 (up to number
     of physical cores)
-  - Tab Display/Screen: increase Memory to 64 MB
-  - Tab USB: choose USB 3.0 Controller
+-   Tab Display/Screen: increase Memory to 64 MB
+-   Tab USB: choose USB 3.0 Controller
 
 Finally you should create a desktop icon to directly launch the virtual
 machine. Locate the name of the virtual machine on the left side of the
@@ -1021,9 +1063,9 @@ the (virtual) disk by the “Continue” button.
 While the installation process has already started in the background you
 are asked to provide a few additional informations:
 
-  - “Where are you”: Select your time zone by clicking close to your
+-   “Where are you”: Select your time zone by clicking close to your
     geographic location
-  - “Who are you”: Fill in your (full) name, a computer name, username
+-   “Who are you”: Fill in your (full) name, a computer name, username
     and user password. Note that choosing “xubuntu” for the name of the
     virtual computer is allowed, despite the given warning message. You
     might toggle the “Log in automatically” radio button for the sake of
@@ -1075,22 +1117,22 @@ performance and usability.
 
 For installation you must
 
-  - Boot the guest OS.
-  - Go to the VirtualBox guest menu item “Devices” and press “Install
+-   Boot the guest OS.
+-   Go to the VirtualBox guest menu item “Devices” and press “Install
     Guest Additions CD Image”. A new CD icon appears on the Linux
     desktop and a few seconds later the Linux file manager is showing
     the contents of the Guest Additions virtual CD.
-  - Open a terminal window using “File” menu of the file manager and
+-   Open a terminal window using “File” menu of the file manager and
     select “Open Terminal Here”.
-  - From the command line of the terminal run the following commands
+-   From the command line of the terminal run the following commands
     (you will be asked to provide your password): `sudo apt-get update`
     and `sudo apt-get install build-essential`
-  - Start installation by entering the command: `sudo bash
-    VBoxLinuxAdditions.run`
-  - If installation has finished close the terminal window and eject the
+-   Start installation by entering the command:
+    `sudo bash VBoxLinuxAdditions.run`
+-   If installation has finished close the terminal window and eject the
     virtual CD by using the eject button (caret-up) next to the CD entry
     in the file manager.
-  - Finally you must reboot the Linux guest.
+-   Finally you must reboot the Linux guest.
 
 After a restart of the Linux virtual machine you may adjust the guest
 window size and effectively the screen size of the Linux desktop as
@@ -1114,18 +1156,18 @@ installed.
 
 ### Create project
 
-  - Start Airtools (double-click the icon)
+-   Start Airtools (double-click the icon)
 
-  - If this is the first start of the application then you are prompted
+-   If this is the first start of the application then you are prompted
     with the Airtools setup dialog. You can accept default directories.
 
-  - Create a new project choosing 2023 February 16th as the date of
+-   Create a new project choosing 2023 February 16th as the date of
     observations by using the calendar date picker and the observatory
     site “Hakos” from the appropriate dropdown list.
 
-  - Optionally fill in your observer details
+-   Optionally fill in your observer details
 
-  - Press “Apply”
+-   Press “Apply”
 
 ### Get observations data files
 
@@ -1136,11 +1178,11 @@ data files. For other methods of data transfer (e.g. using the
 VirtualBox File Manager or using external USB storage) please refer to
 the VirtualBox documentation.
 
-  - Use the provided Firefox browser from the applications menu and
+-   Use the provided Firefox browser from the applications menu and
     download the [sample data
     archive](https://fg-kometen.vdsastro.de/airtools/testdata/230216_shf_raw.zip)
 
-  - Open the archive and extract files and directories into the raw
+-   Open the archive and extract files and directories into the raw
     files folder corresponding to your project. After extraction the raw
     folder will look like the following screenshot when using default
     directory names during initial setup.
@@ -1152,18 +1194,18 @@ the VirtualBox documentation.
 The “Image Reduction” tab of the AIRTOOLS graphical user interface
 contains all tasks to calibrate and stack images automatically.
 
-  - Select the first task “Extract basic image info” and run it via the
+-   Select the first task “Extract basic image info” and run it via the
     button “Start”
 
-  - Next you need to allocate images to “image sets” of darks, flats and
+-   Next you need to allocate images to “image sets” of darks, flats and
     lights: from the menu choose Edit/Edit Image Set Definitions, create
     an empty file set.dat and copy and paste the following contents:
 
-<!-- end list -->
+<!-- -->
 
     # 230216
     # Skygems Hakos, Namibia, FSQ106, Moravian C3-61000EC PRO, ts=0
-    
+
     # UT
     # h:m set  target type texp n1 n2   nref dark flat tel
     04:23 sk01 skyflat  f   9 0001 0012 -    dk01 -    SHF
@@ -1172,36 +1214,36 @@ contains all tasks to calibrate and stack images automatically.
     04:44 dk02 dark     d 120 0031 0042 -    -    -    SHF
     18:43 co02 2017K2   o 120 0043 0047 0045 dk02 sk01 SHF # 230221
 
-  - Check for a valid entry of SHF in camera.dat (Edit/Edit Camera
+-   Check for a valid entry of SHF in camera.dat (Edit/Edit Camera
     Parameters),
 
-  - Proceed with the image reduction by running every single task in the
+-   Proceed with the image reduction by running every single task in the
     given order until the comet stack is created: select a task,
     activate all processing options (Process …, View …, Show …) and
     press the “Start” button
 
-  - Evaluate results, e.g. new plots and images displayed by each task
+-   Evaluate results, e.g. new plots and images displayed by each task
 
-  - Note: It is allowed to activate and execute several/all tasks in a
+-   Note: It is allowed to activate and execute several/all tasks in a
     single run but it is not recommended for the beginner.
 
 ### SAOImage display
 
-  - Get familiar with the SAOImage display application and examine the
+-   Get familiar with the SAOImage display application and examine the
     stacked images:
-      - use right mouse button for brightness/contrast adjustment
-      - use middle mouse button for pan, scroll wheel for zoom
-      - use left mouse to place/move/edit regions
-      - use tab to cycle through several loaded images (frames)
-  - Also try menuitems from the Zoom, Scale and Region menues and
+    -   use right mouse button for brightness/contrast adjustment
+    -   use middle mouse button for pan, scroll wheel for zoom
+    -   use left mouse to place/move/edit regions
+    -   use tab to cycle through several loaded images (frames)
+-   Also try menuitems from the Zoom, Scale and Region menues and
     buttons from the two button bars above the image (e.g. region/save)
 
 ### Comet Photometry
 
-  - Run every single task in the given order (by clicking the named
+-   Run every single task in the given order (by clicking the named
     button)
 
-  - Many tasks provide a window to adjust user settings whose default
+-   Many tasks provide a window to adjust user settings whose default
     settings are appropriate in most cases
 
 ## Using external USB storage
@@ -1211,12 +1253,12 @@ to the virtual Linux operating system or vice versa.
 
 The USB device must be plugged in to an USB port of the physical
 computer. Then, from the running Linux virtual machine locate the
-“Devices” menu entry on the VirtualBox VM menu at the top of the
-window. Select “USB” and you will see a list of USB devices from which
-you need to identify and select the USB disk. After a few seconds a new
-USB disk icon will apear on the virtual Linux desktop and little after
-the file manager window pops up. Use the common copy-and-paste feature
-to copy files between the Linux file system and USB device.
+“Devices” menu entry on the VirtualBox VM menu at the top of the window.
+Select “USB” and you will see a list of USB devices from which you need
+to identify and select the USB disk. After a few seconds a new USB disk
+icon will apear on the virtual Linux desktop and little after the file
+manager window pops up. Use the common copy-and-paste feature to copy
+files between the Linux file system and USB device.
 
 After the file transfer has finished you can disconnect the USB device
 by pushing the eject button next to the USB device entry of the Linux

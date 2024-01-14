@@ -7,312 +7,917 @@
   <meta name="author" content="Thomas Lehmann" />
   <title>Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v5.0)</title>
   <style>
+    html {
+      line-height: 1.5;
+      font-family: Georgia, serif;
+      font-size: 20px;
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 1em;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, 'Lucida Console', Consolas, monospace;
+      font-size: 85%;
+      margin: 0;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      background-color: #1a1a1a;
+      border: none;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
     code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
     span.underline{text-decoration: underline;}
     div.column{display: inline-block; vertical-align: top; width: 50%;}
     div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
     ul.task-list{list-style: none;}
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
   </style>
 </head>
 <body>
 <header id="title-block-header">
-<h1 class="title">Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v5.0)</h1>
+<h1 class="title">Astronomical Image Reduction and Comet Photometry with
+AIRTOOLS (v5.0)</h1>
 <p class="author">Thomas Lehmann</p>
 <p class="date">Draft, May 2023</p>
 </header>
 <nav id="TOC" role="doc-toc">
 <ul>
-<li><a href="#introduction"><span class="toc-section-number">1</span> Introduction</a></li>
-<li><a href="#installation"><span class="toc-section-number">2</span> Installation</a>
+<li><a href="#introduction"><span class="toc-section-number">1</span>
+Introduction</a></li>
+<li><a href="#installation"><span class="toc-section-number">2</span>
+Installation</a>
 <ul>
-<li><a href="#installation-on-linux"><span class="toc-section-number">2.1</span> Installation on Linux</a>
+<li><a href="#installation-on-linux"><span
+class="toc-section-number">2.1</span> Installation on Linux</a>
 <ul>
-<li><a href="#installing-the-airtools-software"><span class="toc-section-number">2.1.1</span> Installing the AIRTOOLS software</a></li>
-<li><a href="#updating-the-airtools-software"><span class="toc-section-number">2.1.2</span> Updating the AIRTOOLS software</a></li>
-<li><a href="#uninstalling-the-airtools-software"><span class="toc-section-number">2.1.3</span> Uninstalling the AIRTOOLS software</a></li>
+<li><a href="#installing-the-airtools-software"><span
+class="toc-section-number">2.1.1</span> Installing the AIRTOOLS
+software</a></li>
+<li><a href="#updating-the-airtools-software"><span
+class="toc-section-number">2.1.2</span> Updating the AIRTOOLS
+software</a></li>
+<li><a href="#uninstalling-the-airtools-software"><span
+class="toc-section-number">2.1.3</span> Uninstalling the AIRTOOLS
+software</a></li>
 </ul></li>
-<li><a href="#installation-on-windows-using-a-linuxairtools-appliance"><span class="toc-section-number">2.2</span> Installation on Windows using a Linux/AIRTOOLS appliance</a>
+<li><a
+href="#installation-on-windows-using-a-linuxairtools-appliance"><span
+class="toc-section-number">2.2</span> Installation on Windows using a
+Linux/AIRTOOLS appliance</a>
 <ul>
-<li><a href="#installing-oracle-virtualbox"><span class="toc-section-number">2.2.1</span> Installing Oracle VirtualBox</a></li>
-<li><a href="#importing-the-linuxairtools-appliance"><span class="toc-section-number">2.2.2</span> Importing the Linux/AIRTOOLS appliance</a></li>
-<li><a href="#starting-the-virtual-linux-os"><span class="toc-section-number">2.2.3</span> Starting the virtual Linux OS</a></li>
-<li><a href="#xubuntu-desktop-basics"><span class="toc-section-number">2.2.4</span> Xubuntu Desktop Basics</a></li>
+<li><a href="#installing-oracle-virtualbox"><span
+class="toc-section-number">2.2.1</span> Installing Oracle
+VirtualBox</a></li>
+<li><a href="#importing-the-linuxairtools-appliance"><span
+class="toc-section-number">2.2.2</span> Importing the Linux/AIRTOOLS
+appliance</a></li>
+<li><a href="#starting-the-virtual-linux-os"><span
+class="toc-section-number">2.2.3</span> Starting the virtual Linux
+OS</a></li>
+<li><a href="#xubuntu-desktop-basics"><span
+class="toc-section-number">2.2.4</span> Xubuntu Desktop Basics</a></li>
 </ul></li>
 </ul></li>
-<li><a href="#the-airtools-graphical-user-interface"><span class="toc-section-number">3</span> The AIRTOOLS Graphical User Interface</a></li>
-<li><a href="#the-first-airtools-project"><span class="toc-section-number">4</span> The first AIRTOOLS Project</a>
+<li><a href="#the-airtools-graphical-user-interface"><span
+class="toc-section-number">3</span> The AIRTOOLS Graphical User
+Interface</a></li>
+<li><a href="#the-first-airtools-project"><span
+class="toc-section-number">4</span> The first AIRTOOLS Project</a>
 <ul>
-<li><a href="#what-is-a-project"><span class="toc-section-number">4.1</span> What is a Project?</a></li>
-<li><a href="#setting-up-the-airtools-software"><span class="toc-section-number">4.2</span> Setting up the AIRTOOLS software</a></li>
-<li><a href="#setting-up-the-first-project"><span class="toc-section-number">4.3</span> Setting up the first Project</a></li>
-<li><a href="#parameter-files"><span class="toc-section-number">4.4</span> Parameter Files</a></li>
-<li><a href="#raw-images"><span class="toc-section-number">4.5</span> Raw Images</a></li>
-<li><a href="#image-orientation-flip-status-and-bayer-pattern"><span class="toc-section-number">4.6</span> Image orientation, flip status and Bayer pattern</a></li>
-<li><a href="#image-set-definition"><span class="toc-section-number">4.7</span> Image Set Definition</a></li>
+<li><a href="#what-is-a-project"><span
+class="toc-section-number">4.1</span> What is a Project?</a></li>
+<li><a href="#setting-up-the-airtools-software"><span
+class="toc-section-number">4.2</span> Setting up the AIRTOOLS
+software</a></li>
+<li><a href="#setting-up-the-first-project"><span
+class="toc-section-number">4.3</span> Setting up the first
+Project</a></li>
+<li><a href="#parameter-files"><span
+class="toc-section-number">4.4</span> Parameter Files</a></li>
+<li><a href="#raw-images"><span class="toc-section-number">4.5</span>
+Raw Images</a></li>
+<li><a href="#image-orientation-flip-status-and-bayer-pattern"><span
+class="toc-section-number">4.6</span> Image orientation, flip status and
+Bayer pattern</a></li>
+<li><a href="#image-set-definition"><span
+class="toc-section-number">4.7</span> Image Set Definition</a></li>
 </ul></li>
-<li><a href="#image-reduction"><span class="toc-section-number">5</span> Image Reduction</a>
+<li><a href="#image-reduction"><span class="toc-section-number">5</span>
+Image Reduction</a>
 <ul>
-<li><a href="#master-darks-and-flats"><span class="toc-section-number">5.1</span> Master Darks and Flats</a></li>
-<li><a href="#bad-pixel-masks"><span class="toc-section-number">5.2</span> Bad Pixel Masks</a></li>
-<li><a href="#image-calibration"><span class="toc-section-number">5.3</span> Image Calibration</a></li>
-<li><a href="#background-evaluation"><span class="toc-section-number">5.4</span> Background evaluation</a></li>
-<li><a href="#image-registration"><span class="toc-section-number">5.5</span> Image Registration</a></li>
-<li><a href="#stacking-and-astrometric-calibration"><span class="toc-section-number">5.6</span> Stacking and Astrometric calibration</a></li>
+<li><a href="#master-darks-and-flats"><span
+class="toc-section-number">5.1</span> Master Darks and Flats</a></li>
+<li><a href="#bad-pixel-masks"><span
+class="toc-section-number">5.2</span> Bad Pixel Masks</a></li>
+<li><a href="#image-calibration"><span
+class="toc-section-number">5.3</span> Image Calibration</a></li>
+<li><a href="#background-evaluation"><span
+class="toc-section-number">5.4</span> Background evaluation</a></li>
+<li><a href="#image-registration"><span
+class="toc-section-number">5.5</span> Image Registration</a></li>
+<li><a href="#stacking-and-astrometric-calibration"><span
+class="toc-section-number">5.6</span> Stacking and Astrometric
+calibration</a></li>
 </ul></li>
-<li><a href="#large-aperture-comet-photometry"><span class="toc-section-number">6</span> Large Aperture Comet Photometry</a>
+<li><a href="#large-aperture-comet-photometry"><span
+class="toc-section-number">6</span> Large Aperture Comet Photometry</a>
 <ul>
-<li><a href="#comet-observation"><span class="toc-section-number">6.1</span> Comet Observation</a></li>
-<li><a href="#background-gradient-removal"><span class="toc-section-number">6.2</span> Background Gradient Removal</a></li>
-<li><a href="#psf-extraction-and-star-removal"><span class="toc-section-number">6.3</span> PSF Extraction and Star Removal</a></li>
-<li><a href="#comet-extraction-and-measuring-the-comet"><span class="toc-section-number">6.4</span> Comet Extraction and Measuring the Comet</a></li>
-<li><a href="#photometric-calibration"><span class="toc-section-number">6.5</span> Photometric Calibration</a></li>
+<li><a href="#comet-observation"><span
+class="toc-section-number">6.1</span> Comet Observation</a></li>
+<li><a href="#background-gradient-removal"><span
+class="toc-section-number">6.2</span> Background Gradient
+Removal</a></li>
+<li><a href="#psf-extraction-and-star-removal"><span
+class="toc-section-number">6.3</span> PSF Extraction and Star
+Removal</a></li>
+<li><a href="#comet-extraction-and-measuring-the-comet"><span
+class="toc-section-number">6.4</span> Comet Extraction and Measuring the
+Comet</a></li>
+<li><a href="#photometric-calibration"><span
+class="toc-section-number">6.5</span> Photometric Calibration</a></li>
 </ul></li>
-<li><a href="#appendix"><span class="toc-section-number">7</span> Appendix</a>
+<li><a href="#appendix"><span class="toc-section-number">7</span>
+Appendix</a>
 <ul>
-<li><a href="#custom-installation-on-windows"><span class="toc-section-number">7.1</span> Custom Installation on Windows</a>
+<li><a href="#custom-installation-on-windows"><span
+class="toc-section-number">7.1</span> Custom Installation on Windows</a>
 <ul>
-<li><a href="#setup-of-a-virtual-machine-for-the-linux-os"><span class="toc-section-number">7.1.1</span> Setup of a Virtual Machine for the Linux OS</a></li>
-<li><a href="#booting-install-medium-of-the-xubuntu-linux-distribution"><span class="toc-section-number">7.1.2</span> Booting Install Medium of the Xubuntu Linux distribution</a></li>
-<li><a href="#installing-xubuntu-linux"><span class="toc-section-number">7.1.3</span> Installing Xubuntu Linux</a></li>
-<li><a href="#xubuntu-desktop-basics-1"><span class="toc-section-number">7.1.4</span> Xubuntu Desktop Basics</a></li>
-<li><a href="#installing-virtualbox-guest-additions"><span class="toc-section-number">7.1.5</span> Installing VirtualBox Guest Additions</a></li>
-<li><a href="#installing-the-airtools-software-1"><span class="toc-section-number">7.1.6</span> Installing the AIRTOOLS software</a></li>
+<li><a href="#setup-of-a-virtual-machine-for-the-linux-os"><span
+class="toc-section-number">7.1.1</span> Setup of a Virtual Machine for
+the Linux OS</a></li>
+<li><a
+href="#booting-install-medium-of-the-xubuntu-linux-distribution"><span
+class="toc-section-number">7.1.2</span> Booting Install Medium of the
+Xubuntu Linux distribution</a></li>
+<li><a href="#installing-xubuntu-linux"><span
+class="toc-section-number">7.1.3</span> Installing Xubuntu
+Linux</a></li>
+<li><a href="#xubuntu-desktop-basics-1"><span
+class="toc-section-number">7.1.4</span> Xubuntu Desktop Basics</a></li>
+<li><a href="#installing-virtualbox-guest-additions"><span
+class="toc-section-number">7.1.5</span> Installing VirtualBox Guest
+Additions</a></li>
+<li><a href="#installing-the-airtools-software-1"><span
+class="toc-section-number">7.1.6</span> Installing the AIRTOOLS
+software</a></li>
 </ul></li>
-<li><a href="#sample-data-project"><span class="toc-section-number">7.2</span> Sample data project</a>
+<li><a href="#sample-data-project"><span
+class="toc-section-number">7.2</span> Sample data project</a>
 <ul>
-<li><a href="#create-project"><span class="toc-section-number">7.2.1</span> Create project</a></li>
-<li><a href="#get-observations-data-files"><span class="toc-section-number">7.2.2</span> Get observations data files</a></li>
-<li><a href="#image-reduction-1"><span class="toc-section-number">7.2.3</span> Image reduction</a></li>
-<li><a href="#saoimage-display"><span class="toc-section-number">7.2.4</span> SAOImage display</a></li>
-<li><a href="#comet-photometry"><span class="toc-section-number">7.2.5</span> Comet Photometry</a></li>
+<li><a href="#create-project"><span
+class="toc-section-number">7.2.1</span> Create project</a></li>
+<li><a href="#get-observations-data-files"><span
+class="toc-section-number">7.2.2</span> Get observations data
+files</a></li>
+<li><a href="#image-reduction-1"><span
+class="toc-section-number">7.2.3</span> Image reduction</a></li>
+<li><a href="#saoimage-display"><span
+class="toc-section-number">7.2.4</span> SAOImage display</a></li>
+<li><a href="#comet-photometry"><span
+class="toc-section-number">7.2.5</span> Comet Photometry</a></li>
 </ul></li>
-<li><a href="#using-external-usb-storage"><span class="toc-section-number">7.3</span> Using external USB storage</a></li>
+<li><a href="#using-external-usb-storage"><span
+class="toc-section-number">7.3</span> Using external USB
+storage</a></li>
 </ul></li>
 </ul>
 </nav>
-<h1 data-number="1" id="introduction"><span class="header-section-number">1</span> Introduction</h1>
-<p>The AIRTOOLS software - or <strong>A</strong>stronomical <strong>I</strong>mage <strong>R</strong>eduction <strong>TOOLS</strong>et - has been developed for the purpose of calibrating and analyzing images of astronomical objects captured by CCD or DSLR cameras. The software provides a large number of functions for basic image calibration (e.g. bias-, dark-, flatfield calibration, raw development of bayered images), for automated object recognition, registration and stacking as well as automated astrometric and photometric calibration routines.</p>
-<p>Moreover specialized tools have been developed to process comet observations and measure the total coma brightness at an accuracy similar to that of visual observers or better. The invention of “Large Aperture Photometry” should allow to complement visual observations, extending to fainter magnitude limits (due to long exposures) with additional benefits of being independent from the observer and added reproducibility of measurement results.</p>
-<p>Recently a graphical user interface has been added to make the software more user friendly. It tries to derive suitable parameters for the underlying functions and programs to hide as much complexity as possible from the average user. Internally a large number of open source software programs for image analysis and visualization is used, e.g. <em>ImageMagick</em>, <em>GraphicsMagick</em>, <em>Netpbm</em> und <em>Gnuplot</em>. Powerful and extremely versatile tools well known in the professional area of astronomical image reduction are used as well, e.g.</p>
+<h1 data-number="1" id="introduction"><span
+class="header-section-number">1</span> Introduction</h1>
+<p>The AIRTOOLS software - or <strong>A</strong>stronomical
+<strong>I</strong>mage <strong>R</strong>eduction
+<strong>TOOLS</strong>et - has been developed for the purpose of
+calibrating and analyzing images of astronomical objects captured by CCD
+or DSLR cameras. The software provides a large number of functions for
+basic image calibration (e.g. bias-, dark-, flatfield calibration, raw
+development of bayered images), for automated object recognition,
+registration and stacking as well as automated astrometric and
+photometric calibration routines.</p>
+<p>Moreover specialized tools have been developed to process comet
+observations and measure the total coma brightness at an accuracy
+similar to that of visual observers or better. The invention of “Large
+Aperture Photometry” should allow to complement visual observations,
+extending to fainter magnitude limits (due to long exposures) with
+additional benefits of being independent from the observer and added
+reproducibility of measurement results.</p>
+<p>Recently a graphical user interface has been added to make the
+software more user friendly. It tries to derive suitable parameters for
+the underlying functions and programs to hide as much complexity as
+possible from the average user. Internally a large number of open source
+software programs for image analysis and visualization is used,
+e.g. <em>ImageMagick</em>, <em>GraphicsMagick</em>, <em>Netpbm</em> und
+<em>Gnuplot</em>. Powerful and extremely versatile tools well known in
+the professional area of astronomical image reduction are used as well,
+e.g.</p>
 <ul>
-<li><a href="http://ds9.si.edu/site/Home.html">SAOImage DS9</a>: Image viewer with extensible tools for analysis and catalog access</li>
-<li><a href="http://www.astromatic.net">Astromatic Software</a> by E. Bertin: Most notably <em>sextractor</em> (Object recognitionand extraction), <em>scamp</em> (astrometry), <em>swarp</em> (image transformation and stacking), <em>skymaker</em> (modelling objects)</li>
-<li><a href="http://www.starlink.ac.uk/stilts/">Stilts</a> by M. Taylor: Analysis, filtering and transforming tabular data (e.g. FITS tables)</li>
-<li><a href="http://tdc-www.harvard.edu/software/wcstools/">WCSTools</a> by J. Mink: Tools to create and manipulate coordinate system information</li>
-<li><a href="https://libvips.github.io/libvips/">libvips</a>: A fast and memory efficient image processing library with bindings to many programming languages</li>
+<li><a href="http://ds9.si.edu/site/Home.html">SAOImage DS9</a>: Image
+viewer with extensible tools for analysis and catalog access</li>
+<li><a href="http://www.astromatic.net">Astromatic Software</a> by E.
+Bertin: Most notably <em>sextractor</em> (Object recognitionand
+extraction), <em>scamp</em> (astrometry), <em>swarp</em> (image
+transformation and stacking), <em>skymaker</em> (modelling objects)</li>
+<li><a href="http://www.starlink.ac.uk/stilts/">Stilts</a> by M. Taylor:
+Analysis, filtering and transforming tabular data (e.g. FITS
+tables)</li>
+<li><a href="http://tdc-www.harvard.edu/software/wcstools/">WCSTools</a>
+by J. Mink: Tools to create and manipulate coordinate system
+information</li>
+<li><a href="https://libvips.github.io/libvips/">libvips</a>: A fast and
+memory efficient image processing library with bindings to many
+programming languages</li>
 </ul>
-<p>The AIRTOOLS software is freely available. The project - including source code - is hosted at <a href="https://github.com/ewelot/airtools" class="uri">https://github.com/ewelot/airtools</a>. Pre-compiled binary packages are provided for a few Linux distributions. Users of other operating systems can use the software in a virtualized environment.</p>
-<p>The AIRTOOLS software has been developed in the hope to proove useful. Its development relies on your feedback, so please do not hesitate to ask any question, e.g. by contacting the author by e-mail at <a href="mailto:t.lehmann@mailbox.org" class="email">t.lehmann@mailbox.org</a>. As well, any suggestion or comment is welcome.</p>
+<p>The AIRTOOLS software is freely available. The project - including
+source code - is hosted at <a href="https://github.com/ewelot/airtools"
+class="uri">https://github.com/ewelot/airtools</a>. Pre-compiled binary
+packages are provided for a few Linux distributions. Users of other
+operating systems can use the software in a virtualized environment.</p>
+<p>The AIRTOOLS software has been developed in the hope to proove
+useful. Its development relies on your feedback, so please do not
+hesitate to ask any question, e.g. by contacting the author by e-mail at
+<a href="mailto:t.lehmann@mailbox.org"
+class="email">t.lehmann@mailbox.org</a>. As well, any suggestion or
+comment is welcome.</p>
 <p> </p>
 <p>Good luck and clear skies!</p>
 <p>Thomas Lehmann, Weimar (Germany)</p>
-<h1 data-number="2" id="installation"><span class="header-section-number">2</span> Installation</h1>
-<p>The AIRTOOLS software is running on a Linux operating system, which is not commonly used in the amateur astronomy community. Nevertheless there exist well established solutions to use the software in a virtualized computer environment on Windows (or any other operating sytem).</p>
-<p>The installation procedure therefore depends on the host operating system:</p>
+<h1 data-number="2" id="installation"><span
+class="header-section-number">2</span> Installation</h1>
+<p>The AIRTOOLS software is running on a Linux operating system, which
+is not commonly used in the amateur astronomy community. Nevertheless
+there exist well established solutions to use the software in a
+virtualized computer environment on Windows (or any other operating
+sytem).</p>
+<p>The installation procedure therefore depends on the host operating
+system:</p>
 <ul>
-<li><p>Installation on a supported Linux distribution, which is as simple as adding the AIRTOOLS binary package repository to your system</p></li>
-<li><p>Installation on a Windows computer (or OS/X or any non-supported Linux distribution) by first installing a virtualization software and then importing a ready to use appliance containing a Linux system with pre-installed AIRTOOLS software (approximately 10 minutes of work)</p></li>
+<li><p>Installation on a supported Linux distribution, which is as
+simple as adding the AIRTOOLS binary package repository to your
+system</p></li>
+<li><p>Installation on a Windows computer (or OS/X or any non-supported
+Linux distribution) by first installing a virtualization software and
+then importing a ready to use appliance containing a Linux system with
+pre-installed AIRTOOLS software (approximately 10 minutes of
+work)</p></li>
 </ul>
-<p>Another more elaborated custom installation on Windows can be done by first installing a virtualization software and then installing a custom virtual Linux operating system and finally installing the AIRTOOLS software within this Linux OS. This procedure is recommended for more advanced users only and described in detail in the appendix.</p>
-<h2 data-number="2.1" id="installation-on-linux"><span class="header-section-number">2.1</span> Installation on Linux</h2>
-<h3 data-number="2.1.1" id="installing-the-airtools-software"><span class="header-section-number">2.1.1</span> Installing the AIRTOOLS software</h3>
-<p>The AIRTOOLS project is hosted at <a href="https://github.com/ewelot/airtools" class="uri">https://github.com/ewelot/airtools</a> where you can find the latest source code and documentation. Pre-compiled binary packages are build for several Debian/Ubuntu based Linux distributions:</p>
+<p>Another more elaborated custom installation on Windows can be done by
+first installing a virtualization software and then installing a custom
+virtual Linux operating system and finally installing the AIRTOOLS
+software within this Linux OS. This procedure is recommended for more
+advanced users only and described in detail in the appendix.</p>
+<h2 data-number="2.1" id="installation-on-linux"><span
+class="header-section-number">2.1</span> Installation on Linux</h2>
+<h3 data-number="2.1.1" id="installing-the-airtools-software"><span
+class="header-section-number">2.1.1</span> Installing the AIRTOOLS
+software</h3>
+<p>The AIRTOOLS project is hosted at <a
+href="https://github.com/ewelot/airtools"
+class="uri">https://github.com/ewelot/airtools</a> where you can find
+the latest source code and documentation. Pre-compiled binary packages
+are build for several Debian/Ubuntu based Linux distributions:</p>
 <ul>
 <li>Ubuntu 20.04 “Focal”</li>
 <li>Ubuntu 22.04 “Jammy”</li>
 <li>Debian 11 “Bullseye”</li>
+<li>Debian 12 “Bookworm”</li>
 </ul>
-<p>Development is done using a recent Debian Linux distribution. Ubuntu packages are tested on Xubuntu LTS distributions and should work on any Ubuntu desktop flavour (e.g. native Ubuntu, Kubuntu, Lubuntu) or other derivatives like LinuxMint.</p>
-<p>Adding the binary package repository of the AIRTOOLS software is done by adding an entry to the package managment sources list. If e.g. your distribution is based on Ubuntu 22.04 “Jammy” you should run the following commands in a terminal:</p>
-<pre><code>DIST=jammy
-REPO=http://fg-kometen.vdsastro.de/airtools/debian
+<p>Development is done using a recent Debian Linux distribution. Ubuntu
+packages are tested on Xubuntu LTS distributions and should work on any
+Ubuntu desktop flavour (e.g. native Ubuntu, Kubuntu, Lubuntu) or other
+derivatives like LinuxMint.</p>
+<p>Adding the binary package repository of the AIRTOOLS software is done
+by adding an entry to the package managment sources list. This can be
+accomplished by running the following commands in a terminal:</p>
+<pre><code># download and verify key:
+SRCREPO=https://github.com/ewelot/airtools
+wget -O airtools.asc $SRCREPO/raw/master/airtools.asc
+md5sum airtools.asc
+# which must show: 8b2a22750d677bd92a2ff456160e6b2e
+
+# convert and register the key:
+KEY=/usr/share/keyrings/airtools.gpg
+sudo gpg --yes --output $KEY --dearmor airtools.asc
+
+# add the package repository
+DIST=$(lsb_release -s -c)
+PKGREPO=http://fg-kometen.vdsastro.de/airtools/debian
 SRCFILE=/etc/apt/sources.list.d/airtools.list
-sudo bash -c &quot;echo deb [trusted=yes] $REPO $DIST main &gt; $SRCFILE&quot;</code></pre>
-<p>If you are running a different distribution, you must replace the setting of DIST by using your distributions code name (lower case, e.g. bullseye) in the command sequence above.</p>
-<p>Installation is done by invoking the following commands:</p>
+sudo bash -c &quot;echo deb [signed-by=$KEY] $PKGREPO $DIST main &gt; $SRCFILE&quot;</code></pre>
+<p>The software installation is done by invoking the following
+commands:</p>
 <pre><code>sudo apt update
 sudo apt install airtools</code></pre>
-<p>Upon first installation of the AIRTOOLS software the script will download many other required software packages from the official distribution repository. This might take several minutes depending on the bandwidth of your internet connection. At the end of the installation a new shortcut icon is showing up on your Linux desktop.</p>
-<h3 data-number="2.1.2" id="updating-the-airtools-software"><span class="header-section-number">2.1.2</span> Updating the AIRTOOLS software</h3>
-<p>The AIRTOOLS software is updated every couple of months. If the binary package repository has been added already (see previous section) then you can install an update by issuing the following two commands:</p>
+<p>Upon first installation of the AIRTOOLS software the script will
+download many other required software packages from the official
+distribution repository. This might take several minutes depending on
+the bandwidth of your internet connection. At the end of the
+installation a new shortcut icon is showing up on your Linux
+desktop.</p>
+<h3 data-number="2.1.2" id="updating-the-airtools-software"><span
+class="header-section-number">2.1.2</span> Updating the AIRTOOLS
+software</h3>
+<p>The AIRTOOLS software is updated every couple of months. If the
+binary package repository has been added already (see previous section)
+then you can install an update by issuing the following two
+commands:</p>
 <pre><code>sudo apt update
 sudo apt install airtools</code></pre>
-<h3 data-number="2.1.3" id="uninstalling-the-airtools-software"><span class="header-section-number">2.1.3</span> Uninstalling the AIRTOOLS software</h3>
+<h3 data-number="2.1.3" id="uninstalling-the-airtools-software"><span
+class="header-section-number">2.1.3</span> Uninstalling the AIRTOOLS
+software</h3>
 <p>The AIRTOOLS software can be uninstalled by running</p>
-<pre><code>sudo apt remove airtools*</code></pre>
-<h2 data-number="2.2" id="installation-on-windows-using-a-linuxairtools-appliance"><span class="header-section-number">2.2</span> Installation on Windows using a Linux/AIRTOOLS appliance</h2>
-<h3 data-number="2.2.1" id="installing-oracle-virtualbox"><span class="header-section-number">2.2.1</span> Installing Oracle VirtualBox</h3>
-<p>VirtualBox (<a href="http://www.virtualbox.org" class="uri">http://www.virtualbox.org</a>) is a free and powerful virtualization software for enterprise and home users. Get the software appropriate for your host operating system from the <a href="https://www.virtualbox.org/wiki/Downloads">Downloads</a> page and install it.</p>
-<p>You must also download and install the “Oracle VM VirtualBox Extension Pack” for improved performance and additional virtual hardware features. Get it from the appropriate section of the previously mentioned download page. Click on “All supported platforms” and open it using the Oracle VM VirtualBox software.</p>
-<p>In the following chapters the physical computer where you have installed the VirtualBox software is sometimes refered to as “host” computer. A virtual computer managed by the VirtualBox software is called a virtual machine or simply “guest” computer.</p>
-<h3 data-number="2.2.2" id="importing-the-linuxairtools-appliance"><span class="header-section-number">2.2.2</span> Importing the Linux/AIRTOOLS appliance</h3>
+<pre><code>sudo apt remove airtools airtools-core airtools-doc</code></pre>
+<h2 data-number="2.2"
+id="installation-on-windows-using-a-linuxairtools-appliance"><span
+class="header-section-number">2.2</span> Installation on Windows using a
+Linux/AIRTOOLS appliance</h2>
+<h3 data-number="2.2.1" id="installing-oracle-virtualbox"><span
+class="header-section-number">2.2.1</span> Installing Oracle
+VirtualBox</h3>
+<p>VirtualBox (<a href="http://www.virtualbox.org"
+class="uri">http://www.virtualbox.org</a>) is a free and powerful
+virtualization software for enterprise and home users. Get the software
+appropriate for your host operating system from the <a
+href="https://www.virtualbox.org/wiki/Downloads">Downloads</a> page and
+install it.</p>
+<p>You must also download and install the “Oracle VM VirtualBox
+Extension Pack” for improved performance and additional virtual hardware
+features. Get it from the appropriate section of the previously
+mentioned download page. Click on “All supported platforms” and open it
+using the Oracle VM VirtualBox software.</p>
+<p>In the following chapters the physical computer where you have
+installed the VirtualBox software is sometimes refered to as “host”
+computer. A virtual computer managed by the VirtualBox software is
+called a virtual machine or simply “guest” computer.</p>
+<h3 data-number="2.2.2" id="importing-the-linuxairtools-appliance"><span
+class="header-section-number">2.2.2</span> Importing the Linux/AIRTOOLS
+appliance</h3>
 <ul>
-<li><p>Download the <a href="https://fg-kometen.vdsastro.de/airtools/vm/xubuntu-airtools.ova">Xubuntu Linux/AIRTOOLS appliance</a></p></li>
-<li><p>Start the Oracle VM VirtualBox Manager, choose File/Import Appliance and select the local .ova file</p></li>
-<li><p>Make sure there is sufficient free disk space in the virtual machine base folder on your host computer. The .ova file size is only 2.5 GB and will expand to about 8 GB after importing. The virtual disk file will grow from this initial size (containing the Linux OS, AIRTOOLS and all required software compnents) dynamically up to its maximum size of 100 GB upon using the virtual guest system. Therefore you should make sure that you have at least that much of free disk space.</p></li>
-<li><p>Virtual machine settings were choosen to impose low hardware requirements: it uses 3 CPU cores and 4 GB of physical RAM only. This is sufficient to run the AIRTOOLS software even on large images (e.g. 30 Mpix single band images). It is possible to adjust those settings at any time later on within the Oracle VirtualBox Manager.</p></li>
-<li><p>Start importing the appliance by clicking the button “Import”.</p></li>
+<li><p>Download the <a
+href="https://fg-kometen.vdsastro.de/airtools/vm/xubuntu-airtools.ova">Xubuntu
+Linux/AIRTOOLS appliance</a></p></li>
+<li><p>Start the Oracle VM VirtualBox Manager, choose File/Import
+Appliance and select the local .ova file</p></li>
+<li><p>Make sure there is sufficient free disk space in the virtual
+machine base folder on your host computer. The .ova file size is only
+2.5 GB and will expand to about 8 GB after importing. The virtual disk
+file will grow from this initial size (containing the Linux OS, AIRTOOLS
+and all required software compnents) dynamically up to its maximum size
+of 100 GB upon using the virtual guest system. Therefore you should make
+sure that you have at least that much of free disk space.</p></li>
+<li><p>Virtual machine settings were choosen to impose low hardware
+requirements: it uses 3 CPU cores and 4 GB of physical RAM only. This is
+sufficient to run the AIRTOOLS software even on large images (e.g. 30
+Mpix single band images). It is possible to adjust those settings at any
+time later on within the Oracle VirtualBox Manager.</p></li>
+<li><p>Start importing the appliance by clicking the button
+“Import”.</p></li>
 </ul>
-<h3 data-number="2.2.3" id="starting-the-virtual-linux-os"><span class="header-section-number">2.2.3</span> Starting the virtual Linux OS</h3>
+<h3 data-number="2.2.3" id="starting-the-virtual-linux-os"><span
+class="header-section-number">2.2.3</span> Starting the virtual Linux
+OS</h3>
 <ul>
-<li><p>You are now ready to “boot” the virtual Linux computer from the VirtualBox Manager or create a desktop shortcut (see pop-up menu when right-clicking on the machine name) and start from there. It will automatically login to the Xubuntu desktop with the user name “user” (password is “user” as well).</p></li>
-<li><p>There might be messages written at the top of the window (about mouse integration and alike) which you can savely ignore.</p></li>
+<li><p>You are now ready to “boot” the virtual Linux computer from the
+VirtualBox Manager or create a desktop shortcut (see pop-up menu when
+right-clicking on the machine name) and start from there. It will
+automatically login to the Xubuntu desktop with the user name “user”
+(password is “user” as well).</p></li>
+<li><p>There might be messages written at the top of the window (about
+mouse integration and alike) which you can savely ignore.</p></li>
 </ul>
-<h3 data-number="2.2.4" id="xubuntu-desktop-basics"><span class="header-section-number">2.2.4</span> Xubuntu Desktop Basics</h3>
-<p>The desktop of the virtual Linux computer is displayed within the window of the Oracle VM VirtualBox software. The menu bar at the top is part of the virtualization software. The Xubuntu Linux desktop is located directly below this menu bar.</p>
-<p>On the top of the desktop screen there is a (dark) desktop panel. If you click on the small icon on the left of this panel (it uses the Xubuntu logo which mimics the head of a mouse) the main application menu pops up. From there you can start programs, tweak several desktop settings, log out and shutdown the virtual Linux system. Note the location of the “Log out” icon at bottom-right of the menu, which is also used to shutdown or restart the Linux OS. Get familiar with how to start the web browser and the file manager and how to shutdown the Linux OS.</p>
-<p>You might need to adjust the keyboard language. This is done by clicking the appropriate panel applet with the name “EN” and choosing an item from the drop-down list.</p>
-<p>For additional information please consult the official <a href="https://docs.xubuntu.org/">Xubuntu Documentation</a> or other tutorials on the web. Please keep in mind that you do not have to worry about any hardware specific setups in your Linux system (or for example network connection) because all communication to the real devices of the host computer is transparently handled by the VirtualBox drivers.</p>
+<h3 data-number="2.2.4" id="xubuntu-desktop-basics"><span
+class="header-section-number">2.2.4</span> Xubuntu Desktop Basics</h3>
+<p>The desktop of the virtual Linux computer is displayed within the
+window of the Oracle VM VirtualBox software. The menu bar at the top is
+part of the virtualization software. The Xubuntu Linux desktop is
+located directly below this menu bar.</p>
+<p>On the top of the desktop screen there is a (dark) desktop panel. If
+you click on the small icon on the left of this panel (it uses the
+Xubuntu logo which mimics the head of a mouse) the main application menu
+pops up. From there you can start programs, tweak several desktop
+settings, log out and shutdown the virtual Linux system. Note the
+location of the “Log out” icon at bottom-right of the menu, which is
+also used to shutdown or restart the Linux OS. Get familiar with how to
+start the web browser and the file manager and how to shutdown the Linux
+OS.</p>
+<p>You might need to adjust the keyboard language. This is done by
+clicking the appropriate panel applet with the name “EN” and choosing an
+item from the drop-down list.</p>
+<p>For additional information please consult the official <a
+href="https://docs.xubuntu.org/">Xubuntu Documentation</a> or other
+tutorials on the web. Please keep in mind that you do not have to worry
+about any hardware specific setups in your Linux system (or for example
+network connection) because all communication to the real devices of the
+host computer is transparently handled by the VirtualBox drivers.</p>
 <figure>
-<img src="images/xubuntu-vm-annotated.png" title="Xubuntu" alt="" /><figcaption>Xubuntu Linux (with AIRTOOLS) running in VirtualBox</figcaption>
+<img src="images/xubuntu-vm-annotated.png" title="Xubuntu"
+alt="Xubuntu Linux (with AIRTOOLS) running in VirtualBox" />
+<figcaption aria-hidden="true">Xubuntu Linux (with AIRTOOLS) running in
+VirtualBox</figcaption>
 </figure>
-<h1 data-number="3" id="the-airtools-graphical-user-interface"><span class="header-section-number">3</span> The AIRTOOLS Graphical User Interface</h1>
-<p>The graphical user interface consists of a top menu bar, three main tabs and a text area for log output.</p>
+<h1 data-number="3" id="the-airtools-graphical-user-interface"><span
+class="header-section-number">3</span> The AIRTOOLS Graphical User
+Interface</h1>
+<p>The graphical user interface consists of a top menu bar, three main
+tabs and a text area for log output.</p>
 <p>TODO: description of main menu bar items</p>
-<p>Main processing tasks are organized in three different tabs. The first tab provides access to all basic image reduction steps to process raw images with the goal to finally create stacked images of your targets. The second tab is dedicated to the comet extraction and large aperture photometry tasks. Finally, a couple of handy tools are placed on a third tab.</p>
+<p>Main processing tasks are organized in three different tabs. The
+first tab provides access to all basic image reduction steps to process
+raw images with the goal to finally create stacked images of your
+targets. The second tab is dedicated to the comet extraction and large
+aperture photometry tasks. Finally, a couple of handy tools are placed
+on a third tab.</p>
 <figure>
-<img src="images/airtools-gui.png" title="airtools-gui" alt="" /><figcaption>The AIRTOOLS user interface tabs</figcaption>
+<img src="images/airtools-gui.png" title="airtools-gui"
+alt="The AIRTOOLS user interface tabs" />
+<figcaption aria-hidden="true">The AIRTOOLS user interface
+tabs</figcaption>
 </figure>
-<p>The lower part of the interface will display text output from any processing steps. There you can watch progress of the running tasks, see some measurement results but also possible error messages. In a few cases during the comet extraction part you will get information about a required user action written to the same text area. Please note that all the visible output is also logged to a text file <code>airtools.log</code> in the project directory for later reference.</p>
-<h1 data-number="4" id="the-first-airtools-project"><span class="header-section-number">4</span> The first AIRTOOLS Project</h1>
-<h2 data-number="4.1" id="what-is-a-project"><span class="header-section-number">4.1</span> What is a Project?</h2>
-<p>When observing during a clear night, many different exposures are taken, usually of different targets. It is common practice that an observation of a single target consists of multiple bracketed exposures. Serious observers are capturing calibration frames (darks, flats) as well. It is possible that different instruments (telescopes, filters, cameras) are used. All these images of a single night will be processed in a single AIRTOOLS project. Consequently, the project directory itself (and related ones) should have the date of observation used as part of its name. It is good practice to use the date at the beginning of the night.</p>
+<p>The lower part of the interface will display text output from any
+processing steps. There you can watch progress of the running tasks, see
+some measurement results but also possible error messages. In a few
+cases during the comet extraction part you will get information about a
+required user action written to the same text area. Please note that all
+the visible output is also logged to a text file
+<code>airtools.log</code> in the project directory for later
+reference.</p>
+<h1 data-number="4" id="the-first-airtools-project"><span
+class="header-section-number">4</span> The first AIRTOOLS Project</h1>
+<h2 data-number="4.1" id="what-is-a-project"><span
+class="header-section-number">4.1</span> What is a Project?</h2>
+<p>When observing during a clear night, many different exposures are
+taken, usually of different targets. It is common practice that an
+observation of a single target consists of multiple bracketed exposures.
+Serious observers are capturing calibration frames (darks, flats) as
+well. It is possible that different instruments (telescopes, filters,
+cameras) are used. All these images of a single night will be processed
+in a single AIRTOOLS project. Consequently, the project directory itself
+(and related ones) should have the date of observation used as part of
+its name. It is good practice to use the date at the beginning of the
+night.</p>
 <p>The following directories are related to a project:</p>
 <ul>
 <li>Project directory:<br />
-It stores all config files of this project, results from image reduction and analysis (images, plots, data tables) and log files. After finishing a project this directory should be saved, e.g. to an external disk drive.</li>
+It stores all config files of this project, results from image reduction
+and analysis (images, plots, data tables) and log files. After finishing
+a project this directory should be saved, e.g. to an external disk
+drive.</li>
 <li>Raw directory:<br />
-Used for all the individual raw images as created by your image asquisition system, both light frames and calibration images related to the project.</li>
+Used for all the individual raw images as created by your image
+asquisition system, both light frames and calibration images related to
+the project.</li>
 <li>Temporary directory:<br />
-Used to store individual calibrated images of the project which are used by several different AIRTOOLS analysis tasks as well as temporary files created during those tasks. This directory may be savely deleted when the project is finished.</li>
+Used to store individual calibrated images of the project which are used
+by several different AIRTOOLS analysis tasks as well as temporary files
+created during those tasks. This directory may be savely deleted when
+the project is finished.</li>
 </ul>
-<h2 data-number="4.2" id="setting-up-the-airtools-software"><span class="header-section-number">4.2</span> Setting up the AIRTOOLS software</h2>
-<p>Upon first start of the AIRTOOLS software a few settings have to be defined. All projects use a common base for their project directories. Each project will create a subdirectory below this path. Similarly, the base location for raw files directories of any project and for all temporary directories has to be choosen. Note that the vast majority of disk space will be used on the temporary directories.</p>
-<h2 data-number="4.3" id="setting-up-the-first-project"><span class="header-section-number">4.3</span> Setting up the first Project</h2>
-<p>You may try the AIRTOOLS software using sample data. If you just want to get up and running quickly you could follow the instructions provided in the <a href="#sample-data-project">appendix</a> and skip the rest of chapter 4.</p>
-<p>For any new project the setup form has to be completed. Select the date of observation. This will be used to make initial suggestions for path names of the project directory, raw directory and temporary directory. It is allowed to modify those names, e.g. append a letter. E.g. you might want to repeat the image reduction of a given night using other parameters without interfering the original analysis. In that case you could use the same raw directory name but different names for the project and temporary directories for a second project.</p>
+<h2 data-number="4.2" id="setting-up-the-airtools-software"><span
+class="header-section-number">4.2</span> Setting up the AIRTOOLS
+software</h2>
+<p>Upon first start of the AIRTOOLS software a few settings have to be
+defined. All projects use a common base for their project directories.
+Each project will create a subdirectory below this path. Similarly, the
+base location for raw files directories of any project and for all
+temporary directories has to be choosen. Note that the vast majority of
+disk space will be used on the temporary directories.</p>
+<h2 data-number="4.3" id="setting-up-the-first-project"><span
+class="header-section-number">4.3</span> Setting up the first
+Project</h2>
+<p>You may try the AIRTOOLS software using sample data. If you just want
+to get up and running quickly you could follow the instructions provided
+in the <a href="#sample-data-project">appendix</a> and skip the rest of
+chapter 4.</p>
+<p>For any new project the setup form has to be completed. Select the
+date of observation. This will be used to make initial suggestions for
+path names of the project directory, raw directory and temporary
+directory. It is allowed to modify those names, e.g. append a letter.
+E.g. you might want to repeat the image reduction of a given night using
+other parameters without interfering the original analysis. In that case
+you could use the same raw directory name but different names for the
+project and temporary directories for a second project.</p>
 <p>Further settings are:</p>
 <dl>
 <dt>Observatory Site:</dt>
-<dd>Enter the name of your observatory site (must be single word) or choose one of the items from the combobox dropdown list (it holds items which are already defined in the parameter file <code>sites.dat</code>).
+<dd>
+Enter the name of your observatory site (must be single word) or choose
+one of the items from the combobox dropdown list (it holds items which
+are already defined in the parameter file <code>sites.dat</code>).
 </dd>
 <dt>Offset of Camera Time:</dt>
-<dd>Enter the time offset of your camera time with respect to UT in hours. The camera time is found either in RAW images metadata of DSLR cameras or in the header of your FITS images (usually stored in keyword DATE-OBS).
+<dd>
+Enter the time offset of your camera time with respect to UT in hours.
+The camera time is found either in RAW images metadata of DSLR cameras
+or in the header of your FITS images (usually stored in keyword
+DATE-OBS).
 </dd>
 </dl>
-<p>Optional settings for observer details are used by reports of photometric or astrometrc measurements generated by AIRTOOLS for submission to COBS or MPC:</p>
+<p>Optional settings for observer details are used by reports of
+photometric or astrometrc measurements generated by AIRTOOLS for
+submission to COBS or MPC:</p>
 <dl>
 <dt>Full Name:</dt>
-<dd>Observers full name.
+<dd>
+Observers full name.
 </dd>
 <dt>Address:</dt>
-<dd>Full contact address.
+<dd>
+Full contact address.
 </dd>
 <dt>E-Mail:</dt>
-<dd>Contact e-mail address.
+<dd>
+Contact e-mail address.
 </dd>
 <dt>ICQ Observer ID:</dt>
-<dd>ICQ report observer ID as assigned by MPC (or COBS)
+<dd>
+ICQ report observer ID as assigned by MPC (or COBS)
 </dd>
 </dl>
-<h2 data-number="4.4" id="parameter-files"><span class="header-section-number">4.4</span> Parameter Files</h2>
-<p>The different image acquisition systems used by amateurs do normally write some meta data about telescope, camera etc. to image headers. Those data are required by any image reduction and analysis software. Unfortunately, keyword names and the format of their values is not standardized in any way.</p>
-<p>We therefore decided to supply most redundant data by means of parameter files - simple text files, structured in a tabular way. The first line in the file is used to name the columns (parameters). Anything that appears after the <code>#</code> sign in any other line is considered a comment and will be ignored. Each line describes a separate entry and each parameter value is made of a single word. In some places you are allowed to use the character <code>-</code> to indicate an unknown value.</p>
-<p>At first the information about your observatory site must be added to the corresponding parameter file <code>sites.dat</code>. From the AIRTOOLS application’s “Edit” menu select “Edit Site Parameters”. This will start a simple text editor (called <em>mousepad</em>). The parameter file should have a few entries already, which can be used as reference when adding a new line for your site. The column description is as follows:</p>
+<h2 data-number="4.4" id="parameter-files"><span
+class="header-section-number">4.4</span> Parameter Files</h2>
+<p>The different image acquisition systems used by amateurs do normally
+write some meta data about telescope, camera etc. to image headers.
+Those data are required by any image reduction and analysis software.
+Unfortunately, keyword names and the format of their values is not
+standardized in any way.</p>
+<p>We therefore decided to supply most redundant data by means of
+parameter files - simple text files, structured in a tabular way. The
+first line in the file is used to name the columns (parameters).
+Anything that appears after the <code>#</code> sign in any other line is
+considered a comment and will be ignored. Each line describes a separate
+entry and each parameter value is made of a single word. In some places
+you are allowed to use the character <code>-</code> to indicate an
+unknown value.</p>
+<p>At first the information about your observatory site must be added to
+the corresponding parameter file <code>sites.dat</code>. From the
+AIRTOOLS application’s “Edit” menu select “Edit Site Parameters”. This
+will start a simple text editor (called <em>mousepad</em>). The
+parameter file should have a few entries already, which can be used as
+reference when adding a new line for your site. The column description
+is as follows:</p>
 <dl>
 <dt>ID:</dt>
-<dd>This is a unique short identifier for your site (three letters)
+<dd>
+This is a unique short identifier for your site (three letters)
 </dd>
 <dt>COD:</dt>
-<dd>Three digit observatory code (IAU code or MPC code) published by the MPC
+<dd>
+Three digit observatory code (IAU code or MPC code) published by the MPC
 </dd>
 <dt>location:</dt>
-<dd>A unique single word for the name of your observatory location. The previously used entry of the observatory site during project setup must match one of these.
+<dd>
+A unique single word for the name of your observatory location. The
+previously used entry of the observatory site during project setup must
+match one of these.
 </dd>
 <dt>long:</dt>
-<dd>Geographic longitude in degrees, negative for a location east of Greenwich meridian.
+<dd>
+Geographic longitude in degrees, negative for a location east of
+Greenwich meridian.
 </dd>
 <dt>lat:</dt>
-<dd>Geographic latitude in degrees, negative for a locations south of the equator.
+<dd>
+Geographic latitude in degrees, negative for a locations south of the
+equator.
 </dd>
 <dt>alt:</dt>
-<dd>Altitude of your observatory in meters.
+<dd>
+Altitude of your observatory in meters.
 </dd>
 </dl>
 <p>Save your edits and close the text editor.</p>
-<p>The next information you have to provide is those of the instrumentation you have used. Open the parameter file <code>camera.dat</code> by selecting “Edit” and “Edit Camera Parameters”. Each combination of telescope and camera must have a dedicated entry. Use the existing sample entries as a reference for your newly added lines. The columns used are:</p>
+<p>The next information you have to provide is those of the
+instrumentation you have used. Open the parameter file
+<code>camera.dat</code> by selecting “Edit” and “Edit Camera
+Parameters”. Each combination of telescope and camera must have a
+dedicated entry. Use the existing sample entries as a reference for your
+newly added lines. The columns used are:</p>
 <dl>
 <dt>tel:</dt>
-<dd>Unique identifier for the telescope and camera, using 3-6 alphanumeric characters.
+<dd>
+Unique identifier for the telescope and camera, using 3-6 alphanumeric
+characters.
 </dd>
 <dt>flen:</dt>
-<dd>Focal length of the telescope or camera lens in mm.
+<dd>
+Focal length of the telescope or camera lens in mm.
 </dd>
 <dt>aperture:</dt>
-<dd>Open aperture of the telescope or camera lens in mm.
+<dd>
+Open aperture of the telescope or camera lens in mm.
 </dd>
 <dt>fratio:</dt>
-<dd>F-ration of the telescope or camera, that is <code>flen/aperture</code>.
+<dd>
+F-ration of the telescope or camera, that is <code>flen/aperture</code>.
 </dd>
 <dt>camera:</dt>
-<dd>Camera model, used for your convenience only
+<dd>
+Camera model, used for your convenience only
 </dd>
 <dt>camchip:</dt>
-<dd>Camera and sensor keys used in final ICQ records of a comet measurement. Refer to the lists of <a href="https://cobs.si/help/icq_list/list_camera_types/">camera keys</a> and <a href="https://cobs.si/help/icq_list/list_chip_types/">sensor keys</a>. Both values have to be provided in a single word, using the character <code>/</code> as a delimiter. If you for example have used a Canon 6D DSLR for imaging then the correct entry would be <code>CDS/CFC</code>.
+<dd>
+Camera and sensor keys used in final ICQ records of a comet measurement.
+Refer to the lists of <a
+href="https://cobs.si/help/icq_list/list_camera_types/">camera keys</a>
+and <a href="https://cobs.si/help/icq_list/list_chip_types/">sensor
+keys</a>. Both values have to be provided in a single word, using the
+character <code>/</code> as a delimiter. If you for example have used a
+Canon 6D DSLR for imaging then the correct entry would be
+<code>CDS/CFC</code>.
 </dd>
 <dt>flip:</dt>
-<dd>Indicate if the image data is flipped top-down (1) or not (0). Essentially this describes the order and interpretation of FITS data: If the FITS file is organized in such a way that the data of the bottom image row comes first and that of the top-most row latest then it is considered unflipped and the other way it is flipped. More information about checking the image orientation is provided in chapter 4.5.
+<dd>
+Indicate if the image data is flipped top-down (1) or not (0).
+Essentially this describes the order and interpretation of FITS data: If
+the FITS file is organized in such a way that the data of the bottom
+image row comes first and that of the top-most row latest then it is
+considered unflipped and the other way it is flipped. More information
+about checking the image orientation is provided in chapter 4.5.
 </dd>
 <dt>rot:</dt>
-<dd>Camera rotation with respect to the sky coordinate system. This parameter is left for historical reason but not used in current versions of the software and should be left undefined (using the string “-”).
+<dd>
+Camera rotation with respect to the sky coordinate system. This
+parameter is left for historical reason but not used in current versions
+of the software and should be left undefined (using the string “-”).
 </dd>
 <dt>rawbits:</dt>
-<dd>Original bitdepth or number of bits per pixel in a single color channel. Note that at start of the image reduction the counts (ADU, intensities) are scaled up to the 16-bit range where needed.
+<dd>
+Original bitdepth or number of bits per pixel in a single color channel.
+Note that at start of the image reduction the counts (ADU, intensities)
+are scaled up to the 16-bit range where needed.
 </dd>
 <dt>satur:</dt>
-<dd>Saturation value. Strictly speeking the upper counts (ADU) for which the camera response is linear (proportional to the illumination intensity) must be provided. We need the value after scaling up to the 16-bit range, e.g. if you are using a consumer DSLR where response is linear up to 2/3 of its dynamic range then you should enter a value of 40000 approximately.
+<dd>
+Saturation value. Strictly speeking the upper counts (ADU) for which the
+camera response is linear (proportional to the illumination intensity)
+must be provided. We need the value after scaling up to the 16-bit
+range, e.g. if you are using a consumer DSLR where response is linear up
+to 2/3 of its dynamic range then you should enter a value of 40000
+approximately.
 </dd>
 <dt>gain:</dt>
-<dd>Number of electrons per ADU. Use a value of 1 if it is not known.
+<dd>
+Number of electrons per ADU. Use a value of 1 if it is not known.
 </dd>
 <dt>pixscale:</dt>
-<dd>Approximate value of the size of a (unbinned) pixel on the sky in seconds of arc.
+<dd>
+Approximate value of the size of a (unbinned) pixel on the sky in
+seconds of arc.
 </dd>
 <dt>magzero:</dt>
-<dd>Zeropoint of the non-calibrated instrumental magnitude scale. This is the magnitude of a star which yields a signal of 1 count (ADU) in a 1 second exposure. Initially you can use an arbitrary value but it is useful to refine it to something close to the zeropoint of the calibrated scale (see log output of your first photometric calibration later on)
+<dd>
+Zeropoint of the non-calibrated instrumental magnitude scale. This is
+the magnitude of a star which yields a signal of 1 count (ADU) in a 1
+second exposure. Initially you can use an arbitrary value but it is
+useful to refine it to something close to the zeropoint of the
+calibrated scale (see log output of your first photometric calibration
+later on)
 </dd>
 <dt>ttype:</dt>
-<dd>Telescope type: L=reflector, R=refractor, A=photo lens
+<dd>
+Telescope type: L=reflector, R=refractor, A=photo lens
 </dd>
 <dt>ctype:</dt>
-<dd>Sensor type: CCD=monochrome CCD, DSLR=DSLR with native camera model RAW files, CMOS=monochrome CMOS sensor, RGGB or similar pattern for a one-shot-color CMOS sensor with a Bayer filter matrix in the given layout (see also chapter 4.5).
+<dd>
+Sensor type: CCD=monochrome CCD, DSLR=DSLR with native camera model RAW
+files, CMOS=monochrome CMOS sensor, RGGB or similar pattern for a
+one-shot-color CMOS sensor with a Bayer filter matrix in the given
+layout (see also chapter 4.5).
 </dd>
 </dl>
-<p>Save your edits and close the text editor. After any modification you can choose if the new parameter file is just applied to your current project or if you like to use it in subsequent new projects.</p>
-<h2 data-number="4.5" id="raw-images"><span class="header-section-number">4.5</span> Raw Images</h2>
-<p>Initially the AIRTOOLS software was written to work on digital camera raw image files. It uses a modified version of the <a href="https://www.dechifro.org/dcraw/">dcraw</a> converter (by D. Coffin). Therefore raw images of all cameras supported by <em>dcraw</em> will be handled by AIRTOOLS. Later on, support of single plane FITS images from CCD cameras was added. Now, the AIRTOOLS software correctly handles monochrome images as well as bayered images from one-shot color sensors (e.g. CMOS sensors with an added Bayer filter matrix).</p>
-<p>At first you must copy your unprocessed raw images to the projects raw directory within the Linux file system. There are different solutions to handle this file transfer between the host operating system if AIRTOOLS is running in a virtualized environment. We suggest using the shared folder feature of the VirtualBox software:</p>
+<p>Save your edits and close the text editor. After any modification you
+can choose if the new parameter file is just applied to your current
+project or if you like to use it in subsequent new projects.</p>
+<h2 data-number="4.5" id="raw-images"><span
+class="header-section-number">4.5</span> Raw Images</h2>
+<p>Initially the AIRTOOLS software was written to work on digital camera
+raw image files. It uses a modified version of the <a
+href="https://www.dechifro.org/dcraw/">dcraw</a> converter (by D.
+Coffin). Therefore raw images of all cameras supported by <em>dcraw</em>
+will be handled by AIRTOOLS. Later on, support of single plane FITS
+images from CCD cameras was added. Now, the AIRTOOLS software correctly
+handles monochrome images as well as bayered images from one-shot color
+sensors (e.g. CMOS sensors with an added Bayer filter matrix).</p>
+<p>At first you must copy your unprocessed raw images to the projects
+raw directory within the Linux file system. There are different
+solutions to handle this file transfer between the host operating system
+if AIRTOOLS is running in a virtualized environment. We suggest using
+the shared folder feature of the VirtualBox software:</p>
 <ul>
-<li><p>Locate the VirtualBox menubar (above the virtual Linux Desktop) and select Devices/Shared Folders/Shared Folder Settings</p></li>
-<li><p>Click the blue folder icon in the right part of the settings window which opens the “Add Share” dialog</p></li>
-<li><p>Select the folder path of the host computer where you collect raw images and select Auto-mount and then click OK button</p></li>
-<li><p>Accept the settings for the new shared folder by using the OK button</p></li>
-<li><p>Within the virtual Linux computer start the file manager. You will recognize the new file share in the left panel (default name starts with “sf_”). Locate the raw image files on this file share (exported from your host computers file system) and copy them to the raw files folder corresponding to your current project.</p></li>
+<li><p>Locate the VirtualBox menubar (above the virtual Linux Desktop)
+and select Devices/Shared Folders/Shared Folder Settings</p></li>
+<li><p>Click the blue folder icon in the right part of the settings
+window which opens the “Add Share” dialog</p></li>
+<li><p>Select the folder path of the host computer where you collect raw
+images and select Auto-mount and then click OK button</p></li>
+<li><p>Accept the settings for the new shared folder by using the OK
+button</p></li>
+<li><p>Within the virtual Linux computer start the file manager. You
+will recognize the new file share in the left panel (default name starts
+with “sf_”). Locate the raw image files on this file share (exported
+from your host computers file system) and copy them to the raw files
+folder corresponding to your current project.</p></li>
 </ul>
-<p>Refer to the instructions in the <a href="#using-external-usb-storage">appendix</a> if your raw images reside on an external USB disk.</p>
-<p>You are now going to start the first AIRTOOLS task. By pressing the “Extract basic image info” the program reads meta data of all raw image files. At the end an editor window pops up which shows an overview of relevant data for each image. Please note the column which holds a 4-digit image number associated with each image (first column if images are in FITS format, second column if images are RAW files from DSLR). Individual images are referenced by this number throughout the reduction process.</p>
-<p>To view an raw image or a selection of several raw images you can open the “Misc. Tools” tab, enter the image number or a sequence into the textfield next to the “Load Raw Images” button (e.g. 3-5,9-11) and press the button to start, which starts the SAOImage viewer.</p>
-<h2 data-number="4.6" id="image-orientation-flip-status-and-bayer-pattern"><span class="header-section-number">4.6</span> Image orientation, flip status and Bayer pattern</h2>
-<p>Most professional tools in astronomy are storing and displaying image data starting at the bottom line, following general conventions provided by the FITS specification. Unfortunately, most camera drivers nowadays are delivering data the other way around, starting with the topmost row. Depending on the data acquisition software and different tools for displaying FITS images, there might be additional steps of image flipping involved. It is therefore difficult to reliably estimate the image orientation in a viewer program on the computer in advance, even if we know the path of light in the optical train of our instrument.</p>
-<p>In AIRTOOLS we have to provide image orientation parameters via the camera parameters file (e.g. column “flip”) for each individual setup. The best way to get things right is to look at an example raw FITS image captured by your camera which contains an object with a known orientation (e.g. Plejades or Whirlpool Galaxy). Load a raw image in the SAOImage display application and check if the object appears flipped/mirrored or not. This determines the value for the “flip” parameter, using a setting of 1 if the image is flipped.</p>
+<p>Refer to the instructions in the <a
+href="#using-external-usb-storage">appendix</a> if your raw images
+reside on an external USB disk.</p>
+<p>You are now going to start the first AIRTOOLS task. By pressing the
+“Extract basic image info” the program reads meta data of all raw image
+files. At the end an editor window pops up which shows an overview of
+relevant data for each image. Please note the column which holds a
+4-digit image number associated with each image (first column if images
+are in FITS format, second column if images are RAW files from DSLR).
+Individual images are referenced by this number throughout the reduction
+process.</p>
+<p>To view an raw image or a selection of several raw images you can
+open the “Misc. Tools” tab, enter the image number or a sequence into
+the textfield next to the “Load Raw Images” button (e.g. 3-5,9-11) and
+press the button to start, which starts the SAOImage viewer.</p>
+<h2 data-number="4.6"
+id="image-orientation-flip-status-and-bayer-pattern"><span
+class="header-section-number">4.6</span> Image orientation, flip status
+and Bayer pattern</h2>
+<p>Most professional tools in astronomy are storing and displaying image
+data starting at the bottom line, following general conventions provided
+by the FITS specification. Unfortunately, most camera drivers nowadays
+are delivering data the other way around, starting with the topmost row.
+Depending on the data acquisition software and different tools for
+displaying FITS images, there might be additional steps of image
+flipping involved. It is therefore difficult to reliably estimate the
+image orientation in a viewer program on the computer in advance, even
+if we know the path of light in the optical train of our instrument.</p>
+<p>In AIRTOOLS we have to provide image orientation parameters via the
+camera parameters file (e.g. column “flip”) for each individual setup.
+The best way to get things right is to look at an example raw FITS image
+captured by your camera which contains an object with a known
+orientation (e.g. Plejades or Whirlpool Galaxy). Load a raw image in the
+SAOImage display application and check if the object appears
+flipped/mirrored or not. This determines the value for the “flip”
+parameter, using a setting of 1 if the image is flipped.</p>
 <figure>
-<img src="images/rawfile_bayer2.png" title="rawfile_bayer2" alt="" /><figcaption>Raw image preview (fliped image) and Bayer matrix pattern</figcaption>
+<img src="images/rawfile_bayer2.png" title="rawfile_bayer2"
+alt="Raw image preview (fliped image) and Bayer matrix pattern" />
+<figcaption aria-hidden="true">Raw image preview (fliped image) and
+Bayer matrix pattern</figcaption>
 </figure>
-<p>Special care must be taken when dealing with images from one-shot-color cameras with a Bayer matrix filter. The parameter “ctype” must be used to tell the software about the present Bayer pattern order. We need to estimate it by examining a raw image in the SAOImage viewer. Choose an image area void of stars, or even better an image of the twilight sky (red and blue pixels ideally should have different brightness). Zoom in to display about 8x8 pixels and ajust brightness and contrast to highlight the underlaying Bayer pattern structure. Select a pixel for which the center has x and y image coordinates close to uneven numbers. This is the first pixel of the Bayer matrix (the pixel to the right is the second one of the matrix, see Figure 3). If adjacent pixels on both diagonals crossing the selected one are similar in brightness then the first pixel of the Bayer pattern is a green one. It is difficult to distinguish between the two possible alternatives GBRG and GRBG but most likely it will be the first. If diagonal pixels are varying a lot in brightness (as is the case in the example image) then the first pixel of the pattern is either red or blue, which means either RGGB or BGGR. Again, most likely it is the first variant. A final decision can only be drawn when examining a de-bayered image of a known colored target. Another possibility is to compare sky flats taken at bright twilight and almost dark sky, because the bright twilight appears much bluer.</p>
-<p>The example image is a capture of the night sky under bright urban light pollution, resulting in much higher intensity of red pixels than blue ones. Pixel 1 appears much brighter than pixel 4 which means the red pixel is the first one of the Bayer pattern and the correct entry for “ctype” in the parameter file in this case is therefore RGGB.</p>
-<h2 data-number="4.7" id="image-set-definition"><span class="header-section-number">4.7</span> Image Set Definition</h2>
-<p>An image set is a number of images of the same type and target, e.g. a couple of dark exposures with a given exposure time or a bracketed sequence of exposures of a comet. All image sets of the project are described in a parameter file called <code>set.dat</code> which must be created by yourself. From the AIRTOOLS application’s main menu select “Edit” and “Edit Image Set Definitions”. Here is an example of a typical file which can be used for reference:</p>
+<p>Special care must be taken when dealing with images from
+one-shot-color cameras with a Bayer matrix filter. The parameter “ctype”
+must be used to tell the software about the present Bayer pattern order.
+We need to estimate it by examining a raw image in the SAOImage viewer.
+Choose an image area void of stars, or even better an image of the
+twilight sky (red and blue pixels ideally should have different
+brightness). Zoom in to display about 8x8 pixels and ajust brightness
+and contrast to highlight the underlaying Bayer pattern structure.
+Select a pixel for which the center has x and y image coordinates close
+to uneven numbers. This is the first pixel of the Bayer matrix (the
+pixel to the right is the second one of the matrix, see Figure 3). If
+adjacent pixels on both diagonals crossing the selected one are similar
+in brightness then the first pixel of the Bayer pattern is a green one.
+It is difficult to distinguish between the two possible alternatives
+GBRG and GRBG but most likely it will be the first. If diagonal pixels
+are varying a lot in brightness (as is the case in the example image)
+then the first pixel of the pattern is either red or blue, which means
+either RGGB or BGGR. Again, most likely it is the first variant. A final
+decision can only be drawn when examining a de-bayered image of a known
+colored target. Another possibility is to compare sky flats taken at
+bright twilight and almost dark sky, because the bright twilight appears
+much bluer.</p>
+<p>The example image is a capture of the night sky under bright urban
+light pollution, resulting in much higher intensity of red pixels than
+blue ones. Pixel 1 appears much brighter than pixel 4 which means the
+red pixel is the first one of the Bayer pattern and the correct entry
+for “ctype” in the parameter file in this case is therefore RGGB.</p>
+<h2 data-number="4.7" id="image-set-definition"><span
+class="header-section-number">4.7</span> Image Set Definition</h2>
+<p>An image set is a number of images of the same type and target,
+e.g. a couple of dark exposures with a given exposure time or a
+bracketed sequence of exposures of a comet. All image sets of the
+project are described in a parameter file called <code>set.dat</code>
+which must be created by yourself. From the AIRTOOLS application’s main
+menu select “Edit” and “Edit Image Set Definitions”. Here is an example
+of a typical file which can be used for reference:</p>
 <pre><code># 230216
 # Skygems Hakos, Namibia, FSQ106, Moravian C3-61000EC PRO, ts=0
 
@@ -324,174 +929,505 @@ Used to store individual calibrated images of the project which are used by seve
 04:44 dk02 dark     d 120 0031 0042 -    -    -    SHF
 18:43 co02 2017K2   o 120 0043 0047 0045 dk02 sk01 SHF # 230221
 </code></pre>
-<p>The syntax is as follows: everything after the character <code>#</code> is considered a comment. Each line (uncommented and non-empty) defines an image set using at least 11 fields (words separated by spaces) which are:</p>
+<p>The syntax is as follows: everything after the character
+<code>#</code> is considered a comment. Each line (uncommented and
+non-empty) defines an image set using at least 11 fields (words
+separated by spaces) which are:</p>
 <dl>
 <dt>h:m:</dt>
-<dd>The local time (or UT if you prefer) at start of imaging. This is for personel reference only and not used at all by the program.
+<dd>
+The local time (or UT if you prefer) at start of imaging. This is for
+personel reference only and not used at all by the program.
 </dd>
 <dt>set:</dt>
-<dd>The name given to the image set. We do recommend the following scheme: Use the first two letters to denote the image type, where “dk” is for darks (and bias exposures) and “sk” for sky flats, “co” might be used for a comet observation. Any other deep sky target could use two (or three) letters from the constellation it belongs to. After the letters use a two-digit running number, so the image set of the first comet target would be named <code>co01</code>, the second <code>co02</code> and so on. The set name is used in many places later on, e.g. in the file names of computed stacks and other result files. Therefore a short name using four characters only is recommended.
+<dd>
+The name given to the image set. We do recommend the following scheme:
+Use the first two letters to denote the image type, where “dk” is for
+darks (and bias exposures) and “sk” for sky flats, “co” might be used
+for a comet observation. Any other deep sky target could use two (or
+three) letters from the constellation it belongs to. After the letters
+use a two-digit running number, so the image set of the first comet
+target would be named <code>co01</code>, the second <code>co02</code>
+and so on. The set name is used in many places later on, e.g. in the
+file names of computed stacks and other result files. Therefore a short
+name using four characters only is recommended.
 </dd>
 <dt>target:</dt>
-<dd>Short name of the target observed (up to 8 characters). For comets a compact name has to be used, e.g. 2017K2 is recognized as C/2017 K2 (PANSTARRS).
+<dd>
+Short name of the target observed (up to 8 characters). For comets a
+compact name has to be used, e.g. 2017K2 is recognized as C/2017 K2
+(PANSTARRS).
 </dd>
 <dt>type:</dt>
-<dd>Type of images (1 character): d=dark/bias, f=flat, o=lights, a=addition (continuation) of a previously defined image set. If you for some reason would like to exclude a series of images from the analysis (e.g. a focus sequence) but keep the information about those files for your record then use the character <code>-</code> in place of the image type.
+<dd>
+Type of images (1 character): d=dark/bias, f=flat, o=lights, a=addition
+(continuation) of a previously defined image set. If you for some reason
+would like to exclude a series of images from the analysis (e.g. a focus
+sequence) but keep the information about those files for your record
+then use the character <code>-</code> in place of the image type.
 </dd>
 <dt>texp:</dt>
-<dd>Exposure time of a single exposure in seconds.
+<dd>
+Exposure time of a single exposure in seconds.
 </dd>
 <dt>n1:</dt>
-<dd>Number of the first image of the set.
+<dd>
+Number of the first image of the set.
 </dd>
 <dt>n2:</dt>
-<dd>Number of the last image of the set.
+<dd>
+Number of the last image of the set.
 </dd>
 <dt>nref:</dt>
-<dd>Number of the image which is used as a reference image for stacking, typically it should be close to the middle of the bracketed sequence. Not used for darks and flats.
+<dd>
+Number of the image which is used as a reference image for stacking,
+typically it should be close to the middle of the bracketed sequence.
+Not used for darks and flats.
 </dd>
 <dt>dark:</dt>
-<dd>Name of the master dark (image set name) used for calibration.
+<dd>
+Name of the master dark (image set name) used for calibration.
 </dd>
 <dt>flat:</dt>
-<dd>Name of the master flat used for calibration.
+<dd>
+Name of the master flat used for calibration.
 </dd>
 <dt>tel:</dt>
-<dd>Identifier of the instrument (telescope/camera) used. This must match a valid entry in <code>camera.dat</code>.
+<dd>
+Identifier of the instrument (telescope/camera) used. This must match a
+valid entry in <code>camera.dat</code>.
 </dd>
 </dl>
-<p>A note about master calibration images. It is not required and not convenient to capture darks and flats in every night. After you have collected some calibration sets and build some master files by AIRTOOLS it is common practice to reuse them later on. This can be done by simply copying them over from older project directories to the current one using the file manager.</p>
-<p>Some (remote) observatories deliver already calibrated images to their customers. In this special case you can omit dark and flat field calibration by providing the name “cal” for both dark and flat field image names.</p>
-<h1 data-number="5" id="image-reduction"><span class="header-section-number">5</span> Image Reduction</h1>
-<p>The “Image Reduction” tab is the first tab of the AIRTOOLS graphical user interface. Its main purpose is to provide general tasks for basic reduction of astronomical images that is to process all of the raw image sequences to obtain deep stacked result images of your targets.</p>
-<p>The tasks are presented in logical order and may be run one step after the other - which is recommended for first time users - or run completely unattended, including astrometry and blind stacking on a moving comet. Just select the tasks you wish to run in a row. Suitable parameters are determined automatically and will work in most cases.</p>
-<p>It is possible to limit the requested tasks to run on a specific image set (or a list of image sets) by providing the set name in the appropriate text entry field.</p>
-<p>The final group of checkboxes determines which part of the tasks is executed. Normally, you will want the program to process your images and display any diagnostic plot it creates and show all result images. Image processing is normally applied to unprocessed image sets only. You might use the checkbox “Delete previous results” if you need to re-run a specific task and overwrite previously generated data (for safety reason you need to provide the desired image set names explicitely).</p>
-<p>Pressing the “Start” button causes the selected tasks to execute. At any time you may interrupt operation by pressing the same button again. Note that interruption is typically defered by a couple of seconds.</p>
-<h2 data-number="5.1" id="master-darks-and-flats"><span class="header-section-number">5.1</span> Master Darks and Flats</h2>
-<p>The processing of calibration images involves a mixture of median and average operations. For best results it is therefore adviced to capture multiples of 6 exposures, e.g. 6 individual dark images at any required exposure time (and temperature) and 12 individual flat images for each filter used.</p>
-<p>Throughout this manual we refer to the term master dark by meaning of an image which has not been subtracted by a bias image. Within this definition a bias image is just a dark image at zero seconds exposure time. Furthermore a master flat image is a dark-subtracted flat field (where the corresponding master dark was taken at the same exposure time, sometimes called a flat-dark).</p>
-<p>If you don’t know your camera/sensor very well then it is a good idea to take more exposures - especially darks. The processing routines include measurements of the dark level in each image. A plot of this measurements is displayed and you can evaluate the stability of the mean intensity level. In addition, the difference of each individual dark exposure with respect to the mean image is computed. A mosaic of the much downsized and contrast enhanced difference images is created and displayed. This is helpful again to judge sensor stability and health. You may measure image intensity withing self defined regions. Note that the mean intensity of difference images has been shifted to 1000 and streched by a factor of 10.</p>
-<p>The number of individual flat images has to be choosen to be large enough to provide suitable signal to noise (not degrade the signal to noise of the stacked target image). Also its intensity level should be choosen carefully to provide high signal but fall well within linear range of the sensor response. Creating high quality flat fields is a challenge but crucial for obtaining precise photometry of extended objects like comets.</p>
+<p>A note about master calibration images. It is not required and not
+convenient to capture darks and flats in every night. After you have
+collected some calibration sets and build some master files by AIRTOOLS
+it is common practice to reuse them later on. This can be done by simply
+copying them over from older project directories to the current one
+using the file manager.</p>
+<p>Some (remote) observatories deliver already calibrated images to
+their customers. In this special case you can omit dark and flat field
+calibration by providing the name “cal” for both dark and flat field
+image names.</p>
+<h1 data-number="5" id="image-reduction"><span
+class="header-section-number">5</span> Image Reduction</h1>
+<p>The “Image Reduction” tab is the first tab of the AIRTOOLS graphical
+user interface. Its main purpose is to provide general tasks for basic
+reduction of astronomical images that is to process all of the raw image
+sequences to obtain deep stacked result images of your targets.</p>
+<p>The tasks are presented in logical order and may be run one step
+after the other - which is recommended for first time users - or run
+completely unattended, including astrometry and blind stacking on a
+moving comet. Just select the tasks you wish to run in a row. Suitable
+parameters are determined automatically and will work in most cases.</p>
+<p>It is possible to limit the requested tasks to run on a specific
+image set (or a list of image sets) by providing the set name in the
+appropriate text entry field.</p>
+<p>The final group of checkboxes determines which part of the tasks is
+executed. Normally, you will want the program to process your images and
+display any diagnostic plot it creates and show all result images. Image
+processing is normally applied to unprocessed image sets only. You might
+use the checkbox “Delete previous results” if you need to re-run a
+specific task and overwrite previously generated data (for safety reason
+you need to provide the desired image set names explicitely).</p>
+<p>Pressing the “Start” button causes the selected tasks to execute. At
+any time you may interrupt operation by pressing the same button again.
+Note that interruption is typically defered by a couple of seconds.</p>
+<h2 data-number="5.1" id="master-darks-and-flats"><span
+class="header-section-number">5.1</span> Master Darks and Flats</h2>
+<p>The processing of calibration images involves a mixture of median and
+average operations. For best results it is therefore adviced to capture
+multiples of 6 exposures, e.g. 6 individual dark images at any required
+exposure time (and temperature) and 12 individual flat images for each
+filter used.</p>
+<p>Throughout this manual we refer to the term master dark by meaning of
+an image which has not been subtracted by a bias image. Within this
+definition a bias image is just a dark image at zero seconds exposure
+time. Furthermore a master flat image is a dark-subtracted flat field
+(where the corresponding master dark was taken at the same exposure
+time, sometimes called a flat-dark).</p>
+<p>If you don’t know your camera/sensor very well then it is a good idea
+to take more exposures - especially darks. The processing routines
+include measurements of the dark level in each image. A plot of this
+measurements is displayed and you can evaluate the stability of the mean
+intensity level. In addition, the difference of each individual dark
+exposure with respect to the mean image is computed. A mosaic of the
+much downsized and contrast enhanced difference images is created and
+displayed. This is helpful again to judge sensor stability and health.
+You may measure image intensity withing self defined regions. Note that
+the mean intensity of difference images has been shifted to 1000 and
+streched by a factor of 10.</p>
+<p>The number of individual flat images has to be choosen to be large
+enough to provide suitable signal to noise (not degrade the signal to
+noise of the stacked target image). Also its intensity level should be
+choosen carefully to provide high signal but fall well within linear
+range of the sensor response. Creating high quality flat fields is a
+challenge but crucial for obtaining precise photometry of extended
+objects like comets.</p>
 <figure>
-<img src="images/dark_variation2.png" title="Dark variation" alt="" /><figcaption>Variation of dark images with respect to master dark (Pentax K-5II DSLR)</figcaption>
+<img src="images/dark_variation2.png" title="Dark variation"
+alt="Variation of dark images with respect to master dark (Pentax K-5II DSLR)" />
+<figcaption aria-hidden="true">Variation of dark images with respect to
+master dark (Pentax K-5II DSLR)</figcaption>
 </figure>
-<h2 data-number="5.2" id="bad-pixel-masks"><span class="header-section-number">5.2</span> Bad Pixel Masks</h2>
+<h2 data-number="5.2" id="bad-pixel-masks"><span
+class="header-section-number">5.2</span> Bad Pixel Masks</h2>
 <p>TODO</p>
-<h2 data-number="5.3" id="image-calibration"><span class="header-section-number">5.3</span> Image Calibration</h2>
-<p>Image calibration involves the subtraction of the master dark image and division by the master flat image. The calibrated images are stored in the temporary directory defined for the project. Their name starts with the image number associated with each individual raw image. Calibrated images are not overwritten by default and kept throughout the project.</p>
-<p>There is no plots or result images produced by the caibration task. Though you may display certain calibrated images by using actions from the “Misc. Tools” tab: enter an image set name or specific image numbers and press the button “Load Calibrated Images”.</p>
-<p>For DSLR images it is possible to provide a text file which holds a list of known hot pixels. Those will be replaced by the interpolation algorithm during the debayering step. The hot pixel file must be named using a fixed scheme which uses the camera name you have defined in the parameter file <code>camera.dat</code>. The appropriate line is found by matching the telescope identifier of the image set (first column in <code>camera.dat</code>). The camera name is given at fifth field position of that line. If the camera identifier is <code>K5II</code> then you have to name the hot pixel file <code>hotpix.k5ii.dat</code> and place it in the project directory. The file contains one line per pixel, with at least 3 space separated values. The values are image coordinates in x (starting at left with 0) and y (starting at top with 0) and a third fixed value of 0.</p>
-<p>In addition it is possible to manually create masks of bad image regions where necessary (e.g. satellite trails) on calibrated images. Load the calibrated images and use SAOImage regions to draw around affected areas. Save the regions file under the <code>bgvar</code> subdirectory using a name containing the given image number, e.g. <code>0003.bad.reg</code>. Those image regions will be excluded from the stacking process later on.</p>
-<h2 data-number="5.4" id="background-evaluation"><span class="header-section-number">5.4</span> Background evaluation</h2>
-<p>Often, observations are carried out under non-perfect conditions. If you plan to estimate photometric magnitudes from extended sources, then it is important to carefully check image quality and possibly reject some exposures from stacking of a long sequence of images. Therefore a check of variation in the sky background has been added to the processing pipeline. At first, a downsized background map is created for each image and the average intensity level is plotted.</p>
+<h2 data-number="5.3" id="image-calibration"><span
+class="header-section-number">5.3</span> Image Calibration</h2>
+<p>Image calibration involves the subtraction of the master dark image
+and division by the master flat image. The calibrated images are stored
+in the temporary directory defined for the project. Their name starts
+with the image number associated with each individual raw image.
+Calibrated images are not overwritten by default and kept throughout the
+project.</p>
+<p>There is no plots or result images produced by the caibration task.
+Though you may display certain calibrated images by using actions from
+the “Misc. Tools” tab: enter an image set name or specific image numbers
+and press the button “Load Calibrated Images”.</p>
+<p>For DSLR images it is possible to provide a text file which holds a
+list of known hot pixels. Those will be replaced by the interpolation
+algorithm during the debayering step. The hot pixel file must be named
+using a fixed scheme which uses the camera name you have defined in the
+parameter file <code>camera.dat</code>. The appropriate line is found by
+matching the telescope identifier of the image set (first column in
+<code>camera.dat</code>). The camera name is given at fifth field
+position of that line. If the camera identifier is <code>K5II</code>
+then you have to name the hot pixel file <code>hotpix.k5ii.dat</code>
+and place it in the project directory. The file contains one line per
+pixel, with at least 3 space separated values. The values are image
+coordinates in x (starting at left with 0) and y (starting at top with
+0) and a third fixed value of 0.</p>
+<p>In addition it is possible to manually create masks of bad image
+regions where necessary (e.g. satellite trails) on calibrated images.
+Load the calibrated images and use SAOImage regions to draw around
+affected areas. Save the regions file under the <code>bgvar</code>
+subdirectory using a name containing the given image number,
+e.g. <code>0003.bad.reg</code>. Those image regions will be excluded
+from the stacking process later on.</p>
+<h2 data-number="5.4" id="background-evaluation"><span
+class="header-section-number">5.4</span> Background evaluation</h2>
+<p>Often, observations are carried out under non-perfect conditions. If
+you plan to estimate photometric magnitudes from extended sources, then
+it is important to carefully check image quality and possibly reject
+some exposures from stacking of a long sequence of images. Therefore a
+check of variation in the sky background has been added to the
+processing pipeline. At first, a downsized background map is created for
+each image and the average intensity level is plotted.</p>
 <figure>
-<img src="images/gsog.bg.png" title="Background intensity" alt="" /><figcaption>Background intensity (3 image sets)</figcaption>
+<img src="images/gsog.bg.png" title="Background intensity"
+alt="Background intensity (3 image sets)" />
+<figcaption aria-hidden="true">Background intensity (3 image
+sets)</figcaption>
 </figure>
-<p>Then an average background image is created for each image set as reference and difference images are created for each individual exposure. A mosaic of those thumbnail difference images is finally displayed.</p>
+<p>Then an average background image is created for each image set as
+reference and difference images are created for each individual
+exposure. A mosaic of those thumbnail difference images is finally
+displayed.</p>
 <figure>
-<img src="images/bgvar.png" title="Background variation" alt="" /><figcaption>Background variation (2 different image sets)</figcaption>
+<img src="images/bgvar.png" title="Background variation"
+alt="Background variation (2 different image sets)" />
+<figcaption aria-hidden="true">Background variation (2 different image
+sets)</figcaption>
 </figure>
-<h2 data-number="5.5" id="image-registration"><span class="header-section-number">5.5</span> Image Registration</h2>
-<p>The stacking process involves several steps. At first, sources (stars) are extracted for each calibrated image. Then sources are matched with respect to the reference image of the given set. Some of the brighter, unsaturated stars are used to measure relative brightness between images and an average value of star size (full width at half maximum). Those values are plotted to allow to quantify image quality and sky conditions.</p>
-<p>If some of your images have signs of much degraded quality then you might wish to exclude them from any further processing. To do so, go to the “Edit” menu and open the “Project Settings”. Add the corresponding image numbers to the string variable <code>AI_EXCLUDE</code> (space separated four digit numbers). Save your edits and close the text editor.</p>
+<h2 data-number="5.5" id="image-registration"><span
+class="header-section-number">5.5</span> Image Registration</h2>
+<p>The stacking process involves several steps. At first, sources
+(stars) are extracted for each calibrated image. Then sources are
+matched with respect to the reference image of the given set. Some of
+the brighter, unsaturated stars are used to measure relative brightness
+between images and an average value of star size (full width at half
+maximum). Those values are plotted to allow to quantify image quality
+and sky conditions.</p>
+<p>If some of your images have signs of much degraded quality then you
+might wish to exclude them from any further processing. To do so, go to
+the “Edit” menu and open the “Project Settings”. Add the corresponding
+image numbers to the string variable <code>AI_EXCLUDE</code> (space
+separated four digit numbers). Save your edits and close the text
+editor.</p>
 <figure>
-<img src="images/gsog.dmag.png" title="Mag difference" alt="" /><figcaption>Mag difference</figcaption>
+<img src="images/gsog.dmag.png" title="Mag difference"
+alt="Mag difference" />
+<figcaption aria-hidden="true">Mag difference</figcaption>
 </figure>
 <figure>
-<img src="images/gsog.fwhm.png" title="FWHM" alt="" /><figcaption>FWHM of stars</figcaption>
+<img src="images/gsog.fwhm.png" title="FWHM" alt="FWHM of stars" />
+<figcaption aria-hidden="true">FWHM of stars</figcaption>
 </figure>
-<h2 data-number="5.6" id="stacking-and-astrometric-calibration"><span class="header-section-number">5.6</span> Stacking and Astrometric calibration</h2>
-<p>Finally the images are projected to the reference image arbitrary coordinate system and co-added. The stacked image is used to create an object catalog. Stellar sources of this catalog are matched against a local copy of the Tycho2 star catalog to obtain a first astrometric solution (using an offline Astrometry.net solver). In a second step a global model is fitted (using online UCAC-4 catalog) over the whole image including to map some degree of distortion. This new WCS model is saved and used later on to identify objects from photometric catalogs. The overall astrometric accuracy is printed to the log output and several diagnostic plots are created to show residuals from catalog position in different axes, a distortion map showing pixel scale variation and a sky chart with detected sources.</p>
+<h2 data-number="5.6" id="stacking-and-astrometric-calibration"><span
+class="header-section-number">5.6</span> Stacking and Astrometric
+calibration</h2>
+<p>Finally the images are projected to the reference image arbitrary
+coordinate system and co-added. The stacked image is used to create an
+object catalog. Stellar sources of this catalog are matched against a
+local copy of the Tycho2 star catalog to obtain a first astrometric
+solution (using an offline Astrometry.net solver). In a second step a
+global model is fitted (using online UCAC-4 catalog) over the whole
+image including to map some degree of distortion. This new WCS model is
+saved and used later on to identify objects from photometric catalogs.
+The overall astrometric accuracy is printed to the log output and
+several diagnostic plots are created to show residuals from catalog
+position in different axes, a distortion map showing pixel scale
+variation and a sky chart with detected sources.</p>
 <figure>
-<img src="images/distortion2.png" title="Distortion map" alt="" /><figcaption>Distortion map (8" Newton f/4, Pentax K-5II)</figcaption>
+<img src="images/distortion2.png" title="Distortion map"
+alt="Distortion map (8” Newton f/4, Pentax K-5II)" />
+<figcaption aria-hidden="true">Distortion map (8” Newton f/4, Pentax
+K-5II)</figcaption>
 </figure>
-<p>With the help of the astrometric solution and comet ephemeris data fetched from MPC it is possible to predict the comet motion between individual exposures and use this information to do blind stacking on the comet.</p>
-<p>The resulting output images have names starting with the image set name. Stacks centered on the moving comet have a fixed string suffix of <code>_m</code> after the set name. Images consist of 16bit integer data and are either in PGM (monochrome, gray image) or PPM (RGB color image) format. The choice of these formats over FITS is mainly due to historic reasons - the software originally was written to reduce DSLR images only - and because many of the underlying image reduction software programs simply do not operate on (RGB-) FITS images. Image metadata are stored in associated ASCII header files using the file extension <code>.head</code>.</p>
-<h1 data-number="6" id="large-aperture-comet-photometry"><span class="header-section-number">6</span> Large Aperture Comet Photometry</h1>
-<h2 data-number="6.1" id="comet-observation"><span class="header-section-number">6.1</span> Comet Observation</h2>
-<h2 data-number="6.2" id="background-gradient-removal"><span class="header-section-number">6.2</span> Background Gradient Removal</h2>
-<h2 data-number="6.3" id="psf-extraction-and-star-removal"><span class="header-section-number">6.3</span> PSF Extraction and Star Removal</h2>
-<h2 data-number="6.4" id="comet-extraction-and-measuring-the-comet"><span class="header-section-number">6.4</span> Comet Extraction and Measuring the Comet</h2>
-<h2 data-number="6.5" id="photometric-calibration"><span class="header-section-number">6.5</span> Photometric Calibration</h2>
+<p>With the help of the astrometric solution and comet ephemeris data
+fetched from MPC it is possible to predict the comet motion between
+individual exposures and use this information to do blind stacking on
+the comet.</p>
+<p>The resulting output images have names starting with the image set
+name. Stacks centered on the moving comet have a fixed string suffix of
+<code>_m</code> after the set name. Images consist of 16bit integer data
+and are either in PGM (monochrome, gray image) or PPM (RGB color image)
+format. The choice of these formats over FITS is mainly due to historic
+reasons - the software originally was written to reduce DSLR images only
+- and because many of the underlying image reduction software programs
+simply do not operate on (RGB-) FITS images. Image metadata are stored
+in associated ASCII header files using the file extension
+<code>.head</code>.</p>
+<h1 data-number="6" id="large-aperture-comet-photometry"><span
+class="header-section-number">6</span> Large Aperture Comet
+Photometry</h1>
+<h2 data-number="6.1" id="comet-observation"><span
+class="header-section-number">6.1</span> Comet Observation</h2>
+<h2 data-number="6.2" id="background-gradient-removal"><span
+class="header-section-number">6.2</span> Background Gradient
+Removal</h2>
+<h2 data-number="6.3" id="psf-extraction-and-star-removal"><span
+class="header-section-number">6.3</span> PSF Extraction and Star
+Removal</h2>
+<h2 data-number="6.4"
+id="comet-extraction-and-measuring-the-comet"><span
+class="header-section-number">6.4</span> Comet Extraction and Measuring
+the Comet</h2>
+<h2 data-number="6.5" id="photometric-calibration"><span
+class="header-section-number">6.5</span> Photometric Calibration</h2>
 
-<h1 data-number="7" id="appendix"><span class="header-section-number">7</span> Appendix</h1>
-<h2 data-number="7.1" id="custom-installation-on-windows"><span class="header-section-number">7.1</span> Custom Installation on Windows</h2>
-<p>This alternative allows for more options in setting up the virtual machine and a custom installation of the Linux operating system in a similar way you would install Linux on a physical computer.</p>
-<h3 data-number="7.1.1" id="setup-of-a-virtual-machine-for-the-linux-os"><span class="header-section-number">7.1.1</span> Setup of a Virtual Machine for the Linux OS</h3>
-<p>At first you need to install the VirtualBox software as described in <a href="#installing-oracle-virtualbox">this chapter</a>.</p>
-<p>Start the Oracle VirtualBox Manager, if not running already. Click on the “New” button and fill in the name of the new VM, e.g. xubuntu-vm. Depending on the name you have choosen you might have to select Type=“Linux” and Version=“Ubuntu (64-bit)”. Continue by pressing “Next”.</p>
-<p>Set the memory size to &gt;=2 GB (recommended 4 GB or up to 75% of physical RAM) and press “Next”.</p>
-<p>Create a virtual hard disk of type VDI of fixed size. You can use the proposed location but it is recommended to create the virtual disk file on a fast physical hard disk drive, e.g. SSD. The file size should be &gt;=50 GB to serve for roughly 10-20 comet observations, based on 10-20 individual exposures each. If you intent to use the AIRTOOLS software regularly to analyze all your comet observations then you should create a much larger virtual hard disk. After pressing the “Create” button the virtual machine is created.</p>
-<p>It is recommended to tweak some additional parameters for improved performance. Click the “Settings” button to access the following tabs:</p>
+<h1 data-number="7" id="appendix"><span
+class="header-section-number">7</span> Appendix</h1>
+<h2 data-number="7.1" id="custom-installation-on-windows"><span
+class="header-section-number">7.1</span> Custom Installation on
+Windows</h2>
+<p>This alternative allows for more options in setting up the virtual
+machine and a custom installation of the Linux operating system in a
+similar way you would install Linux on a physical computer.</p>
+<h3 data-number="7.1.1"
+id="setup-of-a-virtual-machine-for-the-linux-os"><span
+class="header-section-number">7.1.1</span> Setup of a Virtual Machine
+for the Linux OS</h3>
+<p>At first you need to install the VirtualBox software as described in
+<a href="#installing-oracle-virtualbox">this chapter</a>.</p>
+<p>Start the Oracle VirtualBox Manager, if not running already. Click on
+the “New” button and fill in the name of the new VM, e.g. xubuntu-vm.
+Depending on the name you have choosen you might have to select
+Type=“Linux” and Version=“Ubuntu (64-bit)”. Continue by pressing
+“Next”.</p>
+<p>Set the memory size to &gt;=2 GB (recommended 4 GB or up to 75% of
+physical RAM) and press “Next”.</p>
+<p>Create a virtual hard disk of type VDI of fixed size. You can use the
+proposed location but it is recommended to create the virtual disk file
+on a fast physical hard disk drive, e.g. SSD. The file size should be
+&gt;=50 GB to serve for roughly 10-20 comet observations, based on 10-20
+individual exposures each. If you intent to use the AIRTOOLS software
+regularly to analyze all your comet observations then you should create
+a much larger virtual hard disk. After pressing the “Create” button the
+virtual machine is created.</p>
+<p>It is recommended to tweak some additional parameters for improved
+performance. Click the “Settings” button to access the following
+tabs:</p>
 <ul>
-<li>Tab System/Processor: increase number of CPU to &gt;=2 (up to number of physical cores)</li>
+<li>Tab System/Processor: increase number of CPU to &gt;=2 (up to number
+of physical cores)</li>
 <li>Tab Display/Screen: increase Memory to 64 MB</li>
 <li>Tab USB: choose USB 3.0 Controller</li>
 </ul>
-<p>Finally you should create a desktop icon to directly launch the virtual machine. Locate the name of the virtual machine on the left side of the VirtualBox Manager, press the right mouse and select “Create Shortcut on Desktop”.</p>
+<p>Finally you should create a desktop icon to directly launch the
+virtual machine. Locate the name of the virtual machine on the left side
+of the VirtualBox Manager, press the right mouse and select “Create
+Shortcut on Desktop”.</p>
 <figure>
-<img src="images/virtualbox-manager.png" title="virtualbox manager" alt="" /><figcaption>Setup of a virtual machine in the Oracle VirtualBox Manager</figcaption>
+<img src="images/virtualbox-manager.png" title="virtualbox manager"
+alt="Setup of a virtual machine in the Oracle VirtualBox Manager" />
+<figcaption aria-hidden="true">Setup of a virtual machine in the Oracle
+VirtualBox Manager</figcaption>
 </figure>
-<h3 data-number="7.1.2" id="booting-install-medium-of-the-xubuntu-linux-distribution"><span class="header-section-number">7.1.2</span> Booting Install Medium of the Xubuntu Linux distribution</h3>
-<p>Download the ISO image file of the latest Xubuntu LTS release from <a href="http://xubuntu.org/download" class="uri">http://xubuntu.org/download</a>. Please note the important <strong>LTS</strong> version label, which indicates a “Long Term Support” release. This Linux OS version is well supported by the AIRTOOLS software. Choose a mirror download close to your location and download the 64-bit desktop image. At the time of this writing it is named <code>xubuntu-22.04.2-desktop-amd64.iso</code>.</p>
-<p>The ISO image file is used in place of a install medium for the virtual machine. To do so you have to start the VirtualBox software (if not running already) and press the “Settings” button of the selected virtual machine.</p>
-<p>Select the “Storage” tab. Within “Storage Devices” click on the CD symbol (labeled “Empty”) and from “Attributes” click the CD symbol near the right border of the window and select the previously downloaded ISO file. Pressing “OK” will save your modified settings and you are ready to start the virtual machine by pressing the green “Start” button.</p>
-<p>The following boot process is very similar to a regular boot process of a install CD/DVD on a real computer. In addition, the current virtual machine can be used to start a fully functional Linux live session to evaluate or experiment with the Xubuntu Linux OS (but this is not our goal).</p>
-<h3 data-number="7.1.3" id="installing-xubuntu-linux"><span class="header-section-number">7.1.3</span> Installing Xubuntu Linux</h3>
-<p>Now, the Linux OS has to be installed into the presently empty virtual hard disk of the running virtual machine. Please make sure your host computer has a working internet connection.</p>
-<p>From the initial “Welcome” screen you choose your prefered language and click the “Install Xubuntu” button to start the setup program of the installer. You can accept default settings on all the following screens (“Keyboard layout”, “Updates and other software”, “Installation type”). Please note that the Linux OS is installed on the virtual hard disk only, it does in no way erase data from your host computer’s file system. Finally click “Install now” and confirm writing the changes to the (virtual) disk by the “Continue” button.</p>
-<p>While the installation process has already started in the background you are asked to provide a few additional informations:</p>
+<h3 data-number="7.1.2"
+id="booting-install-medium-of-the-xubuntu-linux-distribution"><span
+class="header-section-number">7.1.2</span> Booting Install Medium of the
+Xubuntu Linux distribution</h3>
+<p>Download the ISO image file of the latest Xubuntu LTS release from <a
+href="http://xubuntu.org/download"
+class="uri">http://xubuntu.org/download</a>. Please note the important
+<strong>LTS</strong> version label, which indicates a “Long Term
+Support” release. This Linux OS version is well supported by the
+AIRTOOLS software. Choose a mirror download close to your location and
+download the 64-bit desktop image. At the time of this writing it is
+named <code>xubuntu-22.04.2-desktop-amd64.iso</code>.</p>
+<p>The ISO image file is used in place of a install medium for the
+virtual machine. To do so you have to start the VirtualBox software (if
+not running already) and press the “Settings” button of the selected
+virtual machine.</p>
+<p>Select the “Storage” tab. Within “Storage Devices” click on the CD
+symbol (labeled “Empty”) and from “Attributes” click the CD symbol near
+the right border of the window and select the previously downloaded ISO
+file. Pressing “OK” will save your modified settings and you are ready
+to start the virtual machine by pressing the green “Start” button.</p>
+<p>The following boot process is very similar to a regular boot process
+of a install CD/DVD on a real computer. In addition, the current virtual
+machine can be used to start a fully functional Linux live session to
+evaluate or experiment with the Xubuntu Linux OS (but this is not our
+goal).</p>
+<h3 data-number="7.1.3" id="installing-xubuntu-linux"><span
+class="header-section-number">7.1.3</span> Installing Xubuntu Linux</h3>
+<p>Now, the Linux OS has to be installed into the presently empty
+virtual hard disk of the running virtual machine. Please make sure your
+host computer has a working internet connection.</p>
+<p>From the initial “Welcome” screen you choose your prefered language
+and click the “Install Xubuntu” button to start the setup program of the
+installer. You can accept default settings on all the following screens
+(“Keyboard layout”, “Updates and other software”, “Installation type”).
+Please note that the Linux OS is installed on the virtual hard disk
+only, it does in no way erase data from your host computer’s file
+system. Finally click “Install now” and confirm writing the changes to
+the (virtual) disk by the “Continue” button.</p>
+<p>While the installation process has already started in the background
+you are asked to provide a few additional informations:</p>
 <ul>
-<li>“Where are you”: Select your time zone by clicking close to your geographic location</li>
-<li>“Who are you”: Fill in your (full) name, a computer name, username and user password. Note that choosing “xubuntu” for the name of the virtual computer is allowed, despite the given warning message. You might toggle the “Log in automatically” radio button for the sake of convenience.</li>
+<li>“Where are you”: Select your time zone by clicking close to your
+geographic location</li>
+<li>“Who are you”: Fill in your (full) name, a computer name, username
+and user password. Note that choosing “xubuntu” for the name of the
+virtual computer is allowed, despite the given warning message. You
+might toggle the “Log in automatically” radio button for the sake of
+convenience.</li>
 </ul>
-<p>Continue the installation process which will take a few minutes to complete. Finally you are asked to restart the (virtual) computer. This will take a little time and you might be prompted to remove the installation medium (the ISO file used in the virtual CDROM drive). Press the “Enter” key to continue. There are few combinations of host hardware, VirtualBox version and guest operating system where the virtual machine is not rebooting but showing a black screen for infinite time. In this case you must manually close the virtual machine window and select “Shutdown VM”. In the VirtualBox Manager, check that the ISO file is removed from the virtual CDROM drive and start the virtual machine again.</p>
-<p>The virtual machine (in virtualbox jargon the “guest” system) will now boot the installed Linux OS from the virtual disk and automatically logs in to the Xubuntu Linux desktop. Please note the different sections of the VirtualBox guest application window: the VirtualBox guest machine’s menu bar at the top, a status bar at the bottom and the virtual screen of the Linux Desktop in between.</p>
-<p>After booting into the virtual Xubuntu Linux desktop you might be faced by a message window stating “Incomplete Language Support”. It is save to skip the update until later as it is not required by the AIRTOOLS software installation.</p>
-<p>Similarly the “Software Updater” might pop up at any time with the information about available updates of currently installed packages. Again, those updates are not required right now but should be completed after the AIRTOOLS installation.</p>
-<h3 data-number="7.1.4" id="xubuntu-desktop-basics-1"><span class="header-section-number">7.1.4</span> Xubuntu Desktop Basics</h3>
-<p>See <a href="#xubuntu-desktop-basics">this chapter</a>. Please note that the appearance of the desktop might be slightly different from that of the pre-build Linux appliance, e.g. the panel applet for choosing another keyboard language is not visible.</p>
-<h3 data-number="7.1.5" id="installing-virtualbox-guest-additions"><span class="header-section-number">7.1.5</span> Installing VirtualBox Guest Additions</h3>
-<p>The Guest Additions are designed to be installed inside a virtual machine after the guest operating system has been installed. They consist of device drivers and system applications provided by Oracle VirtualBox that optimize the guest operating system for better performance and usability.</p>
+<p>Continue the installation process which will take a few minutes to
+complete. Finally you are asked to restart the (virtual) computer. This
+will take a little time and you might be prompted to remove the
+installation medium (the ISO file used in the virtual CDROM drive).
+Press the “Enter” key to continue. There are few combinations of host
+hardware, VirtualBox version and guest operating system where the
+virtual machine is not rebooting but showing a black screen for infinite
+time. In this case you must manually close the virtual machine window
+and select “Shutdown VM”. In the VirtualBox Manager, check that the ISO
+file is removed from the virtual CDROM drive and start the virtual
+machine again.</p>
+<p>The virtual machine (in virtualbox jargon the “guest” system) will
+now boot the installed Linux OS from the virtual disk and automatically
+logs in to the Xubuntu Linux desktop. Please note the different sections
+of the VirtualBox guest application window: the VirtualBox guest
+machine’s menu bar at the top, a status bar at the bottom and the
+virtual screen of the Linux Desktop in between.</p>
+<p>After booting into the virtual Xubuntu Linux desktop you might be
+faced by a message window stating “Incomplete Language Support”. It is
+save to skip the update until later as it is not required by the
+AIRTOOLS software installation.</p>
+<p>Similarly the “Software Updater” might pop up at any time with the
+information about available updates of currently installed packages.
+Again, those updates are not required right now but should be completed
+after the AIRTOOLS installation.</p>
+<h3 data-number="7.1.4" id="xubuntu-desktop-basics-1"><span
+class="header-section-number">7.1.4</span> Xubuntu Desktop Basics</h3>
+<p>See <a href="#xubuntu-desktop-basics">this chapter</a>. Please note
+that the appearance of the desktop might be slightly different from that
+of the pre-build Linux appliance, e.g. the panel applet for choosing
+another keyboard language is not visible.</p>
+<h3 data-number="7.1.5" id="installing-virtualbox-guest-additions"><span
+class="header-section-number">7.1.5</span> Installing VirtualBox Guest
+Additions</h3>
+<p>The Guest Additions are designed to be installed inside a virtual
+machine after the guest operating system has been installed. They
+consist of device drivers and system applications provided by Oracle
+VirtualBox that optimize the guest operating system for better
+performance and usability.</p>
 <p>For installation you must</p>
 <ul>
 <li>Boot the guest OS.</li>
-<li>Go to the VirtualBox guest menu item “Devices” and press “Install Guest Additions CD Image”. A new CD icon appears on the Linux desktop and a few seconds later the Linux file manager is showing the contents of the Guest Additions virtual CD.</li>
-<li>Open a terminal window using “File” menu of the file manager and select “Open Terminal Here”.</li>
-<li>From the command line of the terminal run the following commands (you will be asked to provide your password): <code>sudo apt-get update</code> and <code>sudo apt-get install build-essential</code></li>
-<li>Start installation by entering the command: <code>sudo bash VBoxLinuxAdditions.run</code></li>
-<li>If installation has finished close the terminal window and eject the virtual CD by using the eject button (caret-up) next to the CD entry in the file manager.</li>
+<li>Go to the VirtualBox guest menu item “Devices” and press “Install
+Guest Additions CD Image”. A new CD icon appears on the Linux desktop
+and a few seconds later the Linux file manager is showing the contents
+of the Guest Additions virtual CD.</li>
+<li>Open a terminal window using “File” menu of the file manager and
+select “Open Terminal Here”.</li>
+<li>From the command line of the terminal run the following commands
+(you will be asked to provide your password):
+<code>sudo apt-get update</code> and
+<code>sudo apt-get install build-essential</code></li>
+<li>Start installation by entering the command:
+<code>sudo bash VBoxLinuxAdditions.run</code></li>
+<li>If installation has finished close the terminal window and eject the
+virtual CD by using the eject button (caret-up) next to the CD entry in
+the file manager.</li>
 <li>Finally you must reboot the Linux guest.</li>
 </ul>
-<p>After a restart of the Linux virtual machine you may adjust the guest window size and effectively the screen size of the Linux desktop as needed.</p>
-<p>Moreover, you can now configure the virtual machine to use a shared clipboard between host and guest and use drag-and-drop between both systems. Those settings are activated from the “Devices” menu of the VirtualBox guest menu bar on the top of the window.</p>
-<h3 data-number="7.1.6" id="installing-the-airtools-software-1"><span class="header-section-number">7.1.6</span> Installing the AIRTOOLS software</h3>
+<p>After a restart of the Linux virtual machine you may adjust the guest
+window size and effectively the screen size of the Linux desktop as
+needed.</p>
+<p>Moreover, you can now configure the virtual machine to use a shared
+clipboard between host and guest and use drag-and-drop between both
+systems. Those settings are activated from the “Devices” menu of the
+VirtualBox guest menu bar on the top of the window.</p>
+<h3 data-number="7.1.6" id="installing-the-airtools-software-1"><span
+class="header-section-number">7.1.6</span> Installing the AIRTOOLS
+software</h3>
 <p>see <a href="#installing-the-airtools-software">this chapter</a></p>
-<h2 data-number="7.2" id="sample-data-project"><span class="header-section-number">7.2</span> Sample data project</h2>
-<p>Sample data files are provided to test and experiment with the AIRTOOLS software. The following steps must be completed within a running Linux system (physical or virtualized computer) where AIRTOOLS has been installed.</p>
-<h3 data-number="7.2.1" id="create-project"><span class="header-section-number">7.2.1</span> Create project</h3>
+<h2 data-number="7.2" id="sample-data-project"><span
+class="header-section-number">7.2</span> Sample data project</h2>
+<p>Sample data files are provided to test and experiment with the
+AIRTOOLS software. The following steps must be completed within a
+running Linux system (physical or virtualized computer) where AIRTOOLS
+has been installed.</p>
+<h3 data-number="7.2.1" id="create-project"><span
+class="header-section-number">7.2.1</span> Create project</h3>
 <ul>
 <li><p>Start Airtools (double-click the icon)</p></li>
-<li><p>If this is the first start of the application then you are prompted with the Airtools setup dialog. You can accept default directories.</p></li>
-<li><p>Create a new project choosing 2023 February 16th as the date of observations by using the calendar date picker and the observatory site “Hakos” from the appropriate dropdown list.</p></li>
+<li><p>If this is the first start of the application then you are
+prompted with the Airtools setup dialog. You can accept default
+directories.</p></li>
+<li><p>Create a new project choosing 2023 February 16th as the date of
+observations by using the calendar date picker and the observatory site
+“Hakos” from the appropriate dropdown list.</p></li>
 <li><p>Optionally fill in your observer details</p></li>
 <li><p>Press “Apply”</p></li>
 </ul>
-<h3 data-number="7.2.2" id="get-observations-data-files"><span class="header-section-number">7.2.2</span> Get observations data files</h3>
-<p>Observations data files (raw FITS images) must be placed into the appropriate folder on the virtual Linux computer. Here we describe the use of a shared folder between host and virtual computer to copy those data files. For other methods of data transfer (e.g. using the VirtualBox File Manager or using external USB storage) please refer to the VirtualBox documentation.</p>
+<h3 data-number="7.2.2" id="get-observations-data-files"><span
+class="header-section-number">7.2.2</span> Get observations data
+files</h3>
+<p>Observations data files (raw FITS images) must be placed into the
+appropriate folder on the virtual Linux computer. Here we describe the
+use of a shared folder between host and virtual computer to copy those
+data files. For other methods of data transfer (e.g. using the
+VirtualBox File Manager or using external USB storage) please refer to
+the VirtualBox documentation.</p>
 <ul>
-<li><p>Use the provided Firefox browser from the applications menu and download the <a href="https://fg-kometen.vdsastro.de/airtools/testdata/230216_shf_raw.zip">sample data archive</a></p></li>
-<li><p>Open the archive and extract files and directories into the raw files folder corresponding to your project. After extraction the raw folder will look like the following screenshot when using default directory names during initial setup.</p></li>
+<li><p>Use the provided Firefox browser from the applications menu and
+download the <a
+href="https://fg-kometen.vdsastro.de/airtools/testdata/230216_shf_raw.zip">sample
+data archive</a></p></li>
+<li><p>Open the archive and extract files and directories into the raw
+files folder corresponding to your project. After extraction the raw
+folder will look like the following screenshot when using default
+directory names during initial setup.</p></li>
 </ul>
 <figure>
-<img src="images/sample_rawfolder.png" title="rawfolder" alt="" /><figcaption>Raw images folder</figcaption>
+<img src="images/sample_rawfolder.png" title="rawfolder"
+alt="Raw images folder" />
+<figcaption aria-hidden="true">Raw images folder</figcaption>
 </figure>
-<h3 data-number="7.2.3" id="image-reduction-1"><span class="header-section-number">7.2.3</span> Image reduction</h3>
-<p>The “Image Reduction” tab of the AIRTOOLS graphical user interface contains all tasks to calibrate and stack images automatically.</p>
+<h3 data-number="7.2.3" id="image-reduction-1"><span
+class="header-section-number">7.2.3</span> Image reduction</h3>
+<p>The “Image Reduction” tab of the AIRTOOLS graphical user interface
+contains all tasks to calibrate and stack images automatically.</p>
 <ul>
-<li><p>Select the first task “Extract basic image info” and run it via the button “Start”</p></li>
-<li><p>Next you need to allocate images to “image sets” of darks, flats and lights: from the menu choose Edit/Edit Image Set Definitions, create an empty file set.dat and copy and paste the following contents:</p></li>
+<li><p>Select the first task “Extract basic image info” and run it via
+the button “Start”</p></li>
+<li><p>Next you need to allocate images to “image sets” of darks, flats
+and lights: from the menu choose Edit/Edit Image Set Definitions, create
+an empty file set.dat and copy and paste the following
+contents:</p></li>
 </ul>
 <pre><code># 230216
 # Skygems Hakos, Namibia, FSQ106, Moravian C3-61000EC PRO, ts=0
@@ -505,30 +1441,55 @@ Used to store individual calibrated images of the project which are used by seve
 18:43 co02 2017K2   o 120 0043 0047 0045 dk02 sk01 SHF # 230221
 </code></pre>
 <ul>
-<li><p>Check for a valid entry of SHF in camera.dat (Edit/Edit Camera Parameters),</p></li>
-<li><p>Proceed with the image reduction by running every single task in the given order until the comet stack is created: select a task, activate all processing options (Process …, View …, Show …) and press the “Start” button</p></li>
-<li><p>Evaluate results, e.g. new plots and images displayed by each task</p></li>
-<li><p>Note: It is allowed to activate and execute several/all tasks in a single run but it is not recommended for the beginner.</p></li>
+<li><p>Check for a valid entry of SHF in camera.dat (Edit/Edit Camera
+Parameters),</p></li>
+<li><p>Proceed with the image reduction by running every single task in
+the given order until the comet stack is created: select a task,
+activate all processing options (Process …, View …, Show …) and press
+the “Start” button</p></li>
+<li><p>Evaluate results, e.g. new plots and images displayed by each
+task</p></li>
+<li><p>Note: It is allowed to activate and execute several/all tasks in
+a single run but it is not recommended for the beginner.</p></li>
 </ul>
-<h3 data-number="7.2.4" id="saoimage-display"><span class="header-section-number">7.2.4</span> SAOImage display</h3>
+<h3 data-number="7.2.4" id="saoimage-display"><span
+class="header-section-number">7.2.4</span> SAOImage display</h3>
 <ul>
-<li>Get familiar with the SAOImage display application and examine the stacked images:
+<li>Get familiar with the SAOImage display application and examine the
+stacked images:
 <ul>
 <li>use right mouse button for brightness/contrast adjustment</li>
 <li>use middle mouse button for pan, scroll wheel for zoom</li>
 <li>use left mouse to place/move/edit regions</li>
 <li>use tab to cycle through several loaded images (frames)</li>
 </ul></li>
-<li>Also try menuitems from the Zoom, Scale and Region menues and buttons from the two button bars above the image (e.g. region/save)</li>
+<li>Also try menuitems from the Zoom, Scale and Region menues and
+buttons from the two button bars above the image (e.g. region/save)</li>
 </ul>
-<h3 data-number="7.2.5" id="comet-photometry"><span class="header-section-number">7.2.5</span> Comet Photometry</h3>
+<h3 data-number="7.2.5" id="comet-photometry"><span
+class="header-section-number">7.2.5</span> Comet Photometry</h3>
 <ul>
-<li><p>Run every single task in the given order (by clicking the named button)</p></li>
-<li><p>Many tasks provide a window to adjust user settings whose default settings are appropriate in most cases</p></li>
+<li><p>Run every single task in the given order (by clicking the named
+button)</p></li>
+<li><p>Many tasks provide a window to adjust user settings whose default
+settings are appropriate in most cases</p></li>
 </ul>
-<h2 data-number="7.3" id="using-external-usb-storage"><span class="header-section-number">7.3</span> Using external USB storage</h2>
-<p>This chapter describes the file transfer from USB pen drive or USB disk to the virtual Linux operating system or vice versa.</p>
-<p>The USB device must be plugged in to an USB port of the physical computer. Then, from the running Linux virtual machine locate the “Devices” menu entry on the VirtualBox VM menu at the top of the window. Select “USB” and you will see a list of USB devices from which you need to identify and select the USB disk. After a few seconds a new USB disk icon will apear on the virtual Linux desktop and little after the file manager window pops up. Use the common copy-and-paste feature to copy files between the Linux file system and USB device.</p>
-<p>After the file transfer has finished you can disconnect the USB device by pushing the eject button next to the USB device entry of the Linux file manager. Finally disconnect the USB device from the virtual computer by opening the “Devices” menu entry on the VirtualBox VM menu, select “USB” and deselect the entry of your USB device.</p>
+<h2 data-number="7.3" id="using-external-usb-storage"><span
+class="header-section-number">7.3</span> Using external USB storage</h2>
+<p>This chapter describes the file transfer from USB pen drive or USB
+disk to the virtual Linux operating system or vice versa.</p>
+<p>The USB device must be plugged in to an USB port of the physical
+computer. Then, from the running Linux virtual machine locate the
+“Devices” menu entry on the VirtualBox VM menu at the top of the window.
+Select “USB” and you will see a list of USB devices from which you need
+to identify and select the USB disk. After a few seconds a new USB disk
+icon will apear on the virtual Linux desktop and little after the file
+manager window pops up. Use the common copy-and-paste feature to copy
+files between the Linux file system and USB device.</p>
+<p>After the file transfer has finished you can disconnect the USB
+device by pushing the eject button next to the USB device entry of the
+Linux file manager. Finally disconnect the USB device from the virtual
+computer by opening the “Devices” menu entry on the VirtualBox VM menu,
+select “USB” and deselect the entry of your USB device.</p>
 </body>
 </html>
