@@ -3,7 +3,7 @@
 # airfun.sh
 #   shell functions aimed towards astronomical image reduction
 #
-# Copyright: Thomas Lehmann, 2011-2023
+# Copyright: Thomas Lehmann, 2011-2024
 # License: GPL v3
 #
 # note:
@@ -14,9 +14,20 @@
 # - in order to use SAOImage DS9 analysis tasks (via AIexamine) you must
 #   have installed files airds9.ana and aircmd.sh
 ########################################################################
-AI_VERSION="5.3.5"
+AI_VERSION="5.3.6"
 : << '----'
 CHANGELOG
+    5.3.6 - 13 Jan 2023
+        * imslice: bugfix to improve handling of unusual input file name
+        * AIbgdiff: take bad bg region into account when operating on FITS
+            images
+        * mkrefcat: updated list of currently active Vizier servers
+        * AIphotcal: added option -srv <vizserver> to choose a specific Vizier
+            server in mkrefcat
+        * cometsmooth: replace imagemagick convert by graphicsmagick or vips
+            commands to avoid exhausting imagemagick memory resources
+        * AIstiff: deal with RGB FITS cube as input
+
     5.3.5 - 12 Dec 2023
         * regstat, aphot: bugfix when operating on RGB image due to changes
             in pnmnoraw output (introduced in netpbm 10.23?)
@@ -5620,10 +5631,11 @@ cometsmooth () {
         kmedian $wdir/x.small.ppm $wdir/x.kern.pbm > $wdir/x.smallmd.ppm
         convert $wdir/x.smallmd.ppm -resize $(imsize $coimg | tr ' ' 'x')\! $wdir/x.smooth.ppm
         reg2pbm $coimg $cobad > $wdir/x.mask.pbm
-        pnmcomp -alpha $wdir/x.mask.pbm $wdir/x.smooth.ppm $coimg | \
-            convert - $wdir/x.min.ppm -evaluate-sequence max $wdir/x.newsub.ppm
+        pnmcomp -alpha $wdir/x.mask.pbm $wdir/x.smooth.ppm $coimg $wdir/x.smoothmasked.ppm
+        vips bandrank "$wdir/x.smoothmasked.ppm $wdir/x.min.ppm" $wdir/x.newsub.ppm[strip=1] --index 1
     else
-        convert $coimg $wdir/x.min.ppm -evaluate-sequence max $wdir/x.newsub.ppm
+        #convert $coimg $wdir/x.min.ppm -evaluate-sequence max $wdir/x.newsub.ppm
+        vips bandrank "$coimg $wdir/x.min.ppm" $wdir/x.newsub.ppm[strip=1] --index 1
     fi
     
     # create smoothed images
@@ -5633,9 +5645,9 @@ cometsmooth () {
         printf("%.0f", b-$1)
         if (NF==3) printf(",%.0f,%.0f", b-$2, b-$3)}')
     echo "# add=$add" >&2
-    pnmccdred -a $add $wdir/x.newsub.ppm $wdir/x.core.$ext   # bright core - not smoothed
-    convert $wdir/x.core.$ext -blur 0x1.0 $wdir/x.inner.$ext # center coma
-    convert $wdir/x.core.$ext -blur 0x2.6 $wdir/x.outer.$ext # outer coma and tail
+    pnmccdred -a $add $wdir/x.newsub.ppm $wdir/x.core.$ext      # bright core - not smoothed
+    gm convert $wdir/x.core.$ext -blur 0x1.0 $wdir/x.inner.$ext # center coma
+    gm convert $wdir/x.core.$ext -blur 0x2.6 $wdir/x.outer.$ext # outer coma and tail
         
     # TODO: measure size of regions to determine amount of blurring
     
@@ -5643,12 +5655,12 @@ cometsmooth () {
     # the second number in the blur parameter approximatly corresponds
     # to the distance of blurring at both sides of the edge
     (cd $wdir
-    pnmdepth 65535 x.core.m.pbm 2>/dev/null  | convert - -blur 0x$blurscale x.core.mb.pgm
+    pnmdepth 65535 x.core.m.pbm 2>/dev/null  | gm convert - -blur 0x$blurscale x.core.mb.pgm
     b=$(echo "3*$blurscale" | bc)
-    pnmdepth 65535 x.inner.m.pbm 2>/dev/null | convert - -blur 0x$b - | \
+    pnmdepth 65535 x.inner.m.pbm 2>/dev/null | gm convert - -blur 0x$b - | \
         pnmccdred -d x.core.mb.pgm - x.inner.mb.pgm
     b=$(echo "9*$blurscale" | bc)
-    pnmdepth 65535 x.outer.m.pbm 2>/dev/null | convert - -blur 0x$b - | \
+    pnmdepth 65535 x.outer.m.pbm 2>/dev/null | gm convert - -blur 0x$b - | \
         pnmccdred -d x.core.mb.pgm - - | \
         pnmccdred -d x.inner.mb.pgm - x.outer.mb.pgm
     # outside of comet area
@@ -7564,7 +7576,8 @@ raw2obs () {
             type="f"
         }
         if (obs=="local" &&
-            (tolower($2)~/^fo[0-9]/ || tolower($2)~/^fs[0-9]/ || tolower($2)~/^fw[0-9]/)) {
+            (tolower($2)~/^fo[0-9]/ || tolower($2)~/^fs[0-9]/ ||
+             tolower($2)~/^fw[0-9]/ || tolower($2)~/^f[0-9][0-9]/)) {
             type="focus"
         }
     
@@ -7580,7 +7593,8 @@ raw2obs () {
             if (obs=="local")      target=a[1]
             if (obs=="SkyGems") {
                 naa=split(a[3], aa, /_/)
-                if (aa[2]=="LIGHT") {target=aa[1]} else {target=aa[naa-1]}
+                target=aa[1]
+                if ((length(aa[1])<3) && (aa[1]!~/P$/)) target=aa[2]
             }
             if (obs=="iTelescope") target=a[4]
         }
@@ -8890,15 +8904,15 @@ mkrefcat () {
         return 1
 
     # list of vizier servers to check
+    # ref: https://vizier.cfa.harvard.edu/vizier/mirrors.gml
     serverlist="
-        vizier.u-strasbg.fr \
+        https://vizier.cds.unistra.fr \
+        https://vizier.cfa.harvard.edu \
         vizier.china-vo.org \
-        vizier.hia.nrc.ca \
-        vizier.ast.cam.ac.uk \
+        https://vizier.iucaa.in \
+        https://vizier.inasan.ru \
         vizier.nao.ac.jp \
-        vizier.cfa.harvard.edu \
-        www.ukirt.jach.hawaii.edu \
-        vizier.iucaa.ernet.in \
+        vizier.idia.ac.za \
         "
     test "$server" && serverlist="$server"
 
@@ -8945,8 +8959,10 @@ mkrefcat () {
     for server in $serverlist
     do
         echo "# connecting to $server ..." >&2
-        check_url http://$server 2 || continue
-        url=http://$server/viz-bin/asu-$outfmt
+        url=$server
+        test "${server/:\/\//}" == "$server" && url=http://$server
+        check_url $url 2 || continue
+        url=$url/viz-bin/asu-$outfmt
         # run database query
         test "$AI_DEBUG" &&
             echo "wget -O $tmp1 \"${url}?${args}${opts}&-c=${center}\"" >&2
@@ -15402,17 +15418,23 @@ colorize () {
     local mode="full"   # either full or center (crop half width and height)
     local outsize=1400  # size of long axis on output image
     local depth=8
-    local maxclip=3     # clip promille of brightest pixels
+    local maxclip=3     # clip amount of brightest pixels in promille
+    local blacklevel=1    # black level in percent
     local do_overwrite
     local do_lrgb_smooth
+    local no_display
     local scalediv=1
+    local sopts         # user supplied AIstiff options
     local verbose
     local i
-    for i in $(seq 1 7)
+    for i in $(seq 1 10)
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-s" && outsize=$2 && shift 2
         test "$1" == "-m" && maxclip=$2 && shift 2
+        test "$1" == "-b" && blacklevel=$2 && shift 2
+        test "$1" == "-x" && sopts="$2" && shift 2
+        test "$1" == "-n" && no_display=1 && shift 1
         test "$1" == "-o" && do_overwrite=1 && shift 1
         test "$1" == "-16" && depth=16 && shift 1
         test "$1" == "-c" && mode="center" && scalediv=$((scalediv*2)) && shift 1
@@ -15422,11 +15444,13 @@ colorize () {
     local ppmlist=${@:-"-"}
     local ppm
     local max
+    local min
     local cropgeom
     local dim
     local outim
     local outlist
     local opts="-srgb"  # options passed to AIstiff
+    local popts
     local sdg
     local add
     local tdir=${AI_TMPDIR:-"/tmp"}
@@ -15435,9 +15459,10 @@ colorize () {
     local tmpstat=$(mktemp "$tdir/tmp_stat_XXXXXX.dat")
     
     (test "$showhelp" || test $# -lt 1) &&
-        echo "usage: colorize [-c] [-o] [-16] [-s outsize|$outsize] [-m maxclip_permil|$maxclip] <ppm1> [ppm2 ...]" >&2 &&
+        echo "usage: colorize [-c] [-o] [-16] [-s outsize|$outsize]" \
+            "[-m maxclip_permille|$maxclip] [-b backlevel_percent|$blacklevel] <ppm1> [ppm2 ...]" >&2 &&
         return 1
-    
+
     # determine crop geometry
     # note: image size is forced to even numbers
     cropgeom=$(imsize ${ppmlist%% *} | awk -v s=$scalediv '{
@@ -15451,12 +15476,13 @@ colorize () {
     fi
     outlist=""
     max=$(echo $maxclip | awk '{printf("%f", 1-$1/1000)}')
+    min=$(echo $blacklevel | awk '{printf("%f", $1/100)}')
     for ppm in $ppmlist
     do
         test ! -f "$ppm" &&
             echo "ERROR: ppm file $ppm not found." >&2 &&
             return 255
-        basename $ppm >&2
+        test "$AI_DEBUG$verbose" && basename $ppm >&2
         case $depth in
             8)  outim=$(basename $ppm | sed -e 's,.[a-z]*$,.color8.tif,')
                 ;;
@@ -15466,11 +15492,14 @@ colorize () {
         esac
         test -e $outim && test -z "$do_overwrite" &&
             echo "ERROR: output image $outim already exists" && return 255
+        popts=""
+        is_fits $ppm && popts="-fmt fits"
         test "$AI_DEBUG$verbose" &&
-            echo "#" airfun.py pnmccdred -cgeom $cropgeom -resize ${outsize/ /x} $ppm $tmpim >&2
-        airfun.py pnmccdred -cgeom $cropgeom -resize ${outsize/ /x} $ppm $tmpim
-        echo AIstiff $opts -o $outim $tmpim $max >&2
-        AIstiff $opts -o $outim $tmpim $max
+            echo "#" airfun.py pnmccdred $popts -cgeom $cropgeom -resize ${outsize/ /x} $ppm $tmpim >&2
+        airfun.py pnmccdred $popts -cgeom $cropgeom -resize ${outsize/ /x} $ppm $tmpim
+        test "$AI_DEBUG$verbose" &&
+            echo AIstiff $opts $sopts -o $outim $tmpim $max >&2
+        AIstiff $opts $sopts -o $outim $tmpim $max "" $min
         if [ "$do_lrgb_smooth" ]
         then
             airfun.py lrgb -t $opts $outim ${outim/.tif/.lrgb.tif}
@@ -15478,7 +15507,7 @@ colorize () {
         fi
         outlist="$outlist $outim"
     done
-    AIdisplay $outlist
+    test -z "$no_display" && AIdisplay $outlist
     test -z "$AI_DEBUG$verbose" && rm -f stiff.xml
     rm -f $tmpstat $tmpim $tmpim2
 }
@@ -15983,6 +16012,11 @@ imslice () {
 		imcopy "$img[$num]" -
 	else
         # fits cube
+        tfits=$(mktemp "$wdir/tmp_imslice_XXXXXX.fits")
+        airfun.py cubeslice -fmt fits $img $slicenum $tfits
+        cat $tfits
+
+        false && (
 		imcopy "$img[0]" $wdir/"$(basename $img)"
 		missfits -d > $mconf
 		(cd $wdir;
@@ -15993,9 +16027,12 @@ imslice () {
 			return 255
 		
 		num=$(echo $slicenum | awk '{printf("%03d", $1)}')
-		tfits=$wdir/$(basename $img | sed -e 's/\.[^.]*$//')".$num.miss.fits"
+		#tfits=$wdir/$(basename $img | sed -e 's/\.[^.]*$//')".$num.miss.fits"
+        tfits=$(ls $wdir/*.$num.miss.fits)
         #delhead $tfits CTYPE3
-		cat $tfits
+		test -z "$tfits" && return 255
+        cat $tfits
+        )
 	fi
     
     rm -rf $wdir
@@ -16536,7 +16573,7 @@ _imstat_old () {
 }
 
 immedian () {
-    # compute median in each color channel of the given image (or stdin)
+    # compute median value of each color channel of the given image (or stdin)
     local do_bayer
     local showhelp
     local i
@@ -24282,6 +24319,7 @@ AIbgdiff () {
             else
                 cp $imlist $imlist2
             fi
+            #echo "# imlist2 =" $imlist2 >&2
             n=$(cat $imlist2 | wc -l)
             test $n -le 9 && echo "create mean of $n images ..." >&2
             test $n -gt 9 && echo "create mean using 9 out of $n images ..." >&2
@@ -24337,6 +24375,7 @@ EOF
 			local bgm
 			local w
 			local h
+			local tmpsmallmask=$(mktemp "$tdir/tmp_smallmask_$$.XXXXXX.pnm")
 			local tmpdiff=$(mktemp "$tdir/tmp_diff_$$.XXXXXX.pnm")
 			local tmpim2=$(mktemp "$tdir/tmp_im2_$$.XXXXXX.pnm")
 			local tmpdat=$(mktemp "$tdir/tmp_txt1_$$.XXXXXX.dat")
@@ -24357,25 +24396,24 @@ EOF
             #echo $num $tmpref $bgm $w $h >&2
             
             # mask bad pixels to be excluded from fit
-            if [ -f $diffdir/$num.bad.reg ] && false
+            if [ -f $diffdir/$num.bad.reg ]
             then
-                # note: disabled as of 2023-04-05
+                # note: disabled from 2023-04-05 until 2024-01-13
                 reg2pbm $tmpref $diffdir/$num.bad.reg | \
-                gm convert - -resize ${w}x${h}\! \
-                    -threshold 10% -negate -depth 16 $inext:- | \
-                    pnmarith -min $bgm - > $tmpim2
+                    gm convert - -resize ${w}x${h}\! -threshold 1 $tmpsmallmask
+                airfun.py immask -fmt $outfmt $bgm $tmpsmallmask $tmpim2
                 test $? -ne 0 && return 255
             else
-                if [ -f $diffdir/$num.bad.png ] && false
+                if [ -f $diffdir/$num.bad.png ]
                 then
-                    # note: disabled as of 2023-04-05
+                    # note: disabled from 2023-04-05 until 2024-01-13
                     ! is_mask $diffdir/$num.bad.png white &&
                         echo "ERROR: $diffdir/$num.bad.png is not a valid mask (white on black)." >&2 &&
                         return 255
                 
                     gm convert $diffdir/$num.bad.png -resize ${w}x${h}\! \
-                        -threshold 10% -negate -depth 16 $inext:- | \
-                        pnmarith -min $bgm - > $tmpim2
+                        -threshold 1 $tmpsmallmask
+                    airfun.py immask -fmt $outfmt $bgm $tmpsmallmask $tmpim2
                     test $? -ne 0 && return 255
                 else
                     cp $bgm $tmpim2
@@ -24406,7 +24444,7 @@ EOF
                 cat $tmpdat | awk -v n=$num '{print n" "$0}' >> $sfitdat 
             fi
 			test "$AI_DEBUG" && echo "nref=$nref  wxh=${w}x${h}  bgzero=$bgzero" >&2
-            rm -f $tmpdiff $bgm $tmpim2 $tmpdat
+            rm -f $tmpsmallmask $tmpdiff $bgm $tmpim2 $tmpdat
 		}
 
 
@@ -27153,10 +27191,11 @@ CD2_2   =      0.0003   / Linear projection matrix
         
         export -f _fitsconv_parallel
         i=0
-        popts="-P ${AI_MAXPROCS:-$(get_maxprocs)}"
+        x="${AI_MAXPROCS:-$(get_maxprocs)}"
         # note: performance is limited by I/O speed, therefore it does not make
         #   sense to run more than 2-3 processes in parallel
-        test "$AI_MAXPROCS" && test "$AI_MAXPROCS" -gt 3 && popts="-P 3"
+        test $x -gt 2 && x=2
+        popts="-P $x"
         for img in $ilist
         do
             i=$((i + 1))
@@ -28080,11 +28119,18 @@ AIstiff () {
 
     test -z "$outfile" && outfile=$b.tif
     stiff -d > $tmpconf
-    ppmtorgb3 $img
-    for c in red grn blu
-    do
-        pnmtomef $b.$c > $b.$c.fits
-    done
+    if is_fits $img
+    then
+        imslice $img 1 > $b.red.fits
+        imslice $img 2 > $b.grn.fits
+        imslice $img 3 > $b.blu.fits
+    else
+        ppmtorgb3 $img
+        for c in red grn blu
+        do
+            pnmtomef $b.$c > $b.$c.fits
+        done
+    fi
     opts="-MIN_LEVEL $min -MAX_LEVEL $max -GAMMA $gamma -GAMMA_FAC $gamfactor \
         -COLOUR_SAT $colorsat -BITS_PER_CHANNEL $bits"
     test -z "$verbose$AI_DEBUG" && opts="-VERBOSE_TYPE QUIET $opts"
@@ -28396,6 +28442,7 @@ AIphotcal () {
     local do_all_ci     # use all catalog stars, even those having extreme colors
     local cimin         # lower limit of valid color indexes of reference stars
     local cimax         # upper limit of valid color indexes of reference stars
+    local server        # Vizier server to send query to (passed to mkrefcat)
     local codir="comet"
     local i
     for i in $(seq 1 17)
@@ -28426,6 +28473,7 @@ AIphotcal () {
         test "$1" == "-a" && do_all_ci=1 && shift 1
         test "$1" == "-cimin" && cimin="$2" && shift 2
         test "$1" == "-cimax" && cimax="$2" && shift 2
+        test "$1" == "-srv" && server="$2" && shift 2
     done
     local setname=${1:-""}
     local plane=${2:-""}    # image plane number (channel number)
@@ -28505,7 +28553,7 @@ AIphotcal () {
     local no
 
     (test "$showhelp" || test $# -lt 3) &&
-        echo "usage: AIphotcal [-t] [-a] [-B|-V|-R|-VT|-GB|...] [-ci colorIndex] [-e] [-crad catradius] [-s skip] [-l maglim] [-d maxdist]" \
+        echo "usage: AIphotcal [-t] [-a] [-srv vizserver] [-B|-V|-R|-VT|-GB|...] [-ci colorIndex] [-e] [-crad catradius] [-s skip] [-l maglim] [-d maxdist]" \
             "[-m magerrlim|$magerrlim] [-n nlim] [-r rlim] [-c xc,yc] <set> <plane> <refcat> [aprad]" >&2 &&
         return 1
 
@@ -28725,7 +28773,9 @@ AIphotcal () {
                             ;;
                     esac
                     ;;
-            *)      mkrefcat -n 10000 $catalog $centerdeg $catradius > phot/$setname.$catalog.dat;;
+            *)      opts=""
+                    test "$server" && opts="-s $server"
+                    mkrefcat $opts -n 10000 $catalog $centerdeg $catradius > phot/$setname.$catalog.dat;;
         esac
     fi
     test ! -s phot/$setname.$catalog.dat &&
@@ -29936,7 +29986,7 @@ physical" > $tmpreg
         test $y -le 3 &&
             echo "ERROR: star mask too large (r=$r, gap=$y < 4)" >&2 &&
             return 255
-        echo "# measure counts in psf: rad=$r gap=$y bgwidth=$((4+y/2))" >&2
+        #echo "# measure counts in psf: rad=$r gap=$y bgwidth=$((4+y/2))" >&2
         test "$AI_DEBUG" &&
             echo "# AI_MAGZERO=$x AIaphot -p 3 $outpsf $tmpdat $r $y $((4+y/2))" >&2
         AI_MAGZERO=$x AIaphot -p 3 $outpsf $tmpdat $r $y $((4+y/2)) > $tmpphot

@@ -1,8 +1,12 @@
 #!/usr/bin/python3
 
-VERSION="2.3.2"
+VERSION="2.3.3"
 """
 CHANGELOG
+    2.3.3 - 13 Jan 2024
+        * cubeslice: complete rewrite
+        * new functions: immedian immask debayer_halfsize
+
     2.3.2 - 08 Dec 2023
         * svgtopbm: bugfix: workaround by setting outfmt=pgm because of
             strange results when using pbm output
@@ -262,19 +266,23 @@ def fitscubetoppm(param):
     inimg.linear(mult,add).copy(interpretation="rgb16").ppmsave(outpnm, strip=1)
     exit()
 
-# slice image cube into 2D images
-# first slice number is 1
-# cubeslice [-f] cube outprefix [nmax]
+# extract single image band (2D image) from image cube
+# band number starts with 1
+# cubeslice [-fmt fmt] imagecube band [outimage]
 def cubeslice(param):
     outfmt='pnm'
-    nmax=0
-    if(param[0]=='-f'):
-        outfmt='fits'
-        del param[0]
-    infilename = param[0]
-    outprefix = param[1]
-    if (len(param)>2):
-        nmax=int(param[2])
+    outfilename=""
+    for i in range(3):
+        if (not param or not isinstance(param[0], str)): break
+        if(param[0]=='-fmt'):
+            outfmt=param[1]
+            del param[0:2]
+
+    # parameters
+    infilename=param[0]
+    band=int(param[1])
+    if(len(param)>2):
+        outfilename = param[2]
 
     # reading input image
     if (infilename and infilename != '-'):
@@ -283,17 +291,17 @@ def cubeslice(param):
         source = pyvips.Source.new_from_descriptor(sys.stdin.fileno())
         inimg = pyvips.Image.new_from_source(source, "")
 
-    print("# input image: bands=", inimg.bands, file=sys.stderr)
-    if (nmax == 0):
-        nmax=inimg.bands
+    # check number of bands
+    if (band > inimg.bands):
+        print("ERROR: too few input image bands", file=sys.stderr)
+        exit(-1)
 
-    # writing output images
-    for i in range(0, min(inimg.bands, nmax)):
-        #print("i=", i, file=sys.stderr)
-        outimg=inimg[i]
-        num=f'{i+1:06d}'
-        outfilename=outprefix + '_' + num + '.' + outfmt
-        writeimage(["-fmt", outfmt, outimg, outfilename])
+    # slicing
+    outimg=inimg[band-1]
+
+    # writing output image
+    writeimage(["-fmt", outfmt, outimg, outfilename])
+
 
 # crop an image
 # imcrop [-f] inimg outimg w h xoff yoff
@@ -323,7 +331,7 @@ def imcrop(param):
 
 
 # image statistics (per channel output: min max mean (stddev))
-# usage: imstat [-m] [-b] [-s scale] "$fname"
+# usage: imstat [-m] [-b] [-s scale] image
 def imstat(param):
     medianbox=""
     scale=1
@@ -945,6 +953,32 @@ def svgtopbm(param):
     writeimage(["-fmt", outfmt, outimg, outfilename])
 
 
+# apply badmask to image 
+def immask(param):
+    outfmt='pnm'
+    outfilename=""
+    for i in range(1):
+        if(param[0]=='-fmt'):
+            outfmt=param[1]
+            del param[0:2]
+    infilename = param[0]
+    maskfilename = param[1]
+    if (len(param) > 2):
+        outfilename = param[2]
+
+    # reading input image
+    if (infilename and infilename != '-'):
+        inimg = pyvips.Image.new_from_file(infilename)
+    else:
+        source = pyvips.Source.new_from_descriptor(sys.stdin.fileno())
+        inimg = pyvips.Image.new_from_source(source, "")
+    maskimg=pyvips.Image.new_from_file(maskfilename)
+    
+    outimg=(maskimg > 0).ifthenelse(0, inimg)
+    # writing output image
+    writeimage(["-fmt", outfmt, outimg, outfilename])
+
+
 # create image mask using simple thresholding
 #   valid pixels inside mask if data intensities are within lowlimit and highlimit
 # usage: createmask [-fmt outfmt] [-medsub] [-low lowlimit] [-high highlimit] \
@@ -1409,6 +1443,54 @@ def debayer_simple(param):
     writeimage(["-fmt", outfmt, outimage, outfilename])
 
 
+def debayer_halfsize(param):
+    bpat_up="RGGB"     # row-order: bottom up
+    outfilename="-"
+    outfmt="ppm"
+    for i in range(2):
+        if (not param or not isinstance(param[0], str)): break
+        if(param[0]=='-fmt'):
+            outfmt=param[1]
+            del param[0:2]
+        elif(param[0]=='-b'):
+            bpat_up=param[1]
+            del param[0:2]
+
+    # reading input image
+    if isinstance(param[0], pyvips.vimage.Image):
+        image = param[0]
+    else:
+        infilename=param[0]
+        if (infilename and infilename != '-'):
+            image = pyvips.Image.new_from_file(infilename)
+        else:
+            source = pyvips.Source.new_from_descriptor(sys.stdin.fileno())
+            image = pyvips.Image.new_from_source(source, "")
+
+    if(len(param)>1):
+        outfilename = param[1]
+
+    # extract bayer cells
+    w = image.width
+    h = image.height
+    ptl = image.subsample(2, 2)
+    ptr = image.embed(-1, 0, w, h).subsample(2, 2)
+    pbl = image.embed(0, -1, w, h).subsample(2, 2)
+    pbr = image.embed(-1, -1, w, h).subsample(2, 2)
+
+    # create half-size color image
+    if (bpat_up == "RGGB"):
+        red = pbl
+        #green = ptl
+        green = (ptl+pbr)/2
+        blue = ptr
+    outimage = red.bandjoin([green, blue])
+
+    # writing output image
+    #outimage.ppmsave(outfilename, format=outfmt, strip=1)
+    writeimage(["-fmt", outfmt, outimage, outfilename])
+
+
 # debayer (demosaic) using high-quality bilinear interpolation (Malvar et al.,
 # https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/Demosaicing_ICASSP04.pdf
 # usage: debayer_malvar [-fmt outfmt] [-b bayerpattern_up] <image> [outimage]
@@ -1603,6 +1685,55 @@ def debayer_bayer2rgb(method, param):
     # delete temp files
     #tmp_infile.close()
     #tmp_outfile.close()
+
+
+# smooth image by computing median value within given box size
+# usage: immedian [-fmt outfmt] [-b] [-m boxwidth] <inimg> [outimg]
+def immedian(param):
+    outfilename=""
+    outfmt="pgm"
+    msize=3
+    has_bayer=False
+    for i in range(3):
+        if (not param or not isinstance(param[0], str)): break
+        if(param[0]=='-fmt'):
+            outfmt=param[1]
+            del param[0:2]
+        elif(param[0]=='-m'):
+            msize=param[1]
+            del param[0:2]
+        elif(param[0]=='-b'):
+            has_bayer=True
+            del param[0]
+
+    # parameters
+    if isinstance(param[0], pyvips.vimage.Image):
+        image = param[0]
+    else:
+        image = pyvips.Image.new_from_file(param[0])
+    if(len(param)>1):
+        outfilename = param[1]
+
+    w = image.width
+    h = image.height
+
+    if has_bayer:
+        # median in each channel
+        p00 = image.subsample(2, 2).median(msize).zoom(2,2)
+        p10 = image.embed(-1, 0, w, h).subsample(2, 2).median(msize).zoom(2,2)
+        p01 = image.embed(0, -1, w, h).subsample(2, 2).median(msize).zoom(2,2)
+        p11 = image.embed(-1, -1, w, h).subsample(2, 2).median(msize).zoom(2,2)
+
+        index = pyvips.Image.new_from_array([[0, 1], [2, 3]]).replicate(w/2, h/2)
+        outimg = index.case([p00, p10, p01, p11])
+    else:
+        outimg = image.median(msize)
+
+    # writing output image
+    if (outfilename):
+        writeimage(["-fmt", outfmt, outimg, outfilename])
+    else:
+        return outimg
 
 
 # clean bad pixels in image according to mask (bilinear interpolation)

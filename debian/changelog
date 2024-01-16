@@ -1,3 +1,10 @@
+airtools (5.0.6-1) experimental; urgency=medium
+
+  * Update to airfun.sh version 5.3.6
+  * Fixed issue with desktop file
+
+ -- Thomas Lehmann <t.lehmann@mailbox.org>  Sun, 14 Jan 2024 21:13:47 +0100
+
 airtools (5.0.5-1) experimental; urgency=medium
 
   * Update to airfun.sh version 5.3.5 and airtools-cli version 1.5.5
