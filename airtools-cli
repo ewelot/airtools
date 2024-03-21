@@ -19,8 +19,8 @@
 ########################################################################
 AOVARS="AO_SKIP AO_FLATS AO_LIGHT AO_BGVAR AO_REGIS AO_STACK AO_AMASK AO_ACOOR AO_ABINN"
 
-VERSION="1.5.5"
-VINFO="T. Lehmann, Nov. 2023"
+VERSION="1.5.6"
+VINFO="T. Lehmann, Feb. 2024"
 PINFO="\
     options:
       -h            show this help text
@@ -34,6 +34,19 @@ PINFO="\
       task          run given task    
 "
 CHANGELOG="
+    1.5.6 - 18 Mar 2024
+        * improved order of checks during startup to allow for creating
+            missing directory $AI_TMPDIR
+
+    1.5.6a2 - 20 Feb 2024
+        * badpix: if no suitable image set is found then only combine badpixel
+            images of previous projects (if provided)
+
+    1.5.6a1 - 02 Feb 2024
+        * badpix: take exposure time into account when selecting most suitable
+            image sets
+        * added task list which only prints (some of) the task names
+
     1.5.5 - 28 Nov 2023
         * added warning if current directory and day are not matching
 
@@ -1401,6 +1414,9 @@ _badpix () {
     local s
     local f
     local n
+    local texp
+    local tdir=${AI_TMPDIR:-"/tmp"}
+    local tmpdat=$(mktemp "$tdir/tmp_list_XXXXXX.dat")
     
     AI_EXCLUDE=""
     if [ "$setname" ]
@@ -1420,126 +1436,141 @@ _badpix () {
         do
             telsetlist=$(AIsetinfo -b -o | grep -v "^#" | awk -v t=$tel '{
                 if (tolower($11)==tolower(t)) {print $2}}')
-            xlist=$(for s in $telsetlist
+            for s in $telsetlist
             do
+                texp=$(AIsetinfo -b -o | grep -v "^#" | awk -v s=co02 '{if($2==s) print $5}')
                 n=$(get_nraw -q $s | wc -l)
-                test $n -gt 4 && echo $s $n
-            done | \
-                sort -nr -k2,2 | lines 4 | cut -d ' ' -f1)
-            
+                test $n -lt 5 && continue
+                echo $s $(((n-4)*texp)) $n $texp
+            done > $tmpdat
+            test "$AI_DEBUG" && cat $tmpdat >&2
+            xlist=$(cat $tmpdat | sort -nr -k2,2 | lines 4 | cut -d ' ' -f1)
+
             test "$xlist" && slist=$(echo $slist $xlist)
             test -z "$xlist" &&
                 echo "WARNING: no suitable image sets to create badpixel mask for $tel." >&2
         done
     fi
-    test -z "$slist" && return
-    tellist=$(for s in $slist; do get_telescope $s; done | sort -u)
-    msg="# Creating badpixel mask(s) for $tellist ..."
-    echo $msg && msg=""
-
+    if [ "$slist" ]
+    then
+        tellist=$(for s in $slist; do get_telescope $s; done | sort -u)
+        msg="# Creating badpixel mask(s) for $tellist ..."
+        echo $msg && msg=""
+    else
+        # get list of telescopes used from set.dat because we might
+        # want to combine badpixel images of previous projects
+        tellist=$(AIsetinfo -b -o | grep -v "^#" | awk '{print $11}' | sort -u)
+    fi
+    
     if [ "$OVERWRITE" ] && ! match proc "$SKIPPARTS"
     then
-        setname=$slist  # note: setname is used by remove command
-        if [ "$use_all_sets" ]
+        if [ "$slist" ]
         then
-            # remove badpix result files for all sets related to tellist
-            setname=$(for tel in $tellist
-            do
-                AIsetinfo -b -o | grep -v "^#" | awk -v t=$tel '{
-                    if (tolower($11)==tolower(t)) {print $2}}'
-            done | sort -u)
-            
+            setname=$slist  # note: setname is used by remove command
+            if [ "$use_all_sets" ]
+            then
+                # remove badpix result files for all sets related to tellist
+                setname=$(for tel in $tellist
+                do
+                    AIsetinfo -b -o | grep -v "^#" | awk -v t=$tel '{
+                        if (tolower($11)==tolower(t)) {print $2}}'
+                done | sort -u)
+                
+            fi
+            echo "# deleting previous results of" $setname
+            _remove -x badpix
+            test $? -ne 0 && return 255
         fi
-        echo "# deleting previous results of" $setname
-        _remove -x badpix
-        test $? -ne 0 && return 255
     fi
 
     ! match proc "$SKIPPARTS" && for tel in $tellist
     do
-        badpix="badpix.${tel,,}.$day.png"
         badpixall="badpix.${tel,,}.png"
-        camtype=$(get_param camera.dat ctype $tel)
-        #test "$camtype" == "DSLR" && badpix="badpixall.${tel,,}.png" # for use by AIccd/dcraw
-        test -e $badpix && rm $badpix
-        if [ -e $badpixall ]
+        if [ "$slist" ]
         then
-            test ! -e ${badpixall/.png/.old.png} && mv $badpixall ${badpixall/.png/.old.png}
-            # echo "WARNING: reusing existing $badpixall" && continue
-        fi
-        telsetlist=$(AIsetinfo -b -o | grep -v "^#" | awk -v t=$tel -v sl="$(echo $slist)" '{
-            if (tolower($11)==tolower(t) && sl~$2) {print $2}}')
-        test -z "$telsetlist" && continue
-        echo "# Creating badpixel mask for $tel using" $telsetlist "..."
-        opts="-n 12"    # limit to 12 frames per set
-        test "$camtype" != "CCD" && test "$camtype" != "CMOS" && opts="$opts -s"   # do subtract bayered background 
-        for set in $telsetlist
-        do
-            #test "$msg" && echo $msg && msg=""
-            test "$AI_DEBUG" && echo "# $set: tel=$tel camtype=$camtype" >&2
-            if [ -z "$use_all_images" ]
+            badpix="badpix.${tel,,}.$day.png"
+            camtype=$(get_param camera.dat ctype $tel)
+            #test "$camtype" == "DSLR" && badpix="badpixall.${tel,,}.png" # for use by AIccd/dcraw
+            test -e $badpix && rm $badpix
+            if [ -e $badpixall ]
             then
-                nref=$(AIsetinfo -o $set | awk '{printf("%s", $4)}')
-                xhigh=$high
-                n=0
-                test -s reg.dat && n=$(grep -v "^#" reg.dat | \
-                    awk -v ref=$nref '{if($2==ref){print $0}}' | wc -l)
-                test -z "$xhigh" && test $n -eq 0 &&
-                    echo "# using default high=20" >&2 &&
-                    xhigh=20
-                test -z "$xhigh" && test $n -lt 5 &&
-                    echo "WARNING: too few registered images ($n<5), skipping set $set" >&2 &&
-                    continue
-                test -z "$xhigh" &&
-                    xhigh=$(grep -v "^#" reg.dat | awk -v ref=$nref '{if($2==ref){print $0}}' | \
-                        median - 7 | awk '{x=13;
-                            if($1<2) x=16; if($1<1.8) x=20; if($1<1.6) x=30}END{print x}')
-                xlow=$low
-                test -z "$xlow" && xlow=10
-                echo "# running AIfindbad $opts $set \"\" $xhigh $xlow"
-                AIfindbad $opts $set "" $xhigh $xlow
-            else
-                # use all images of given sets in one AIfindbad command
-                # TODO: not implemented yet
-                xhigh=$high; test -z "$xhigh" && xhigh=20
-                xlow=$low;   test -z "$xlow" && xlow=10
-                echo "# running AIfindbad $opts $set \"\" $xhigh $xlow"
-                AIfindbad -a $opts "" "" $xhigh $xlow
+                test ! -e ${badpixall/.png/.old.png} && mv $badpixall ${badpixall/.png/.old.png}
+                # echo "WARNING: reusing existing $badpixall" && continue
             fi
-            test $? -ne 0 && return 255
-        done
+            telsetlist=$(AIsetinfo -b -o | grep -v "^#" | awk -v t=$tel -v sl="$(echo $slist)" '{
+                if (tolower($11)==tolower(t) && sl~$2) {print $2}}')
+            test -z "$telsetlist" && continue
+            echo "# Creating badpixel mask for $tel using" $telsetlist "..."
+            opts="-n 12"    # limit to 12 frames per set
+            test "$camtype" != "CCD" && test "$camtype" != "CMOS" && opts="$opts -s"   # do subtract bayered background 
+            for set in $telsetlist
+            do
+                #test "$msg" && echo $msg && msg=""
+                test "$AI_DEBUG" && echo "# $set: tel=$tel camtype=$camtype" >&2
+                if [ -z "$use_all_images" ]
+                then
+                    nref=$(AIsetinfo -o $set | awk '{printf("%s", $4)}')
+                    xhigh=$high
+                    n=0
+                    test -s reg.dat && n=$(grep -v "^#" reg.dat | \
+                        awk -v ref=$nref '{if($2==ref){print $0}}' | wc -l)
+                    test -z "$xhigh" && test $n -eq 0 &&
+                        echo "# using default high=20" >&2 &&
+                        xhigh=20
+                    test -z "$xhigh" && test $n -lt 5 &&
+                        echo "WARNING: too few registered images ($n<5), skipping set $set" >&2 &&
+                        continue
+                    test -z "$xhigh" &&
+                        xhigh=$(grep -v "^#" reg.dat | awk -v ref=$nref '{if($2==ref){print $0}}' | \
+                            median - 7 | awk '{x=13;
+                                if($1<2) x=16; if($1<1.8) x=20; if($1<1.6) x=30}END{print x}')
+                    xlow=$low
+                    test -z "$xlow" && xlow=10
+                    echo "# running AIfindbad $opts $set \"\" $xhigh $xlow"
+                    AIfindbad $opts $set "" $xhigh $xlow
+                else
+                    # use all images of given sets in one AIfindbad command
+                    # TODO: not implemented yet
+                    xhigh=$high; test -z "$xhigh" && xhigh=20
+                    xlow=$low;   test -z "$xlow" && xlow=10
+                    echo "# running AIfindbad $opts $set \"\" $xhigh $xlow"
+                    AIfindbad -a $opts "" "" $xhigh $xlow
+                fi
+                test $? -ne 0 && return 255
+            done
+            
+            # TODO: deal with different binnings
+
+            # combining masks        
+            # if requested use all sets processed for given telescope
+            test "$use_all_sets" &&
+                telsetlist=$(AIsetinfo -b -o | grep -v "^#" | awk -v t=$tel '{
+                    if (tolower($11)==tolower(t)) {print $2}}' | sort -u)
+            highlist=$(for s in $telsetlist; do ls bad.$s.high.png 2>/dev/null; done)
+            lowlist=$(for  s in $telsetlist; do ls bad.$s.low.png  2>/dev/null ; done)
+            test -z "$highlist" && continue
+            echo "#" $tel":" combining masks from $(echo "$highlist" | cut -d '.' -f2)
+            n=$(echo $highlist | wc -w)
+            #convert $highlist -evaluate-sequence max bad.high.${tel,,}.png
+            #convert $lowlist  -evaluate-sequence max bad.low.${tel,,}.png
+            vips bandrank "$highlist" bad.high.${tel,,}.png --index $((n-1))
+            vips bandrank "$lowlist"  bad.low.${tel,,}.png  --index $((n-1))
+            badlist="bad.high.${tel,,}.png bad.low.${tel,,}.png"
         
-        # TODO: deal with different binnings
-
-        # combining masks        
-        # if requested use all sets processed for given telescope
-        test "$use_all_sets" &&
-            telsetlist=$(AIsetinfo -b -o | grep -v "^#" | awk -v t=$tel '{
-                if (tolower($11)==tolower(t)) {print $2}}' | sort -u)
-        highlist=$(for s in $telsetlist; do ls bad.$s.high.png 2>/dev/null; done)
-        lowlist=$(for  s in $telsetlist; do ls bad.$s.low.png  2>/dev/null ; done)
-        test -z "$highlist" && continue
-        echo "#" $tel":" combining masks from $(echo "$highlist" | cut -d '.' -f2)
-        n=$(echo $highlist | wc -w)
-        #convert $highlist -evaluate-sequence max bad.high.${tel,,}.png
-        #convert $lowlist  -evaluate-sequence max bad.low.${tel,,}.png
-        vips bandrank "$highlist" bad.high.${tel,,}.png --index $((n-1))
-        vips bandrank "$lowlist"  bad.low.${tel,,}.png  --index $((n-1))
-        badlist="bad.high.${tel,,}.png bad.low.${tel,,}.png"
-
-        # adding masks provided manually
-        test -e bad.columns.${tel,,}.png && badlist="bad.columns.${tel,,}.png $badlist"
-        test -e bad.dust.${tel,,}.png    && badlist="bad.dust.${tel,,}.png    $badlist"
-        test -e bad.other.${tel,,}.png   && badlist="bad.other.${tel,,}.png   $badlist"
-        #test -e ${badpix/.png/.old.png}  && badlist="${badpix/.png/.old.png}  $badlist"
-        n=$(echo $badlist | wc -w)
-        #convert $badlist  -evaluate-sequence max badpix.${tel,,}.png
-        vips bandrank "$badlist" $badpix --index $((n-1))
-        for f in $badlist $badpix
-        do
-            echo $tel/$f
-            gm convert $f pbm:- | pgmhist | grep 255
-        done
+            # adding masks provided manually
+            test -e bad.columns.${tel,,}.png && badlist="bad.columns.${tel,,}.png $badlist"
+            test -e bad.dust.${tel,,}.png    && badlist="bad.dust.${tel,,}.png    $badlist"
+            test -e bad.other.${tel,,}.png   && badlist="bad.other.${tel,,}.png   $badlist"
+            #test -e ${badpix/.png/.old.png}  && badlist="${badpix/.png/.old.png}  $badlist"
+            n=$(echo $badlist | wc -w)
+            #convert $badlist  -evaluate-sequence max badpix.${tel,,}.png
+            vips bandrank "$badlist" $badpix --index $((n-1))
+            for f in $badlist $badpix
+            do
+                echo $tel/$f
+                gm convert $f pbm:- | pgmhist | grep 255
+            done
+        fi
         
         # combine with badpix images of previous days
         badlist=$(ls badpix.${tel,,}.[0-9]*.png)
@@ -1572,6 +1603,7 @@ _badpix () {
         findcluster $badpixall bad.${tel,,}.clust.png
         AIexamine -n $tel $badpix $badpixall bad.${tel,,}.clust.png $difflist
     done
+    rm -f $tmpdat
     return 0
 }
 
@@ -2831,6 +2863,17 @@ then
 fi
 test ! -e $rcfile && error "not a valid airtools project (missing .airtoolsrc)"
 
+# show list of (some) available tasks
+if [ "$task" == "list" ]
+then
+    echo "# list of (some) available tasks:"
+    echo imageinfo darks flats badpix lights bgvar \
+        register stack astrometry costack load_stacks \
+        imexa_raw imexa_calib terminal check_update | \
+        tr ' ' '\n' | sed -e 's,^,    ,'
+    exit 0
+fi
+
 # if requested start terminal task without any further checkings
 if [ "$task" == "terminal" ]
 then
@@ -2886,8 +2929,6 @@ do
 done
 
 # check presence of required environment variables
-! AIcheck_ok &&
-    error "Unable to initialize AIRTOOLS functions."
 for var in day AI_SITE AI_TMPDIR AI_RAWDIR
 do
     test -z "$var" && error "Variable $var undefined."
@@ -2907,6 +2948,8 @@ then
         test ! "$quiet" && echo "WARNING: raw image directory $AI_RAWDIR is missing." >&2
     fi
 fi
+! AIcheck_ok &&
+    error "Unable to initialize AIRTOOLS functions."
 
 # check for allowed AO_* variables
 varlist=$(env | grep "^AO_" | sed -e 's,=.*,,')
@@ -2945,6 +2988,7 @@ then
     _check_update
     exit 0
 fi
+
 
 #-----------------------
 #   program start

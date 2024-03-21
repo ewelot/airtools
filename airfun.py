@@ -1,8 +1,13 @@
 #!/usr/bin/python3
 
-VERSION="2.3.3"
+VERSION="2.3.4"
 """
 CHANGELOG
+    2.3.4 - 15 Mar 2024
+        * enhanced lrgb, it now defaults to operate in Lch color space and
+            applies gaussian blur on hue only
+        * new function imcompress
+        
     2.3.3 - 13 Jan 2024
         * cubeslice: complete rewrite
         * new functions: immedian immask debayer_halfsize
@@ -622,12 +627,13 @@ def rawtorgb(param):
 #   - rotate image (180 degrees)
 #   - subtract dark image
 #   - divide by flat image
-#   - clean hot pixel
 #   - crop image
 #   - post rotate (180 degrees)
 #   - multiply by mult (array for different bands)
 #   - add offset value add (array for different bands)
-#   - optionally convert from rgb to gray
+#   - convert from rgb to gray
+#   - interpolate bad pixels
+#   - debayer image
 # syntax: pnmccdred [-v] [-fmt outfmt|pnm] [-8|-16] [-gray] [-preadd val] [-premult val] [-flip] [-prerot]
 #   [-bpat bayerpattern_up] [-debayer mode] [-cgeom wxh+x+y ] [-resize wxh|mult] [-rot] [-mult mult] [-add add] inpnm outpnm <dark> <flat> <bad>
 def pnmccdred(param):
@@ -875,12 +881,20 @@ def ppmtogray(param):
 
 
 # convert from (noisy) RGB image to color image by using LRGB techniques
-# syntax: lrgb [-f|-t] [-16] inppm outppm bgR,bgG,bgB rmsg
+# syntax: lrgb [-f|-t] [-16] [-m metric] [-s sigma] inppm outppm bgR,bgG,bgB rmsg
 def lrgb(param):
     outfmt='ppm'
+    metric="Lch"    # Lch (best), Lab (ugly), HSV (not working), RGB
+    sigma=2
     depth=8
-    bg=""
+    bg=0
     while (param[0][0:1] == "-"):
+        if(param[0]=='-m'):
+            metric=param[1]
+            del param[0:2]
+        if(param[0]=='-s'):
+            sigma=float(param[1])
+            del param[0:2]
         if(param[0]=='-f'):
             outfmt='fits'
             del param[0]
@@ -905,18 +919,46 @@ def lrgb(param):
         source = pyvips.Source.new_from_descriptor(sys.stdin.fileno())
         inimg = pyvips.Image.new_from_source(source, "")
 
-    # color smoothing in Lab, and some boost
-    l,a,b = inimg.colourspace("lab").bandsplit()
-    l = l.gaussblur(0.6)
-    if bg:
-        x,a,b = inimg.subtract(bg).colourspace("lab").bandsplit()
-    a = a.gaussblur(3).linear(1.2,0)
-    b = b.gaussblur(3).linear(1.2,0)
-    if (depth == 16):
-        outimg = l.bandjoin([a,b]).colourspace("rgb16")
-    else:
-        outimg = l.bandjoin([a,b]).colourspace("srgb")
-    
+    # color smoothing
+    if (metric == "Lch"):
+        #print(inimg.interpretation)
+        l,c,h = inimg.subtract(bg).colourspace("lch").bandsplit()
+        #l = l.gaussblur(0.4)
+        #c = c.linear(0.9,0)
+        h = h.gaussblur(sigma).linear(1.0,0)
+        if (depth == 16):
+            outimg = l.bandjoin([c,h]).colourspace("rgb16").linear(1,bg)
+        else:
+            outimg = l.bandjoin([c,h]).colourspace("srgb").linear(1,bg)
+    if (metric == "Lab"):
+        #print(inimg.interpretation)
+        l,a,b = inimg.subtract(bg).colourspace("lab").bandsplit()
+        #l = l.gaussblur(0.4)
+        a = a.gaussblur(sigma).linear(1.0,0)
+        b = b.gaussblur(sigma).linear(1.0,0)
+        if (depth == 16):
+            outimg = l.bandjoin([a,b]).colourspace("rgb16").linear(1,bg)
+        else:
+            outimg = l.bandjoin([a,b]).colourspace("srgb").linear(1,bg)
+    if (metric == "HSV"):
+        h,s,v = inimg.subtract(bg).colourspace("hsv").bandsplit()
+        #v = v.gaussblur(0.4)
+        h = h.gaussblur(sigma).linear(1.0,0)
+        #s = s.gaussblur(sigma).linear(1.0,0)
+        if (depth == 16):
+            outimg = h.bandjoin([s,v]).colourspace("rgb16").linear(1,bg)
+        else:
+            outimg = h.bandjoin([s,v]).colourspace("srgb").linear(1,bg)
+    if (metric == "RGB"):
+        #print(inimg.interpretation)
+        l,x,y = inimg.subtract(bg).colourspace("lch").bandsplit()
+        x,c,h = inimg.subtract(bg).gaussblur(sigma).colourspace("lch").bandsplit()
+        #l = l.gaussblur(0.4)
+        if (depth == 16):
+            outimg = l.bandjoin([c,h]).colourspace("rgb16").linear(1,bg)
+        else:
+            outimg = l.bandjoin([c,h]).colourspace("srgb").linear(1,bg)
+  
     # writing output image
     writeimage(["-fmt", outfmt, outimg, outfilename])
 
@@ -1364,6 +1406,8 @@ def debayer(param):
         debayer_vng(param)
     elif (algorithm == 'ahd'):
         debayer_ahd(param)
+    elif (algorithm == 'halfsize'):
+        debayer_halfsize(param)
     else:
         debayer_simple(param)
 
@@ -1443,8 +1487,10 @@ def debayer_simple(param):
     writeimage(["-fmt", outfmt, outimage, outfilename])
 
 
+# no interpolation, creating 1 color pixel from 2x2 bayer cells
+# usage: debayer_halfsize [-fmt outfmt] [-b bayerpattern_up] <image> [outimage]
 def debayer_halfsize(param):
-    bpat_up="RGGB"     # row-order: bottom up
+    bpat_up="RGGB"     # after flipping, row-order: bottom up
     outfilename="-"
     outfmt="ppm"
     for i in range(2):
@@ -1470,20 +1516,36 @@ def debayer_halfsize(param):
     if(len(param)>1):
         outfilename = param[1]
 
-    # extract bayer cells
     w = image.width
     h = image.height
-    ptl = image.subsample(2, 2)
-    ptr = image.embed(-1, 0, w, h).subsample(2, 2)
-    pbl = image.embed(0, -1, w, h).subsample(2, 2)
-    pbr = image.embed(-1, -1, w, h).subsample(2, 2)
+
+    # extract bayer cells (1=bottom-left)
+    p3 = image.subsample(2, 2)
+    p4 = image.embed(-1, 0, w, h).subsample(2, 2)
+    p1 = image.embed(0, -1, w, h).subsample(2, 2)
+    p2 = image.embed(-1, -1, w, h).subsample(2, 2)
 
     # create half-size color image
     if (bpat_up == "RGGB"):
-        red = pbl
+        red = p1
         #green = ptl
-        green = (ptl+pbr)/2
-        blue = ptr
+        green = (p2+p3)/2
+        blue = p4
+    if (bpat_up == "BGGR"):
+        red = p4
+        #green = ptl
+        green = (p2+p3)/2
+        blue = p1
+    if (bpat_up == "GBRG"):
+        red = p3
+        #green = ptl
+        green = (p1+p4)/2
+        blue = p2
+    if (bpat_up == "GRBG"):
+        red = p2
+        #green = ptl
+        green = (p1+p4)/2
+        blue = p3
     outimage = red.bandjoin([green, blue])
 
     # writing output image
@@ -1729,6 +1791,158 @@ def immedian(param):
     else:
         outimg = image.median(msize)
 
+    # writing output image
+    if (outfilename):
+        writeimage(["-fmt", outfmt, outimg, outfilename])
+    else:
+        return outimg
+
+
+# dynamic compression by factor compval above a given threshold (intensity)
+# usage: imcompress [-fmt outfmt] [-c compmult] <image> <threshold> <compval> [outimage]
+def imcompress_old(param):
+    outfilename=""
+    outfmt="pnm"
+    for i in range(2):
+        if (not param or not isinstance(param[0], str)): break
+        if(param[0]=='-fmt'):
+            outfmt=param[1]
+            del param[0:2]
+        elif(param[0]=='-xxx'):
+            unused=param[1]
+            del param[0:2]
+ 
+    if(len(param)<3):
+        print("ERROR: imcompress: wrong number of parameters.", file=sys.stderr)
+        exit(-1)
+        
+    # parameters
+    infilename=param[0]
+    threshold=float(param[1])
+    compmult=float(param[2])    # only used by mode=sqrt
+    if(len(param)>3):
+        outfilename = param[3]
+    
+    # read input image
+    if isinstance(infilename, pyvips.vimage.Image):
+        image = infilename
+    else:
+        image = pyvips.Image.new_from_file(infilename)
+
+    # bandwise thresholding by mean value within statsmask
+    npix=(statsmask > 0).ifthenelse(1,0).stats().getpoint(2, 0)[0]
+    print("npix=", npix, file=sys.stderr)
+    
+    # apply compression above mean
+    for i in range(image.bands):
+        imband=image.extract_band(i)
+        mean=(statsmask > 0).ifthenelse(imband, 0).stats().getpoint(2, 0)[0]/npix
+        print(i, " mean=", mean, file=sys.stderr)
+        add=(1-compmult)*mean
+        #imband2=(imband > mean).ifthenelse(imband.linear(compmult, add), imband)
+        imband2=(imband > mean).ifthenelse(imband.linear(1, -1*mean).math2_const("pow", compmult).linear(1,mean), imband)
+        if (i==0):
+            outimg = imband2
+        else:
+            outimg = outimg.bandjoin(imband2)
+            
+    # writing output image
+    if (outfilename):
+        writeimage(["-fmt", outfmt, outimg, outfilename])
+    else:
+        return outimg
+
+
+# dynamic compression (above a given threshold)
+# usage: imcompress [-fmt outfmt] [-m mode] <image> <threshold> <compmult> [outimage]
+def imcompress(param):
+    outfilename=""
+    outfmt="pnm"
+    mode="simple" # available modes: simple, tanh, sqrt, lut
+    for i in range(2):
+        if (not param or not isinstance(param[0], str)): break
+        if(param[0]=='-fmt'):
+            outfmt=param[1]
+            del param[0:2]
+        elif(param[0]=='-m'):
+            mode=param[1]
+            del param[0:2]
+ 
+    if(len(param)<3):
+        print("ERROR: imcompress: wrong number of parameters.", file=sys.stderr)
+        exit(-1)
+        
+    # parameters
+    infilename=param[0]
+    threshold=float(param[1])
+    compmult=float(param[2])    # only used by mode=sqrt
+    if(len(param)>3):
+        outfilename = param[3]
+    
+    # read input image
+    if isinstance(infilename, pyvips.vimage.Image):
+        image = infilename
+    else:
+        image = pyvips.Image.new_from_file(infilename)
+    
+    if (mode == "sqrt"):
+        # create contour-like mask of pixels having intensity > threshold
+        # note: operating on all bands of RGB image 
+        for i in range(image.bands):
+            if (i==0):
+                mask=(image.extract_band(i) > threshold).ifthenelse(1,0)
+            else:
+                mask=(image.extract_band(i) > threshold).ifthenelse(1,mask)
+        morphmask = pyvips.Image.mask_ideal(3, 3, 0, optical=1, uchar=1)
+        large = mask.morph(morphmask, "VIPS_OPERATION_MORPHOLOGY_DILATE")
+        small = mask.morph(morphmask, "VIPS_OPERATION_MORPHOLOGY_ERODE")
+        statsmask = large.subtract(small)
+        writeimage(["-fmt", "pnm", statsmask, "x.statsmask.pgm"])
+
+        # bandwise thresholding by mean value within statsmask
+        npix=(statsmask > 0).ifthenelse(1,0).stats().getpoint(2, 0)[0]
+        print("npix=", npix, file=sys.stderr)
+
+    # apply compression above mean
+    for i in range(image.bands):
+        imband=image.extract_band(i)
+        if (mode == "simple"):
+            mean=threshold
+            # new = x/(1+x/t)
+            t=10000
+            x = imband.linear(1, -1*mean)
+            y = x.linear(1/t,1)
+            add=(1-compmult)*mean
+            imcomp=(imband > mean).ifthenelse(x.divide(y).linear(1,mean), imband).linear(compmult, add)
+        if (mode == "tanh"):
+            mean=threshold
+            # new = x/sqrt(1+(x/t)^2)
+            t=10000
+            x = imband.linear(1, -1*mean)
+            y = x.linear(1/t,0).math2_const("pow", 2).linear(1, 1)
+            imcomp=(imband > mean).ifthenelse(x.divide(y.math2_const("pow", 0.5)).linear(1,mean), imband)
+        if (mode == "sqrt"):
+            mean=(statsmask > 0).ifthenelse(imband, 0).stats().getpoint(2, 0)[0]/npix
+            print(i, " mean=", mean, file=sys.stderr)
+            add=(1-compmult)*mean
+            #imcomp=(imband > mean).ifthenelse(imband.linear(compmult, add), imband)
+            imcomp=(imband > mean).ifthenelse(imband.linear(1, -1*mean).math2_const("pow", compmult).linear(1,mean), imband)
+        if (mode == "lut"):
+            mean=threshold
+            mean=0
+            x = imband.linear(1, -1*mean)
+            s=5    # shadow adjustment
+            m=20   # mid-tone adjustment
+            h=10   # high-lights adjustment
+            lut=pyvips.Image.tonelut(in_max=65535, out_max=10000, Lb=0, \
+                Ps=0.1, Pm=0.5, Ph=0.8, S=s, M=m, H=h)
+            imcomp=(imband > mean).ifthenelse(imband.linear(1, -1*mean).maplut(lut).linear(1,mean), imband)
+
+        if (i==0):
+            outimg = imcomp
+        else:
+            outimg = outimg.bandjoin(imcomp)
+            
     # writing output image
     if (outfilename):
         writeimage(["-fmt", outfmt, outimg, outfilename])
