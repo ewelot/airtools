@@ -11,7 +11,7 @@
 <?import javafx.scene.layout.RowConstraints?>
 <?import javafx.scene.layout.VBox?>
 
-<AnchorPane id="AnchorPane" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" xmlns="http://javafx.com/javafx/11.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="tl.airtoolsgui.controller.MiscToolsController">
+<AnchorPane id="AnchorPane" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="tl.airtoolsgui.controller.MiscToolsController">
    <children>
       <VBox layoutX="10.0" layoutY="-1.0" maxHeight="1.7976931348623157E308" maxWidth="1.7976931348623157E308" spacing="8.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
          <children>
@@ -30,16 +30,24 @@
                   <RowConstraints vgrow="SOMETIMES" />
                   <RowConstraints vgrow="SOMETIMES" />
                   <RowConstraints vgrow="SOMETIMES" />
+                  <RowConstraints vgrow="SOMETIMES" />
                </rowConstraints>
                <children>
-                  <Button fx:id="buttonLoadRaws" maxWidth="1.7976931348623157E308" mnemonicParsing="false" onAction="#onButtonLoadRaws" text="Load Raw Images" GridPane.halignment="LEFT" />
-                  <TextField fx:id="tfLoadRawsArgs" promptText="set name or image numbers" GridPane.columnIndex="1" />
-                  <Button fx:id="buttonLoadImages" maxWidth="1.7976931348623157E308" mnemonicParsing="false" onAction="#onButtonLoadImages" text="Load Calibrated Images" GridPane.rowIndex="1" />
-                  <TextField fx:id="tfLoadImagesArgs" promptText="set name or image numbers" GridPane.columnIndex="1" GridPane.rowIndex="1" />
-                  <Button fx:id="buttonAladin" maxWidth="1.7976931348623157E308" mnemonicParsing="false" onAction="#onButtonAladin" text="Start Aladin Sky Atlas" GridPane.rowIndex="2" />
-                  <TextField fx:id="tfAladinArgs" promptText="set name or coordinates" GridPane.columnIndex="1" GridPane.rowIndex="2" />
-                  <Button fx:id="buttonFileManager" maxWidth="1.7976931348623157E308" mnemonicParsing="false" onAction="#onButtonFileManager" text="Open File Manager" GridPane.rowIndex="3" />
-                  <Button fx:id="buttonTerminal" maxWidth="1.7976931348623157E308" mnemonicParsing="false" onAction="#onButtonTerminal" text="Open Terminal (CLI)" GridPane.rowIndex="4" />
+                  <Button fx:id="buttonCheckBayerpattern" maxWidth="1.7976931348623157E308" mnemonicParsing="false" onAction="#onButtonCheckBayerpattern" text="Check Bayer Pattern">
+                     <GridPane.margin>
+                        <Insets bottom="12.0" />
+                     </GridPane.margin></Button>
+                  <Button fx:id="buttonLoadRaws" maxWidth="1.7976931348623157E308" mnemonicParsing="false" onAction="#onButtonLoadRaws" text="Load Raw Images" GridPane.halignment="LEFT" GridPane.rowIndex="1" />
+                  <TextField fx:id="tfLoadRawsArgs" promptText="set name or image numbers" GridPane.columnIndex="1" GridPane.rowIndex="1" />
+                  <Button fx:id="buttonLoadImages" maxWidth="1.7976931348623157E308" mnemonicParsing="false" onAction="#onButtonLoadImages" text="Load Calibrated Images" GridPane.rowIndex="2" />
+                  <TextField fx:id="tfLoadImagesArgs" promptText="set name or image numbers" GridPane.columnIndex="1" GridPane.rowIndex="2" />
+                  <Button fx:id="buttonAladin" maxWidth="1.7976931348623157E308" mnemonicParsing="false" onAction="#onButtonAladin" text="Start Aladin Sky Atlas" GridPane.rowIndex="3">
+                     <GridPane.margin>
+                        <Insets bottom="12.0" />
+                     </GridPane.margin></Button>
+                  <TextField fx:id="tfAladinArgs" promptText="set name or coordinates" GridPane.columnIndex="1" GridPane.rowIndex="3" GridPane.valignment="TOP" />
+                  <Button fx:id="buttonFileManager" maxWidth="1.7976931348623157E308" mnemonicParsing="false" onAction="#onButtonFileManager" text="Open File Manager" GridPane.rowIndex="4" />
+                  <Button fx:id="buttonTerminal" maxWidth="1.7976931348623157E308" mnemonicParsing="false" onAction="#onButtonTerminal" text="Open Terminal (CLI)" GridPane.rowIndex="5" />
                </children>
                <padding>
                   <Insets left="24.0" right="8.0" top="8.0" />

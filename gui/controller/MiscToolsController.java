@@ -44,6 +44,8 @@ public class MiscToolsController implements Initializable {
     @FXML
     private Button buttonAladin;
     @FXML
+    private Button buttonCheckBayerpattern;
+    @FXML
     private Button buttonFileManager;
     @FXML
     private Button buttonTerminal;
@@ -61,6 +63,7 @@ public class MiscToolsController implements Initializable {
     @FXML
     private Button buttonRunCommand;
 
+    private MainController mainController;
     private SimpleLogger logger;
     private ShellScript sh;
     private Task task;
@@ -86,10 +89,11 @@ public class MiscToolsController implements Initializable {
     }    
     
 
-    public void setReferences (ShellScript sh, SimpleLogger logger) {
+    public void setReferences (ShellScript sh, SimpleLogger logger, MainController mainController) {
         System.out.println("MiscToolsController: setReferences");
         this.sh = sh;
         this.logger = logger;
+        this.mainController = mainController;
     }
     
     
@@ -147,6 +151,11 @@ public class MiscToolsController implements Initializable {
                 new String[] {"AIaladin", "-a"},
                 tfAladinArgs.getText().split("\\s+")).flatMap(Stream::of).toArray(String[]::new);
         runAirtoolsCommand("usercmd", args, (Button) event.getSource());
+    }
+
+    @FXML
+    private void onButtonCheckBayerpattern(ActionEvent event) {
+        mainController.showWindowCheckBayerpattern();
     }
 
     @FXML

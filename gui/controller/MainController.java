@@ -171,6 +171,8 @@ public class MainController implements Initializable {
     private WCSCalibController wcscalibController;
     @FXML
     private ImportFitsStacksController importFitsStacksController;
+    @FXML
+    private CheckBayerpatternController checkBayerpatternController;
 
     // additional windows (stages)
     private Stage windowImportFitsStacks;
@@ -181,6 +183,7 @@ public class MainController implements Initializable {
     private Stage windowLightCurve;
     private Stage windowMultiApPhotometry;
     private Stage windowAstrometry;
+    private Stage windowCheckBayerpattern;
     
     private Properties projectProperties;
     private String configFile;
@@ -359,7 +362,7 @@ public class MainController implements Initializable {
         paneImageReductionController.setReferences(sh, logger);
         paneCometPhotometryController.setReferences(sh, logger);
         paneCometPhotometryController.projectDir.bind(projectDir);
-        paneMiscToolsController.setReferences(sh, logger);        
+        paneMiscToolsController.setReferences(sh, logger, this);        
         paneMiscToolsController.projectDir.bind(projectDir);
         
 
@@ -953,6 +956,27 @@ public class MainController implements Initializable {
     }
     
     
+    public void showWindowCheckBayerpattern() {
+        System.out.println("showWindowCheckBayerpattern()");
+        if (windowCheckBayerpattern == null) try {
+            FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource("/tl/airtoolsgui/view/CheckBayerpattern.fxml"));
+            Parent parent = fxmlLoader.load();
+            checkBayerpatternController = fxmlLoader.<CheckBayerpatternController>getController();
+            checkBayerpatternController.setReferences(sh, logger, projectDir, rawDir);
+
+            Scene scene = new Scene(parent);
+            windowCheckBayerpattern = new Stage();
+            //windowCheckBayerpattern.initModality(Modality.APPLICATION_MODAL);
+            windowCheckBayerpattern.setScene(scene);
+            windowCheckBayerpattern.setTitle("Check Bayer Pattern");
+        } catch (IOException ex) {
+            Logger.getLogger(MainController.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        //checkBayerpatternController.updateWidgets();
+        windowCheckBayerpattern.showAndWait();
+    }
+
+
     public void showUnknownDialog() {
         try {
             FXMLLoader fxmlLoader = new FXMLLoader(getClass().getResource("/tl/airtoolsgui/view/MultiApPhotometry.fxml"));

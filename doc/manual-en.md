@@ -1,12 +1,12 @@
-Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v5.0)
+Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v5.1)
 ======================================================================
 
 ---
 author:
 - Thomas Lehmann
-date: Draft, May 2023
+date: Draft, May 2024
 title: Astronomical Image Reduction and Comet Photometry with AIRTOOLS
-  (v5.0)
+  (v5.1)
 ---
 
 -   [<span class="toc-section-number">1</span>
@@ -48,8 +48,7 @@ title: Astronomical Image Reduction and Comet Photometry with AIRTOOLS
     -   [<span class="toc-section-number">4.5</span> Raw
         Images](#raw-images)
     -   [<span class="toc-section-number">4.6</span> Image orientation,
-        flip status and Bayer
-        pattern](#image-orientation-flip-status-and-bayer-pattern)
+        flip status and Bayer pattern](#image_orientation)
     -   [<span class="toc-section-number">4.7</span> Image Set
         Definition](#image-set-definition)
 -   [<span class="toc-section-number">5</span> Image
@@ -334,6 +333,9 @@ log out and shutdown the virtual Linux system. Note the location of the
 shutdown or restart the Linux OS. Get familiar with how to start the web
 browser and the file manager and how to shutdown the Linux OS.
 
+![Xubuntu Linux (with AIRTOOLS) running in
+VirtualBox](images/xubuntu-vm-annotated.png "Xubuntu")
+
 You might need to adjust the keyboard language. This is done by clicking
 the appropriate panel applet with the name “EN” and choosing an item
 from the drop-down list.
@@ -345,15 +347,12 @@ specific setups in your Linux system (or for example network connection)
 because all communication to the real devices of the host computer is
 transparently handled by the VirtualBox drivers.
 
-![Xubuntu Linux (with AIRTOOLS) running in
-VirtualBox](images/xubuntu-vm-annotated.png "Xubuntu")
-
 # The AIRTOOLS Graphical User Interface
 
 The graphical user interface consists of a top menu bar, three main tabs
 and a text area for log output.
 
-TODO: description of main menu bar items
+<!-- TODO: description of main menu bar items -->
 
 Main processing tasks are organized in three different tabs. The first
 tab provides access to all basic image reduction steps to process raw
@@ -536,12 +535,9 @@ If you for example have used a Canon 6D DSLR for imaging then the
 correct entry would be `CDS/CFC`.
 
 flip:  
-Indicate if the image data is flipped top-down (1) or not (0).
-Essentially this describes the order and interpretation of FITS data: If
-the FITS file is organized in such a way that the data of the bottom
-image row comes first and that of the top-most row latest then it is
-considered unflipped and the other way it is flipped. More information
-about checking the image orientation is provided in chapter 4.5.
+Indicate if the image appears flipped top-down (1) or not (0). More
+information about checking the image orientation is provided in [this
+chapter](#image_orientation).
 
 rot:  
 Camera rotation with respect to the sky coordinate system. This
@@ -569,10 +565,10 @@ Approximate value of the size of a (unbinned) pixel on the sky in
 seconds of arc.
 
 magzero:  
-Zeropoint of the non-calibrated instrumental magnitude scale. This is
-the magnitude of a star which yields a signal of 1 count (ADU) in a 1
-second exposure. Initially you can use an arbitrary value but it is
-useful to refine it to something close to the zeropoint of the
+Approximate value of the zeropoint of the instrumental magnitude scale.
+This is the magnitude of a star which yields a signal of 1 count (ADU)
+in a 1 second exposure. Initially you can use an arbitrary value but it
+is useful to refine it to something close to the zeropoint of the
 calibrated scale (see log output of your first photometric calibration
 later on)
 
@@ -581,9 +577,9 @@ Telescope type: L=reflector, R=refractor, A=photo lens
 
 ctype:  
 Sensor type: CCD=monochrome CCD, DSLR=DSLR with native camera model RAW
-files, CMOS=monochrome CMOS sensor, RGGB or similar pattern for a
-one-shot-color CMOS sensor with a Bayer filter matrix in the given
-layout (see also chapter 4.5).
+files, CMOS=monochrome CMOS sensor, RGGB or similar layout pattern for a
+one-shot-color CMOS sensor with a Bayer filter matrix (see also chapter
+4.5).
 
 Save your edits and close the text editor. After any modification you
 can choose if the new parameter file is just applied to your current
@@ -644,16 +640,17 @@ the button to start, which starts the SAOImage viewer.
 
 Most professional tools in astronomy are storing and displaying image
 data starting at the bottom line, following general conventions provided
-by the FITS specification. Unfortunately, most camera drivers nowadays
+by the FITS specification. Unfortunately, many camera drivers nowadays
 are delivering data the other way around, starting with the topmost row.
 Depending on the data acquisition software and different tools for
 displaying FITS images, there might be additional steps of image
 flipping involved. It is therefore difficult to reliably estimate the
-image orientation in a viewer program on the computer in advance, even
-if we know the path of light in the optical train of our instrument.
+image orientation for a particular viewer program on the computer in
+advance, even if we know the path of light in the optical train of our
+instrument.
 
 In AIRTOOLS we have to provide image orientation parameters via the
-camera parameters file (e.g. column “flip”) for each individual setup.
+camera parameters file (e.g. column “flip”) for each instrumental setup.
 The best way to get things right is to look at an example raw FITS image
 captured by your camera which contains an object with a known
 orientation (e.g. Plejades or Whirlpool Galaxy). Load a raw image in the
@@ -661,43 +658,33 @@ SAOImage display application and check if the object appears
 flipped/mirrored or not. This determines the value for the “flip”
 parameter, using a setting of 1 if the image is flipped.
 
-![Raw image preview (fliped image) and Bayer matrix
-pattern](images/rawfile_bayer2.png "rawfile_bayer2")
+If you are using a one-shot-color camera then similar considerations
+apply for choosing the correct Bayer pattern order to be set via the
+“ctype” parameter. The pattern must match the order as displayed in
+SAOImage when reading pixel top-down. One way to determine the pattern
+order is to evaluate pixel intensities in the top-left corner of a raw
+image - e.g. using a blueish bright twilight sky flat. An easier
+approach can be choosen if you have captured a colorful target like a
+galactic HII region or spiral galaxy. Then you can check for the
+appropriate Bayer pattern by using a tool provided under the “Misc.
+Tools” tab. The button “Check Bayer Pattern” opens a dialog window from
+which you can choose a raw image file which is then de-bayered using
+different Bayer patterns. You can now choose the pattern order which
+best represents the natural color of your target.
 
-Special care must be taken when dealing with images from one-shot-color
-cameras with a Bayer matrix filter. The parameter “ctype” must be used
-to tell the software about the present Bayer pattern order. We need to
-estimate it by examining a raw image in the SAOImage viewer. Choose an
-image area void of stars, or even better an image of the twilight sky
-(red and blue pixels ideally should have different brightness). Zoom in
-to display about 8x8 pixels and ajust brightness and contrast to
-highlight the underlaying Bayer pattern structure. Select a pixel for
-which the center has x and y image coordinates close to uneven numbers.
-This is the first pixel of the Bayer matrix (the pixel to the right is
-the second one of the matrix, see Figure 3). If adjacent pixels on both
-diagonals crossing the selected one are similar in brightness then the
-first pixel of the Bayer pattern is a green one. It is difficult to
-distinguish between the two possible alternatives GBRG and GRBG but most
-likely it will be the first. If diagonal pixels are varying a lot in
-brightness (as is the case in the example image) then the first pixel of
-the pattern is either red or blue, which means either RGGB or BGGR.
-Again, most likely it is the first variant. A final decision can only be
-drawn when examining a de-bayered image of a known colored target.
-Another possibility is to compare sky flats taken at bright twilight and
-almost dark sky, because the bright twilight appears much bluer.
+With the given example image (M101 galaxy imaged using a RASA 11”
+telescope) we have choosen to set a ctype of GBRG and flip value 0 in
+the parameter file camera.dat.
 
-The example image is a capture of the night sky under bright urban light
-pollution, resulting in much higher intensity of red pixels than blue
-ones. Pixel 1 appears much brighter than pixel 4 which means the red
-pixel is the first one of the Bayer pattern and the correct entry for
-“ctype” in the parameter file in this case is therefore RGGB.
+![Checking Bayer pattern
+order](images/M101_check_bayer.png "Check bayer pattern")
 
 ## Image Set Definition
 
-An image set is a number of images of the same type and target, e.g. a
+An image set is a series of images of the same type and target, e.g. a
 couple of dark exposures with a given exposure time or a bracketed
 sequence of exposures of a comet. All image sets of the project are
-described in a parameter file called `set.dat` which must be created by
+described by a parameter file called `set.dat` which must be created by
 yourself. From the AIRTOOLS application’s main menu select “Edit” and
 “Edit Image Set Definitions”. Here is an example of a typical file which
 can be used for reference:
@@ -779,7 +766,7 @@ using the file manager.
 
 Some (remote) observatories deliver already calibrated images to their
 customers. In this special case you can omit dark and flat field
-calibration by providing the name “cal” for both dark and flat field
+calibration by providing the name “cal” for both dark and flat master
 image names.
 
 # Image Reduction
@@ -820,38 +807,45 @@ exposure time (and temperature) and 12 individual flat images for each
 filter used.
 
 Throughout this manual we refer to the term master dark by meaning of an
-image which has not been subtracted by a bias image. Within this
-definition a bias image is just a dark image at zero seconds exposure
-time. Furthermore a master flat image is a dark-subtracted flat field
-(where the corresponding master dark was taken at the same exposure
-time, sometimes called a flat-dark).
+image which has not been bias subtracted. Within this definition a bias
+image is just a dark image at zero seconds exposure time. Furthermore a
+master flat image is created from dark-subtracted flat field images
+(using an appropriate master dark matching in exposure time and
+temperature, sometimes called a flat-dark).
 
-If you don’t know your camera/sensor very well then it is a good idea to
-take more exposures - especially darks. The processing routines include
-measurements of the dark level in each image. A plot of this
-measurements is displayed and you can evaluate the stability of the mean
-intensity level. In addition, the difference of each individual dark
-exposure with respect to the mean image is computed. A mosaic of the
-much downsized and contrast enhanced difference images is created and
-displayed. This is helpful again to judge sensor stability and health.
-You may measure image intensity withing self defined regions. Note that
-the mean intensity of difference images has been shifted to 1000 and
-streched by a factor of 10.
+The processing of darks includes measurements of the dark level in each
+image. A plot of these measurements is displayed and you can evaluate
+the stability of the mean intensity level. In addition, the difference
+of each individual dark exposure with respect to the master dark is
+computed. A mosaic of the much downsized and contrast enhanced
+difference images is created and displayed. This is helpful again to
+judge sensor stability and health. Note that the mean intensity level of
+those difference images has been shifted to a value of 1000 and streched
+in contrast by a factor of 10.
 
-The number of individual flat images has to be choosen to be large
-enough to provide suitable signal to noise (not degrade the signal to
-noise of the stacked target image). Also its intensity level should be
-choosen carefully to provide high signal but fall well within linear
-range of the sensor response. Creating high quality flat fields is a
-challenge but crucial for obtaining precise photometry of extended
-objects like comets.
+The number of individual flat images should be large enough to preserve
+signal to noise in bright areas of the calibrated image. Also its
+intensity level should be choosen carefully to provide high signal but
+stays well within the linear range of the sensor response. Creating high
+quality flat fields is a challenge but crucial for obtaining precise
+photometry of extended objects like comets.
 
 ![Variation of dark images with respect to master dark (Pentax K-5II
 DSLR)](images/dark_variation2.png "Dark variation")
 
 ## Bad Pixel Masks
 
-TODO
+Bad pixel masks are derived from light exposures. Up to four image sets
+of a project are evaluated to create a combined mask. Those image sets
+ideally should consist of at about 10 images or more. Images must not be
+undersampled otherwise the algorithm might fail to distinguish between
+hot pixels and stars.
+
+After processing has finished a couple of check images are created and
+displayed: - the mask image (white means bad pixel) - a combined mask
+image in case masks from other projects have been copied into the
+current project directory - an image highlighting clusters of bad
+pixels - temporary difference images derived for each image set
 
 ## Image Calibration
 
@@ -861,30 +855,19 @@ the temporary directory defined for the project. Their name starts with
 the image number associated with each individual raw image. Calibrated
 images are not overwritten by default and kept throughout the project.
 
-There is no plots or result images produced by the caibration task.
-Though you may display certain calibrated images by using actions from
-the “Misc. Tools” tab: enter an image set name or specific image numbers
-and press the button “Load Calibrated Images”.
+By default calibrated images are created but not displayed after
+processing. Though you may display certain calibrated images by using
+actions from the “Misc. Tools” tab: enter an image set name or specific
+image numbers and press the button “Load Calibrated Images”.
 
-For DSLR images it is possible to provide a text file which holds a list
-of known hot pixels. Those will be replaced by the interpolation
-algorithm during the debayering step. The hot pixel file must be named
-using a fixed scheme which uses the camera name you have defined in the
-parameter file `camera.dat`. The appropriate line is found by matching
-the telescope identifier of the image set (first column in
-`camera.dat`). The camera name is given at fifth field position of that
-line. If the camera identifier is `K5II` then you have to name the hot
-pixel file `hotpix.k5ii.dat` and place it in the project directory. The
-file contains one line per pixel, with at least 3 space separated
-values. The values are image coordinates in x (starting at left with 0)
-and y (starting at top with 0) and a third fixed value of 0.
-
-In addition it is possible to manually create masks of bad image regions
-where necessary (e.g. satellite trails) on calibrated images. Load the
-calibrated images and use SAOImage regions to draw around affected
-areas. Save the regions file under the `bgvar` subdirectory using a name
-containing the given image number, e.g. `0003.bad.reg`. Those image
-regions will be excluded from the stacking process later on.
+Calibrated images may be affected by satellite trails or other bad image
+regions you would like to exclude in the stacking process later on.
+Those regions have to be defined manually after loading the affected
+calibrated images in the SAOImage display. You can use any
+two-dimensional region type (e.g. polygon) to enclose the bad areas. The
+bad regions have to be saved under the `bgvar` subdirectory using a file
+name containing the given image number and a fixed prefix,
+e.g. `0003.bad.reg`.
 
 ## Background evaluation
 
@@ -893,19 +876,27 @@ plan to estimate photometric magnitudes from extended sources, then it
 is important to carefully check image quality and possibly reject some
 exposures from stacking of a long sequence of images. Therefore a check
 of variation in the sky background has been added to the processing
-pipeline. At first, a downsized background map is created for each image
-and the average intensity level is plotted.
+pipeline. The average background intensity level in each image is
+plotted.
 
-![Background intensity (3 image
-sets)](images/gsog.bg.png "Background intensity")
+For illustration purposes we show results obtained from observations
+carried out with an 8” Newtonian reflector using a DSLR camera showing
+strong background variation due to high clouds at the end of the night.
+
+<figure>
+<img src="images/gsog.bg.png" title="Background intensity"
+style="width:70.0%" alt="Background intensity (3 image sets)" />
+<figcaption aria-hidden="true">Background intensity (3 image
+sets)</figcaption>
+</figure>
 
 Then an average background image is created for each image set as
 reference and difference images are created for each individual
 exposure. A mosaic of those thumbnail difference images is finally
 displayed.
 
-![Background variation (2 different image
-sets)](images/bgvar.png "Background variation")
+![Background variation (refers to 2nd and 3rd image set in last
+figure)](images/bgvar.png "Background variation")
 
 ## Image Registration
 
@@ -923,42 +914,55 @@ the “Edit” menu and open the “Project Settings”. Add the corresponding
 image numbers to the string variable `AI_EXCLUDE` (space separated four
 digit numbers). Save your edits and close the text editor.
 
-![Mag difference](images/gsog.dmag.png "Mag difference")
+<figure>
+<img src="images/gsog.dmag.png" title="Mag difference"
+style="width:70.0%" alt="Mag difference" />
+<figcaption aria-hidden="true">Mag difference</figcaption>
+</figure>
 
-![FWHM of stars](images/gsog.fwhm.png "FWHM")
+<figure>
+<img src="images/gsog.fwhm.png" title="FWHM" style="width:70.0%"
+alt="FWHM of stars" />
+<figcaption aria-hidden="true">FWHM of stars</figcaption>
+</figure>
 
 ## Stacking and Astrometric calibration
 
 Finally the images are projected to the reference image arbitrary
 coordinate system and co-added. The stacked image is used to create an
-object catalog. Stellar sources of this catalog are matched against a
-local copy of the Tycho2 star catalog to obtain a first astrometric
-solution (using an offline Astrometry.net solver). In a second step a
-global model is fitted (using online UCAC-4 catalog) over the whole
-image including to map some degree of distortion. This new WCS model is
-saved and used later on to identify objects from photometric catalogs.
-The overall astrometric accuracy is printed to the log output and
-several diagnostic plots are created to show residuals from catalog
-position in different axes, a distortion map showing pixel scale
-variation and a sky chart with detected sources.
+object catalog. Some image characteristics like noise and average star
+size are determined and a plot of the stellar FWHM across the field of
+view is created.
 
-![Distortion map (8” Newton f/4, Pentax
-K-5II)](images/distortion2.png "Distortion map")
+<figure>
+<img src="images/fwhm.png" title="FWHM_across_fov" style="width:70.0%"
+alt="FWHM of stars across field of view (FSQ106)" />
+<figcaption aria-hidden="true">FWHM of stars across field of view
+(FSQ106)</figcaption>
+</figure>
+
+A preliminar astrometric solution is derived using an offline
+Astrometry.net solver (using the Tycho2 star catalog). In a subsequent
+step a global model is fitted (using either GAIA EDR3 or PPMX catalog)
+over the whole image including to map some degree of distortion. This
+new WCS model is saved and used later on to identify objects from
+photometric catalogs. The overall astrometric accuracy is printed to the
+log output and several diagnostic plots are created to show residuals
+from catalog position in different axes, a distortion map showing pixel
+scale variation and a sky chart with detected sources.
+
+<figure>
+<img src="images/distortion3.png" title="Distortion map"
+style="width:70.0%"
+alt="Distortion map (FSQ106, Moravian Instruments C3-61000)" />
+<figcaption aria-hidden="true">Distortion map (FSQ106, Moravian
+Instruments C3-61000)</figcaption>
+</figure>
 
 With the help of the astrometric solution and comet ephemeris data
-fetched from MPC it is possible to predict the comet motion between
-individual exposures and use this information to do blind stacking on
-the comet.
-
-The resulting output images have names starting with the image set name.
-Stacks centered on the moving comet have a fixed string suffix of `_m`
-after the set name. Images consist of 16bit integer data and are either
-in PGM (monochrome, gray image) or PPM (RGB color image) format. The
-choice of these formats over FITS is mainly due to historic reasons -
-the software originally was written to reduce DSLR images only - and
-because many of the underlying image reduction software programs simply
-do not operate on (RGB-) FITS images. Image metadata are stored in
-associated ASCII header files using the file extension `.head`.
+fetched from MPC and/or JPL it is possible to predict the comet motion
+between individual exposures and use this information to do blind
+stacking on the comet.
 
 # Large Aperture Comet Photometry
 
@@ -990,17 +994,18 @@ the “New” button and fill in the name of the new VM, e.g. xubuntu-vm.
 Depending on the name you have choosen you might have to select
 Type=“Linux” and Version=“Ubuntu (64-bit)”. Continue by pressing “Next”.
 
-Set the memory size to \>=2 GB (recommended 4 GB or up to 75% of
+Set the memory size to \>=3 GB (recommended 6 GB or up to 75% of
 physical RAM) and press “Next”.
 
 Create a virtual hard disk of type VDI of fixed size. You can use the
 proposed location but it is recommended to create the virtual disk file
 on a fast physical hard disk drive, e.g. SSD. The file size should be
-\>=50 GB to serve for roughly 10-20 comet observations, based on 10-20
-individual exposures each. If you intent to use the AIRTOOLS software
-regularly to analyze all your comet observations then you should create
-a much larger virtual hard disk. After pressing the “Create” button the
-virtual machine is created.
+\>=50 GB to serve for about 10-20 comet observations during a night,
+each based on 10-20 individual exposures with a 30 megapixel mono
+camera. If you intent to use the AIRTOOLS software regularly to analyze
+all your comet observations then you should create a much larger virtual
+hard disk. After pressing the “Create” button the virtual machine is
+created.
 
 It is recommended to tweak some additional parameters for improved
 performance. Click the “Settings” button to access the following tabs:
@@ -1010,25 +1015,29 @@ performance. Click the “Settings” button to access the following tabs:
 -   Tab Display/Screen: increase Memory to 64 MB
 -   Tab USB: choose USB 3.0 Controller
 
+<figure>
+<img src="images/virtualbox-manager.png" title="virtualbox manager"
+style="width:80.0%"
+alt="Setup of a virtual machine in the Oracle VirtualBox Manager" />
+<figcaption aria-hidden="true">Setup of a virtual machine in the Oracle
+VirtualBox Manager</figcaption>
+</figure>
+
 Finally you should create a desktop icon to directly launch the virtual
 machine. Locate the name of the virtual machine on the left side of the
 VirtualBox Manager, press the right mouse and select “Create Shortcut on
 Desktop”.
 
-![Setup of a virtual machine in the Oracle VirtualBox
-Manager](images/virtualbox-manager.png "virtualbox manager")
-
 ### Booting Install Medium of the Xubuntu Linux distribution
 
 Download the ISO image file of the latest Xubuntu LTS release from
 <http://xubuntu.org/download>. Please note the important **LTS** version
-label, which indicates a “Long Term Support” release. This Linux OS
-version is well supported by the AIRTOOLS software. Choose a mirror
+label, which indicates a “Long Term Support” release. At the time of
+this writing it is named `xubuntu-22.04.4-desktop-amd64.iso`. This Linux
+OS version is well supported by the AIRTOOLS software. Choose a mirror
 download close to your location and download the 64-bit desktop image.
-At the time of this writing it is named
-`xubuntu-22.04.2-desktop-amd64.iso`.
 
-The ISO image file is used in place of a install medium for the virtual
+The ISO image file is used in place of an install medium for the virtual
 machine. To do so you have to start the VirtualBox software (if not
 running already) and press the “Settings” button of the selected virtual
 machine.
@@ -1187,7 +1196,11 @@ the VirtualBox documentation.
     folder will look like the following screenshot when using default
     directory names during initial setup.
 
-![Raw images folder](images/sample_rawfolder.png "rawfolder")
+<figure>
+<img src="images/sample_rawfolder.png" title="rawfolder"
+style="width:80.0%" alt="Raw images folder" />
+<figcaption aria-hidden="true">Raw images folder</figcaption>
+</figure>
 
 ### Image reduction
 

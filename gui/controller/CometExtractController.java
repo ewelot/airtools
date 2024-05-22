@@ -75,6 +75,7 @@ public class CometExtractController implements Initializable {
     
     private void resetValues() {
         /* reset widgets when the dialog window is shown again (same image set) */        
+        tfBgImage.setText(getBgImage());
         cbDelete.setSelected(false);
     }
 
@@ -91,7 +92,7 @@ public class CometExtractController implements Initializable {
         String bgImage="";
         if (imgSet.getStarStack().endsWith(".ppm")) ext="ppm";
         
-        // choose the latest bgcorr image (bgm10 or bgm1)
+        // choose the latest bgcorr image
         final String patternStr = imgSet.getSetname() + ".bgm[0-9]+." + ext
                 + "|" + imgSet.getSetname() + ".bgm[0-9]+all." + ext;
         System.out.println("# pattern = " + patternStr);

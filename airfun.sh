@@ -14,9 +14,40 @@
 # - in order to use SAOImage DS9 analysis tasks (via AIexamine) you must
 #   have installed files airds9.ana and aircmd.sh
 ########################################################################
-AI_VERSION="5.3.7"
+AI_VERSION="5.4"
 : << '----'
 CHANGELOG
+    5.4 - 19 May 2024
+        * GUI changes:
+            - Comet Extraction dialog: always update to latest background image
+            - Misc Tools tab: added button Check Bayer Pattern
+        * get_cobs: modified to cope with latest COBS API update
+        * map_rawfiles, img_info: added gain/iso to output, rawfiles.dat now
+            stores gain/iso in 6th column
+        * AIsetinfo, AIregister, AIcomet, get_jd_dmag, get_maxprocs: deal with
+            newer rawfiles.dat (added column gain)
+        * AIstack: store ISOGAIN (ISO or camera gain setting) to header
+        * AIsource, AIstack, AIwcs, AIphotcal, AIcomet: improve handling of
+            binned images when determining magzero and pixscale
+        * camera.dat: this version requires switching bayer pattern rows due
+            to changes applied to airfun.py
+        * AIrawconv: do not set a fixed bayerpattern for DSLR images (this is
+            now handled by rawpy from within function pnmccdred in airfun.py)
+        * icqplot: show model light curve even when lacking observations
+        * AImapphot: check for reasonable size of aperture
+        * AIsetinfo: for raw DSLR images show black value again
+        * AIdark, AIccd, AIrawconv: deal with in-camera dark level subtraction
+            (some DSLR models like Pentax), this was a regression since version
+            5.3a3 introducing AIrawconv/rawpy
+        * ds9cmd bggradient: allow for non-centered paraboloid
+        * guess_wcsparam: lower crossradius if airmass is very high
+        * AIskygen: limit number of threads in sky on systems with low memory
+        * AIcosnap: default value of outmult equals to comult if not set by
+            option -m <outmult>
+        * AIbgmodel: improved logic if models from both refsets and bgpattern
+            exist (note: bgpattern must be applied last)
+        * colorize: new option -g <gamma>
+        * new functions: check_bayerpattern get_binning get_rdat
 
     5.3.7 - 19 Mar 2024
         * AImapphot: bugfix when operating on images having multiple photometry
@@ -3039,17 +3070,19 @@ get_maxprocs () {
     test "$1" == "-v" && verbose=1 && shift 1
     local nproc
     local mem
+    local nf
     local npix=30
     local w
     local h
     local mlimit
     
-    # limit due to memory and image size
+    # limit due to memory and max image size
     mem=$(cat /proc/meminfo | grep "MemTotal:" | awk '{printf("%.0f", $2/1024)}')
     if [ -e rawfiles.dat ]
     then
-        w=$(minmax rawfiles.dat 6 | cut -d ' ' -f2)
-        h=$(minmax rawfiles.dat 7 | cut -d ' ' -f2)
+        nf=$(grep -v "^#" rawfiles.dat | lines 1 | wc -w)
+        w=$(minmax rawfiles.dat $((nf - 2)) | cut -d ' ' -f2)
+        h=$(minmax rawfiles.dat $((nf - 1)) | cut -d ' ' -f2)
         npix=$(echo $w $h | awk '{printf("%.0f", $1*$2/1000000)}')
         test $npix -lt 10 && npix=10
     fi
@@ -3058,7 +3091,7 @@ get_maxprocs () {
     nproc=$(cat /proc/cpuinfo | grep processor | wc -l)
     test $verbose && echo "mem=$mem nproc=$nproc npix=$npix mlimit=$mlimit" >&2
     nproc=$((nproc - 1))
-    test $mlimit -lt $nproc && nproc=$mlimit
+    test "$mlimit" && test $mlimit -lt $nproc && nproc=$mlimit
     test $nproc -gt 4 && nproc=4
     test $nproc -eq 0 && nproc=1
     
@@ -3526,6 +3559,7 @@ newmag () {
     local bg=${7:-1000}
     local line
     local texp
+    local binning
     local mzero
     local c
     local oldmag
@@ -3550,13 +3584,17 @@ newmag () {
         echo "ERROR: photometry file $photcat does not exist." >&2 &&
         return 255
     
+    test ! -e $set.head &&
+        echo "ERROR: $set.head not found." >&2 && return 255
     test "$id" && test "$photcat" && line=$(grep "^$id " $photcat)
     #echo "line=$line"
     test "$id" && test -z "$line" && test ! "$do_quiet" &&
         echo "WARNING: object $id not found in $photcat" >&2
     test -z "$id" && id="XXXXX"
     texp=$(AIsetinfo -b $set | lines 1 | awk '{print $5}')
-    mzero=$(get_param camera.dat magzero $set)
+    binning=$(get_binning $set)
+    mzero=$(get_param camera.dat magzero $set | \
+        awk -v dmag=$(di2dmag $((binning*binning))) '{print $1+dmag}')
     test ! "$do_quiet" && echo "# texp=$texp mzero=$mzero"
     x=$(echo $line | cut -d " " -f2)
     y=$(echo $line | cut -d " " -f3)
@@ -4800,15 +4838,10 @@ get_jd_dmag () {
                 jd=$(ut2jd $3 $day | awk '{printf("%.5f", $1)}')
                 test ${3:0:1} -eq 0 && x=$(echo $x | awk '{printf("%.5f", $1+1)}')
             else
-                # get texp jd from rawfilesdat
-                set - $(test -e $rawfilesdat && grep -v "^#" $rawfilesdat | \
-                    awk -v n=$num '{if($1==n){printf("%s", $0)}}' | lines 1) x
-                if [ $# -ge 5 ]
-                then
-                    jd=$5
-                else
+                # get jd from rawfilesdat
+                jd=$(get_rdat jd $num)
+                test $? -ne 0 &&
                     echo "ERROR: unable to determine JD for image $num." >&2 && return 255
-                fi
             fi
         fi
         
@@ -5076,7 +5109,6 @@ cometcenter () {
     test -z "$fwhm" &&
         echo "ERROR: missing header keyword AI_FWHM." >&2 && return 255
     # determine mag zero point of cosub image
-    #mzero=$(get_param camera.dat magzero $set AI_MAGZERO 25.5)
     mzero=$(get_header $hdr MAGZERO)
     test $? -ne 0 &&
         echo "ERROR: missing header keyword MAGZERO." >&2 && return 255
@@ -6037,6 +6069,45 @@ rgbscale () {
 }
 
 
+get_binning () {
+    local sname=$1  # set name
+    local bin
+    local imnum
+    local rfile
+
+    ! is_setname $sname &&
+        echo "ERROR: $sname is not a valid set name." >&2 && return 255
+
+    if [ -s $sname.head ]
+    then
+        bin=$(get_header -q $sname.head BINNING)
+        test -z "$bin" && bin=$(get_header -q $sname.head XBINNING)
+    fi
+    if [ -z "$bin" ]
+    then
+        # first try nref, if not defined use n1
+        imnum=$(AIsetinfo -b $sname | lines 1 | awk '{print $8}')
+        test "$imnum" == "-" &&
+            imnum=$(AIsetinfo -b $sname | lines 1 | awk '{print $6}')
+    fi
+    if [ -z "$bin" ] && [ "$imnum" ] && [ -s measure/$imnum.src.head ]
+    then
+        bin=$(get_header -q measure/$imnum.src.head BINNING)
+        test -z "$bin" && bin=$(get_header -q measure/$imnum.src.head XBINNING)
+    fi    
+    test -z "$bin" && rfile=$(get_rawfile $imnum)
+    if [ -z "$bin" ] && [ "$rfile" ] && [ -s $rfile ]
+    then
+        is_raw $rfile && bin=1
+        test -z "$bin" && bin=$(get_header -q $rfile BINNING)
+        test -z "$bin" && bin=$(get_header -q $rfile XBINNING)
+    fi
+    test -z "$bin" && bin=1 &&
+        test "$AI_DEBUG" && echo "WARNING: binning unknown, assuming bin=1" >&2
+    echo $bin | awk '{printf("%.0f\n", $1)}'
+}
+
+
 get_telescope () {
     # get telescope identifier of the given set evaluating
     #   - $sname.head
@@ -6291,6 +6362,49 @@ get_param () {
     test -z "$quiet" && echo "ERROR: $errmsg" >&2
     return 255
 }
+
+# get value from tabular data in rawfiles.dat
+# fields v>=5.4 (nf=9): num fname ut texp jd gain w h ts
+# fields v<5.4  (nf=8): num fname ut texp jd      w h ts
+# note: gain is camera gain or iso
+get_rdat () {
+    local showhelp
+    local i
+    for i in 1
+    do
+        (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
+    done
+    local rdat="rawfiles.dat"
+    local field=$1
+    local num=$2
+    local nf
+    
+    (test "$showhelp" || test $# -ne 2) &&
+        echo "usage: get_rdat <field> <num>" >&2 &&
+        return 1
+
+    set -- $(grep -w "^$num" $rdat)
+    nf=$#
+    test $nf -lt 8 &&
+        echo "WARNING: image number $num not found in $rdat" >&2 && return 255
+    case $field in
+        fname)  echo $2;;
+        ut)     echo $3;;
+        texp)   echo $4;;
+        jd)     echo $5;;
+        gain)   test $nf -eq 8 &&
+                    echo "ERROR unknown field $field" >&2 && return 255
+                echo $6;;
+        w)      test $nf -eq 8 && echo $6
+                test $nf -eq 9 && echo $7;;
+        h)      test $nf -eq 8 && echo $7
+                test $nf -eq 9 && echo $8;;
+        ts)     test $nf -eq 8 && echo $8
+                test $nf -eq 9 && echo $9;;
+        *)      echo "ERROR unknown field $field" >&2 && return 255;;
+    esac
+}
+
 
 # extract image rotation angle from wcs header at arbitrary position on image
 # value 90 means true north is right
@@ -6696,7 +6810,7 @@ FocalLength|SRFocalLength"
             ! is_number $num && num="-"
             printf "%-4s %-${slen}s  " $num $shortname
             exiftool -S -c "%.5f" "$fname" | grep -wE "$filter" | awk -v tzoff=$tzoff 'BEGIN{
-                fn="-"; fl="-"; ms=0; temp="-"; black="-"; mode="-"
+                iso="-"; fn="-"; fl="-"; ms=0; temp="-"; black="-"; mode="-"
                 gtime="-"; lat="-"; lon="-"; alt=-1; sat=-1; trck=-1; az=-1; pitch=-1; roll=-1}
             {
                 if ($1=="DateTimeOriginal:")          {
@@ -6737,7 +6851,7 @@ FocalLength|SRFocalLength"
                 n=split(texp,arr,"/"); if (n==2) texp=arr[1]/arr[2]
                 if (ms!=0) texp=ms/1000
                 
-                printf(" %s %5.1f %.5f %4d %4d %s\n", hms, texp, jd, w, h, temp)
+                printf(" %s %5.1f %.5f %4s %4d %4d %s\n", hms, texp, jd, iso, w, h, temp)
             }'
         }
         export -f _run_parallel
@@ -7831,7 +7945,7 @@ map_rawfiles () {
         done
     fi
 
-    # extract very basic file information: fname tstart texp jd w h temp
+    # extract very basic file information: fname tstart texp jd gain w h temp
     #   sort images according to JD
     #   spaces in file name are replaced by "_"
     cat <<EOF > $tmpsh
@@ -7847,6 +7961,11 @@ EOF
 
     _info_parallel () {
         local f=$1
+        local b
+        local d
+        local w
+        local h
+        local gain
         local tmphdr=$(mktemp "/tmp/tmp_header_XXXXXX.txt")
 
         test "$verbose" && echo "# $f" >&2
@@ -7872,6 +7991,14 @@ EOF
         (test -z "$w" || test -z "$h") &&
             echo "ERROR: missing NAXIS[12]." >&2 && return
 
+        # get ISO/gain
+        gain=$(grep "^ISO     =" $tmphdr | lines 1 | cut -d "=" -f2 | awk '{printf("%4d", $1)}')
+        test -z "$gain" &&
+            gain=$(grep "^ISOSPEED=" $tmphdr | lines 1 | cut -d "=" -f2 | awk '{printf("%4d", $1)}')
+        test -z "$gain" &&
+            gain=$(grep "^GAIN    =" $tmphdr | lines 1 | cut -d "=" -f2 | awk '{printf("%4d", $1)}')
+        test -z "$gain" && gain="   -"
+        
         # determine JD, tstart
         if [ "$time_from_log" ]
         then
@@ -7926,7 +8053,7 @@ EOF
         # get ccd temp
         temp=$(get_header -q $tmphdr CCD-TEMP | awk '{printf("%.0f", 1*$1)}')
         test -z "$temp" && temp="-"
-        echo $d$b $tstart $texp $jd $w $h $temp
+        echo "$d$b $tstart $texp $jd $gain $w $h $temp"
         rm $tmphdr
     }
 
@@ -7954,8 +8081,8 @@ EOF
         test "$verbose" && echo "# $REPLY" >&2
         test "${REPLY:0:1}" == "#" && continue
         i=$((i+1))
-        # fields are: fname tstart texp jd w h temp
-        printf "%04d %-"$len"s %8s %6.1f %.5f %4d %4d %s\n" $i $REPLY
+        # fields are: fname tstart texp jd gain w h temp
+        printf "%04d %-"$len"s %8s %6.1f %.5f %4s %4d %4d %s\n" $i $REPLY
     done < $tmpdat
     
     test "$AI_DEBUG" && echo $tmpdat $tmpsh >&2
@@ -8423,7 +8550,8 @@ get_cobs () {
     touch -d 'now - 1 days' $tmpstamp
     if [ ! -s "$tmpcdb" ] || [ $tmpstamp -nt $tmpcdb ]
     then
-        wget -O $tmp1 $cobsapi/comet_list.api?is-observed=1
+        #wget -O $tmp1 $cobsapi/comet_list.api?is-observed=1
+        wget -O $tmp1 $cobsapi/comet_list.api?is-observed=true
         jq .objects[].name $tmp1 | tr -d '"' > $tmpcdb
     fi
     
@@ -11218,6 +11346,7 @@ icqplot () {
     local prange
     local pinter
     local plotcmd
+    local popts
     local color
     local lcolor
     local colors=('#E00000' '#3050FF' '#D0B040' '#60C840' '#90B0C8')
@@ -11354,23 +11483,51 @@ icqplot () {
     test -s "$icqdat" && flist="$flist $icqdat"
     test -s $tmplocalobs && flist="$flist $tmplocalobs"
     test "$do_cobsobs"  && test -s $tmpcobsobs  && flist="$flist $tmpcobsobs"
-    cat $flist | awk '{printf("%s\n", substr($0,12,13))}' | \
+    test "$flist" && cat $flist | awk '{printf("%s\n", substr($0,12,13))}' | \
         tr -d ' ' | grep "^[0-9][[:digit:].]*$" | LANG=C sort -n > $tmpdat1
-    ! test -s $tmpdat1 &&
-        echo "ERROR: no observations to process." >&2 && return 255
-    dmin=$(lines 1 $tmpdat1 | cut -d '.' -f1)
-    dmax=$(tail -1 $tmpdat1 | cut -d '.' -f1)
-    dmax=$((dmax+1))
-    echo "# date range of all observations: $dmin $dmax" >&2
-    if [ "$xrange" ]
+    if [ -s $tmpdat1 ]
     then
-        test "${xrange%:*}" && test ${xrange%:*} -gt $dmin && dmin=${xrange%:*}
-        test "${xrange#*:}" && test ${xrange#*:} -lt $dmax && dmax=${xrange#*:}
-        test $dmin -ge $dmax &&
-            echo "ERROR: invalid data range (no observations)." >&2 && return 255
-        echo "# date range of observations within xrange: $dmin $dmax" >&2
+        # TODO: if single line expand dmin, dmax
+        dmin=$(lines 1 $tmpdat1 | cut -d '.' -f1)
+        dmax=$(tail -1 $tmpdat1 | cut -d '.' -f1)
+        dmax=$((dmax+1))
+        echo "# date range of all observations: $dmin $dmax" >&2
+        
+        if [ "$xrange" ]
+        then
+            if ((test "${xrange%:*}" && test "${xrange%:*}" -gt $dmax) ||
+                (test "${xrange#*:}" && test "${xrange#*:}" -lt $dmin))
+            then
+                dmin=""; dmax=""
+                echo "WARNING: all observations outside of date range" >&2
+            else
+                test "${xrange%:*}" && test ${xrange%:*} -gt $dmin && dmin=${xrange%:*}
+                test "${xrange#*:}" && test ${xrange#*:} -lt $dmax && dmax=${xrange#*:}
+            fi
+        fi
+    else
+        echo "WARNING: no observations to process." >&2
     fi
-    
+
+    if [ -z "$dmin" ]
+    then
+        case "$type" in
+            mag|hmag|hmagdist)
+                test "$xrange" && test "${xrange%:*}" && dmin=${xrange%:*}
+                test -z "$dmin" && dmin=$(date -d 'now - 1 month' +%Y%m%d)
+                test "$xrange" && test "${xrange#*:}" && dmax=${xrange#*:}
+                test -z "$dmax" && dmax=$(date -d 'now + 2 months' +%Y%m%d)
+                do_mpcmodel=1
+                ;;
+            *)
+                echo "ERROR: no observations to process." >&2
+                return 255
+                ;;
+        esac
+    fi
+    echo "# date range for plotting: $dmin $dmax" >&2
+
+
     # get comet elements, orbital period, perihel time (xp is utdate,
     #   up is unix time) and distance
     false && if [ "${comet%P}" != "${comet}" ] || [ "${comet%I}" != "${comet}" ]
@@ -11539,43 +11696,45 @@ icqplot () {
     done
 
     n=$(cat $tmpobs | grep -v "^#" | sed -e '1d' | wc -l)
-    test $n -eq 0 &&
-        echo "WARNING: no observation records found for comet $cname." >&2 &&
-        return 255
-    echo "# $n observations" >&2
-    
-    # list most used software (COBS only)
-    # obs id in col 4, software key in col 9 (last col)
-    if grep -q "^[0-9].*,cobs," $tmpobs
+    if [ $n -eq 0 ]
     then
-        echo "# most used software (COBS):"
-        grep "^[0-9].*,cobs," $tmpobs | cut -d "," -f9 | sort | awk '{
-            if (NR>1 && $0 != last) {
-                printf("%d %s\n", n, last)
-                n=1
-            } else {
-                n++
-            }
-            last=$0
-        }END{printf("%d %s\n", n, last)}' | sort -nr -k1,1 | lines 10 | \
-            sed -e 's|$|, |' | tr -d '\n' | sed -e 's|, $|\n|'
-    fi
-    
-    # list most active observers (COBS only)
-    # obs id in col 4, software key in col 9 (last col)
-    if grep -q "^[0-9].*,cobs," $tmpobs
-    then
-        echo "# most active observers (COBS):"
-        grep "^[0-9].*,cobs," $tmpobs | cut -d "," -f4 | sort | awk '{
-            if (NR>1 && $0 != last) {
-                printf("%d %s\n", n, last)
-                n=1
-            } else {
-                n++
-            }
-            last=$0
-        }END{printf("%d %s\n", n, last)}' | sort -nr -k1,1 | lines 10 | \
-            sed -e 's|$|, |' | tr -d '\n' | sed -e 's|, $|\n|'
+        echo "WARNING: no observation records found for comet" $cname >&2
+    else
+        echo "# $n observations" >&2
+        
+        # list most used software (COBS only)
+        # obs id in col 4, software key in col 9 (last col)
+        if grep -q "^[0-9].*,cobs," $tmpobs
+        then
+            echo "# most used software (COBS):"
+            grep "^[0-9].*,cobs," $tmpobs | cut -d "," -f9 | sort | awk '{
+                if (NR>1 && $0 != last) {
+                    printf("%d %s\n", n, last)
+                    n=1
+                } else {
+                    n++
+                }
+                last=$0
+            }END{printf("%d %s\n", n, last)}' | sort -nr -k1,1 | lines 10 | \
+                sed -e 's|$|, |' | tr -d '\n' | sed -e 's|, $|\n|'
+        fi
+        
+        # list most active observers (COBS only)
+        # obs id in col 4, software key in col 9 (last col)
+        if grep -q "^[0-9].*,cobs," $tmpobs
+        then
+            echo "# most active observers (COBS):"
+            grep "^[0-9].*,cobs," $tmpobs | cut -d "," -f4 | sort | awk '{
+                if (NR>1 && $0 != last) {
+                    printf("%d %s\n", n, last)
+                    n=1
+                } else {
+                    n++
+                }
+                last=$0
+            }END{printf("%d %s\n", n, last)}' | sort -nr -k1,1 | lines 10 | \
+                sed -e 's|$|, |' | tr -d '\n' | sed -e 's|, $|\n|'
+        fi
     fi
 
     
@@ -11599,12 +11758,20 @@ icqplot () {
 
     # time range of data
     # determine start, end and number of days from observations
-    cat $tmpdat1 | awk '{printf("%s\n", $1)}' | sort -n > $tmpdat2
-    umin=$(lines 1 $tmpdat2) # unix time in seconds
-    umax=$(tail -1 $tmpdat2)
-    cat $tmpdat1 | awk '{printf("%s\n", $2)}' | sort -n > $tmpdat2
-    dmin=$(lines 1 $tmpdat2) # yyyymmdd.dd
-    dmax=$(tail -1 $tmpdat2)
+    if [ -s $tmpdat1 ]
+    then
+        cat $tmpdat1 | awk '{printf("%s\n", $1)}' | sort -n > $tmpdat2
+        umin=$(lines 1 $tmpdat2) # unix time in seconds
+        umax=$(tail -1 $tmpdat2)
+        cat $tmpdat1 | awk '{printf("%s\n", $2)}' | sort -n > $tmpdat2
+        dmin=$(lines 1 $tmpdat2) # yyyymmdd.dd
+        dmax=$(tail -1 $tmpdat2)
+    else
+        umin=$(ut2jd 0:01 $dmin | awk '{
+                printf("%.0f", ($1-2440587.5)*86400)}')
+        umax=$(ut2jd 0:01 $dmax | awk '{
+                printf("%.0f", ($1-2440587.5)*86400)}')
+    fi
     span=$(echo $umax $umin | awk '{printf("%.1f", ($1-$2)/86400)}')
     echo "# data range: min=$dmin  max=$dmax  span=$span" >&2
     
@@ -12335,12 +12502,15 @@ $plotcmd '$tmpephem'  using $xcol:15 \\
         fi
 
         # plotting model curves
+        # if there are data points (observations) then plot dashed line
+        popts=""
+        test -s $obsdata && popts="dt '-'"
         if [ "$mycol" ] && [ -s $tmpmodel ] # newmodel
         then
             lcolor="#90B0C8"
             echo "\
 $plotcmd '$tmpmodel'  using $mxcol:($datefilter ? \$$mycol : 1/0) \\
-        title '$newlabel' lw 1 lc rgb '$lcolor' dt '-' with lines \\" >> $tmpgp
+        title '$newlabel' lw 1 lc rgb '$lcolor' $popts with lines \\" >> $tmpgp
             plotcmd="    ,"
         fi
         if [ "$mycol" ] && [ "$do_mpcmodel" ]
@@ -12348,7 +12518,7 @@ $plotcmd '$tmpmodel'  using $mxcol:($datefilter ? \$$mycol : 1/0) \\
             lcolor="#DBAE4B"
             echo "\
 $plotcmd '$tmpmpc'  using $mxcol:($datefilter ? \$$mycol : 1/0) \\
-        title '$mpclabel' lw 1 lc rgb '$lcolor' dt '-' with lines \\" >> $tmpgp
+        title '$mpclabel' lw 1 lc rgb '$lcolor' $popts with lines \\" >> $tmpgp
             plotcmd="    ,"
         fi
         if [ "$mycol" ] && [ -s $tmpfit ]
@@ -15206,6 +15376,7 @@ pnmccdred2 () {
             -prerot|-flip|-rot|-gray|-8|-16|-v)
                     pyopts="$pyopts $1"; shift 1;;
             -bpat)
+                    # CFA pattern of input image as displayed by SAOImage, row order top down
                     case "$2" in
                         RGGB|BGGR|GRBG|GBRG)    ;;
                         *)  echo "ERROR: unsupported bayer pattern." >&2
@@ -15488,8 +15659,9 @@ colorize () {
     local mode="full"   # either full or center (crop half width and height)
     local outsize       # size of long axis on output image
     local depth=8
-    local maxclip=3     # clip amount of brightest pixels in promille
+    local maxclip=1     # clip amount of brightest pixels in promille
     local blacklevel=1    # black level in percent
+    local gamma=2.2
     local do_overwrite
     local do_lrgb_smooth
     local no_display
@@ -15497,13 +15669,14 @@ colorize () {
     local sopts         # user supplied AIstiff options
     local verbose
     local i
-    for i in $(seq 1 10)
+    for i in $(seq 1 12)
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-s" && outsize=$2 && shift 2
         test "$1" == "-m" && maxclip=$2 && shift 2
+        test "$1" == "-g" && gamma=$2 && shift 2
         test "$1" == "-b" && blacklevel=$2 && shift 2
-        test "$1" == "-x" && sopts="$2" && shift 2
+        test "$1" == "-x" && sopts="$2" && shift 2  # deprecated
         test "$1" == "-n" && no_display=1 && shift 1
         test "$1" == "-o" && do_overwrite=1 && shift 1
         test "$1" == "-16" && depth=16 && shift 1
@@ -15519,7 +15692,7 @@ colorize () {
     local dim
     local outim
     local outlist
-    local opts="-srgb"  # options passed to AIstiff
+    local opts="-srgb -f $(echo $gamma | awk '{printf("%.2f", $1/2.2)}')"  # options passed to AIstiff
     local popts
     local sdg
     local add
@@ -15530,7 +15703,7 @@ colorize () {
     
     (test "$showhelp" || test $# -lt 1) &&
         echo "usage: colorize [-c] [-o] [-16] [-s outwidth]" \
-            "[-m maxclip_permille|$maxclip] [-b backlevel_percent|$blacklevel] <ppm1> [ppm2 ...]" >&2 &&
+            "[-m maxclip_permille|$maxclip] [-g gamma|$gamma] [-b backlevel_percent|$blacklevel] <ppm1> [ppm2 ...]" >&2 &&
         return 1
 
     # determine crop geometry
@@ -15580,7 +15753,7 @@ colorize () {
             echo "#" airfun.py pnmccdred $popts -cgeom $cropgeom -resize ${outsize/ /x} $ppm $tmpim >&2
         airfun.py pnmccdred $popts -cgeom $cropgeom -resize ${outsize/ /x} $ppm $tmpim
         test "$AI_DEBUG$verbose" &&
-            echo AIstiff $opts $sopts -o $outim $tmpim $max >&2
+            echo AIstiff $opts $sopts -o $outim $tmpim $max "" $min >&2
         AIstiff $opts $sopts -o $outim $tmpim $max "" $min
         if [ "$do_lrgb_smooth" ]
         then
@@ -17025,6 +17198,98 @@ findcluster () {
     airfun.py mkcluster -fmt png $inimg $outimg
 }
 
+check_bayerpattern () {
+    # create color image using different variants of bayer pattern
+    # operates on region in currently displayed image (in SAOImage)
+    local maxclip=3
+    local centercrop    # percent of image size to crop, default: use displayed region
+    local do_flip
+    local verbose
+    local showhelp
+    local i
+    for i in $(seq 1 5)
+    do
+        test "$1" == "-v" && verbose=1 && shift 1
+        test "$1" == "-f" && do_flip=1 && shift 1
+        test "$1" == "-c" && centercrop=$2 && shift 2
+        test "$1" == "-a" && centercrop=100 && shift 1
+        test "$1" == "-m" && maxclip=$2 && shift 2
+        (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
+    done
+    local img=${1:-""}
+    local reg=${2:-""}
+    local tdir=${AI_TMPDIR:-"/tmp"}
+    local wdir=$(mktemp -d $tdir/tmp_bpat_XXXXXX)
+    local tmpreg=$(mktemp $wdir/tmp_reg_XXXXXX.reg)
+    local tmpcrop=$(mktemp $wdir/tmp_crop_XXXXXX.pgm)
+    local ds9name="AIRTOOLS"
+    local cropparam
+    local bpat
+    local tprop
+
+    (test "$showhelp" || test $# -gt 2) &&
+        echo "usage: check_bayerpattern [-v] [-a|-c crop_percent] [-f] [-m maxclip|$maxclip] [img] [cropreg]" >&2 &&
+        return 1
+
+    if [ "$img" ]
+    then
+        test ! -e "$img" &&
+            echo "ERROR: missing image $img" >&2 && return 255
+        if [ ! "$centercrop" ]
+        then
+            test -z "$reg" &&
+                echo "ERROR: missing region file (2nd parameter)" >&2 && return 255
+            test ! -e "$reg" &&
+                echo "ERROR: missing region file $reg" >&2 && return 255
+            cp $reg $tmpreg
+        fi
+    else
+        img=$(xpaget $ds9name file)
+        xpaset -p $ds9name regions system physical &&
+        xpaset -p $ds9name regions save $tmpreg
+    fi
+    if [ ! "$centercrop" ]
+    then
+        test $(cat $tmpreg | wc -l) -le 3 &&
+            echo "ERROR: no regions defined" >&2 && return 255 
+        cropparam=$(regextent $img $tmpreg | tr 'x+' ' ' | awk '{
+            w=$1+$1%2; h=$2+$2%2; x=$3-$3%2; y=$4-$4%2
+            printf("%d %d %d %d", w, h, x, y)}')
+        test "$verbose" && echo "cropparam=$cropparam" >&2
+        imcrop $img $cropparam > $tmpcrop
+    else
+        if [ $centercrop -ge 100 ]
+        then
+            rm $tmpcrop && ln -s $(realpath $img) $tmpcrop
+        else
+            imcrop $img $centercrop > $tmpcrop
+        fi
+    fi
+    tprop="-fill white -font Helvetica -pointsize 18 -gravity northwest -annotate +10+5"
+    i=0
+    for bpat in RGGB GBRG GRBG BGGR
+    do
+        i=$((i+1))
+        AIrawconv -b $bpat -d simple $tmpcrop $wdir/x.$bpat.ppm
+        (cd $wdir
+            colorize -o -n -s 1 -m $maxclip x.$bpat.ppm
+            if [ "$do_flip" ]
+            then
+                convert x.$bpat.color8.tif -resize 500^ -shave 1x1 -flip \
+                    $tprop $bpat x.$i.$bpat.png
+            else
+                convert x.$bpat.color8.tif -resize 500^ -shave 1x1 \
+                    $tprop $bpat x.$i.$bpat.png
+            fi
+        )
+    done
+    montage -mode concatenate -background black -geometry +2+2 \
+        $wdir/x.?.????.png $tdir/x.bpat.png
+    AIdisplay $tdir/x.bpat.png
+    rm -f $wdir/x.* $tmpreg $tmpcrop
+    #echo $wdir
+}
+
 
 AIraw2fullgray () {
     # convert raw image to gray scale with linear scale up to 16bit range
@@ -17051,6 +17316,7 @@ AIraw2fullgray () {
 }
 
 
+# AIraw2gray is deprecated (used by AImedian and AIraw2rgb)
 AIraw2gray () {
     # convert raw image to gray scale image, output to stdout
     # - optionally crop to AI_CCDREGION (image pixel coordinates measured from raw image)
@@ -17372,10 +17638,10 @@ AIrawconv () {
     # - optionally flip image top-down
     local showhelp
     local add           # if set then add value after all other processing
-    local doff          # offset previously added to dark image (FITS only)
+    local doff          # offset previously added to dark image
     local scale         # if set pre-multiply image
-    local bayer_pattern # Bayer matrix pattern, pattern row order is bottom-up
-                        # as in (bayered) FITS image viewed in SAOImage
+    local bayer_pattern # CFA pattern of input image, as displayed in SAOImage
+                        # pattern row order is top-down
     local debayer_mode  # Debayer algorithm (simple or malvar)
     local do_flip       # if set then flip image top-bottom
     local do_ccdregion  # if set then crop to AI_CCDREGION
@@ -17406,6 +17672,8 @@ AIrawconv () {
     local param
     local cmd
     local mult
+    local bits
+    local dscale
     local tdir=${AI_TMPDIR:-"/tmp"}
     local tmpfits=$(mktemp "$tdir/tmp_im_XXXXXX.fits")
     local tmphdr=$(mktemp "$tdir/tmp_hdr_XXXXXX.fits")
@@ -17451,14 +17719,15 @@ AIrawconv () {
     else
         if is_raw "$img"
         then
-            # note: assuming bayer matrix of camera is RGGB but the order of
-            #   cells must follows FITS order starting at lower left
-            if [ -z "$bayer_pattern" ]
+            if [ "$doff" ]
             then
-                test -z "$do_flip"   && bayer_pattern="GBRG"
-                test ! -z "$do_flip" && bayer_pattern="RGGB"
+                # we need to revert dark scaling in doff if bitdepth != 16
+                bits=$(exiftool -S $(get_rawfile 1264) | grep -w BitsPerSample | cut -d ' ' -f2)
+                dscale=$(echo $bits 16 | awk '{print 2^(16-$1)}')
+                ped=$(echo $doff $dscale | awk '{printf("%.0f",$1/$2)}')
+            else
+                ped=0
             fi
-            ped=0
         else
             echo "ERROR: AIrawconv: unsupported input image format." >&2
             return 255
@@ -17468,12 +17737,10 @@ AIrawconv () {
     # determine output image format
     param=""
     test "$do_fits" && param="-fmt fits"
-    test -z "$param" && test "$bayer_pattern" && test "$debayer_mode" && param="-fmt ppm"
-    test -z "$param" && param="-fmt pgm"
 
     test "$bayer_pattern" &&
         param="$param -bpat $bayer_pattern"
-    test "$bayer_pattern" && test "$debayer_mode" &&
+    test "$debayer_mode" &&
         param="$param -debayer $debayer_mode"
     
     test "$dark"    && param="$param -d $dark"
@@ -17508,6 +17775,7 @@ AIrawconv () {
 }
 
 
+# AImedian is deprecated and shoud not be used
 AImedian () {
     # median of a set of images
     # output image: median.pnm (1 or 3 samples per pixel)
@@ -20353,9 +20621,9 @@ AIhplot () {
     set - $(cat $tmp1 | minmax - $col)
     test -z "$xmin" && xmin=$1
     test -z "$xmax" && xmax=$2
-    test -z "$bwidth" && bwidth=$(echo $xmin $xmax | awk '{print ($2-$1)/10}')
-    echo "# bwidth=$bwidth" >&2
-    echo "# data range: xmin=$1  xmax=$2  n=" >&2
+    test -z "$bwidth" && bwidth=$(echo $xmin $xmax | awk '{print ($2-$1)/10}') &&
+        echo "# bwidth=$bwidth" >&2
+    echo "# data range: xmin=$xmin  xmax=$xmax  n=$(cat $tmp1 | wc -l)" >&2
     cat $tmp1 | awk -v col=$col -v start=$xmin -v w=$bwidth '{
         inum=int(($col-start)/w)+1; x=start+w*(inum-0.5)
         printf("%s %.1f %d\n", $col, x, inum)
@@ -20374,7 +20642,7 @@ AIhplot () {
         x=$(echo $xmin $bwidth $i | awk '{printf("%f", $1+$2*($3-0.5))}')
         n=$(grep -w "$i$" $tmp2 | wc -l | awk -v npt=$npt '{printf("%.1f", $1*100/npt)}')
         echo $i $x $n
-    done | AIplot $popts -t "$title" -g "$gpcmd" -b $bwidth - 2 3 "$min" "$max" "$ranges"
+    done | AIplot $popts -t "$title" -g "$gpcmd" -b $bwidth - 2 3 "$xmin" "$xmax" "$ranges"
     rm -f $tmp1 $tmp2
     return
 }
@@ -21493,6 +21761,8 @@ AIskygen () {
     local y
     local c
     local madd
+    local mem
+    local nthreads
     
     (test "$showhelp" || test $# -lt 4) &&
         echo "usage: AIskygen [-v] [-o outfile] [-m dr,dg,db] <photcat> <psf> <texp>" \
@@ -21515,6 +21785,11 @@ AIskygen () {
 
     set - $(imsize $psf)
     pw=$1; ph=$2
+
+    mem=$(grep "MemTotal:" /proc/meminfo | awk '{printf("%.0f", $2/1024/1024)}') # in GB
+    nthreads=2
+    test $mem -gt 10 && nthreads=3
+    test $mem -gt 20 && nthreads=4
 
     pnmtomef $psf > $tmppsf
     for c in $(seq 1 $ncol)
@@ -21542,7 +21817,7 @@ AIskygen () {
         #    -pixel_size 3.5 -seeing_fwhm 6 -starcount_zp 0 -readout_noise 0 \
         #    -back_mag 22 -psf_oversamp 20 $tmpdat
         sky -d > $conf
-        sky -c $conf -image_name $tmpfits2 -image_size $w","$h \
+        sky -c $conf -nthreads $nthreads -image_name $tmpfits2 -image_size $w","$h \
             -image_type sky_nonoise -verbose_type quiet \
             -psf_oversamp $oversamp -seeing_type none -aureole_radius 0 \
             -exposure_time $texp -mag_zeropoint $magzero -back_mag 99 -starcount_zp 0 \
@@ -21612,10 +21887,7 @@ sdensity () {
     
     # determine pixscale
     pixscale=""
-    binning=""
-    test -z "$binning" && binning=$(get_header -q $set.head BINNING)
-    test -z "$binning" && binning=$(get_header -q $set.head XBINNING)
-    test -z "$binning" && binning=1
+    binning=$(get_binning $set)
     pixscale=$(get_param camera.dat pixscale $set | \
         awk -v b=$binning '{print $1*b}')
     test -z "$pixscale" &&
@@ -21878,13 +22150,15 @@ guess_wcsparam () {
                 # T = temperature in Celsius.
                 # computing refraction angle in arcmin
                 a=$1-$2/2
+                if (a<1) a=1
                 x=(a + (10.3/(a + 5.11)))*3.1415926/180
                 rlow = 1.02*cos(x)/sin(x) * P/101 * (283/(273 + T))
                 a=$1+$2/2
+                if (a<2) a=2
                 x=(a + (10.3/(a + 5.11)))*3.1415926/180
                 rhigh = 1.02*cos(x)/sin(x) * P/101 * (283/(273 + T))
-                crossrad=1+6*(rlow-rhigh)
-                if (rlow-rhigh > 1) crossrad=12*(rlow-rhigh)-7
+                crossrad=1+5*(rlow-rhigh)
+                # if (rlow-rhigh > 1) crossrad=12*(rlow-rhigh)-7
                 printf("%.1f %.1f %.1f\n", rlow, rhigh, crossrad)
             }')
         crossrad=$3
@@ -22087,9 +22361,7 @@ stackproperties () {
     test -z "$bgoff" && bgoff=0
     
     # binning
-    bin=$(get_header -q $set.head BINNING | awk '{printf("%.0f", $1)}')
-    test -z "$bin" && bin=$(get_header -q $set.head XBINNING | awk '{printf("%.0f", $1)}')
-    test -z "$bin" && bin=1
+    bin=$(get_binning $set)
 
 
     # show info
@@ -22109,6 +22381,7 @@ stackproperties () {
 # lineary scale up images from 12 to 16 bit
 # median group of 3+ images (to get rid of cosmics)
 # average those
+# note: resulting images are flipped according to the setting in camera.dat
 AIdark () {
     AIcheck_ok -r || return 255
     local rowsub    # if set then subtract median from each row to remove column structure
@@ -22120,6 +22393,7 @@ AIdark () {
         test "$1" == "-r" && rowsub=1 && shift 1
         test "$1" == "-a" && mode="average" && shift 1
         test "$1" == "-d" && mode="median" && shift 1
+        test "$1" == "-c" && mode="convonly" && shift 1 # do not combine images
     done
 
     local setname=${1:-""}
@@ -22145,6 +22419,9 @@ AIdark () {
     local ig
     local scale
     local flip
+    local ctype
+    local black
+    local is_dark_subtracted
     local opts
     local imlist=$(mktemp "$tdir/tmp_imlist_XXXXXX.dat")
     local tmpsh=$(mktemp "/tmp/tmp_script_XXXXXX.sh")
@@ -22162,7 +22439,7 @@ AIdark () {
         (! is_integer "$n1" || ! is_integer "$n2") && continue
         
         # check if output file exists
-        test -s $sname.pgm &&
+        test -s $sname.pgm && test "$mode" != "convonly" &&
             echo "WARNING: $sname.pgm exists, skipping set $sname." >&2 && continue
         
         # check if top-down image flipping is required
@@ -22171,11 +22448,14 @@ AIdark () {
         # check if dslr raw file is already dark subtracted (has black=0)
         is_dark_subtracted=""
         ctype=$(get_param camera.dat ctype $sname)
-        test $ctype == "DSLR" &&
-            test "$(AIsetinfo $sname | awk '{print $11}')" == "0" &&
-            is_dark_subtracted=1 &&
-            echo "$sname: in-camera dark subtraction assumed."
-
+        if [ $ctype == "DSLR" ]
+        then
+            #black=$(AIsetinfo $sname | awk '{print $11}') # old method using info from exif.dat
+            black=$(exiftool -S $(get_rawfile $n1) | grep -i black | awk '{print $2}')
+            test "$black" == "0" && is_dark_subtracted=1 &&
+                echo "$sname: in-camera dark subtraction assumed."
+        fi
+        
         # determine intensity scaling factor to stretch to full 16bit range
         # note: DSLR images are scaled internally by airfun.py pnmccdred
         test "$ctype" != "DSLR" &&
@@ -22193,6 +22473,7 @@ AIdark () {
         test "$AI_CCDREGION" && opts="-c"   # apply AI_CCDREGION
         test "$scale"   && opts="$opts -s $scale"
         test "$flip"    && opts="$opts -f"
+        test "$opts" && echo "# applying AIrawconv options:" $opts >&2
 
         test "$mode" == "avmedian" && test $n -lt 6 && mode="median" &&
             echo "WARNING: set $sname has few images ($n < 6)." >&2
@@ -22271,6 +22552,8 @@ EOF
                 echo "average median images ..."
                 pnmcombine2 $tdir/$sname.m[0-9][0-9].pgm $sname.pgm
                 ;;
+            convonly)
+                ;;
         esac
         
         # clean up
@@ -22289,6 +22572,7 @@ EOF
 #   - median of odd/even images in group (to get rid of stars),
 #     e.g.: median of 1 3 5 and median of 2 4 6
 # average those median frames
+# note: resulting images are flipped according to the setting in camera.dat
 AIflat () {
     AIcheck_ok -r || return 255
     local showhelp
@@ -22395,6 +22679,7 @@ AIflat () {
             printf("%s %s %s %s %s %s %s %s %s cal %s\n", $1, $2, $3, $4, $5, $6, $7, nref, $9, $11)}' >> $tmpsetdat
         test "$AI_DEBUG" &&
             echo "# tmpsetdat=$tmpsetdat" >&2 && cat $tmpsetdat
+        
         AI_SETS=$tmpsetdat AIccd $opts $sname
         test $? -ne 0 &&
             echo "ERROR: AIflat: dark subtraction failed for $sname." >&2 && skipset=1 && continue
@@ -22534,6 +22819,7 @@ AIflat () {
 # output images are written to $AI_TMPDIR
 # note: the order of image operations is defined in function pnmccdred
 #   in airfun.py
+# note: resulting images are flipped according to the setting in camera.dat
 AIccd () {
     AIcheck_ok -r || return 255
     local showhelp
@@ -22588,6 +22874,7 @@ AIccd () {
     local x
     local num
     local fname
+    local black
     local is_dark_subtracted    # black=0 indicates in-camera dark subtraction
     local w
     local h
@@ -22679,10 +22966,13 @@ AIccd () {
         # note: this is not handled anymore
         fname=$(get_rawfile $nref)
         is_dark_subtracted=""
-        is_raw "$fname" && test ! "$is_calibrated" && test "$(AIsetinfo $sname | awk '{print $11}')" == "0" &&
-            is_dark_subtracted=1 &&
-            echo "WARNING: $sname: in-camera dark subtraction is not supported" &&
-            continue
+        if is_raw "$fname"
+        then
+            #black=$(AIsetinfo $sname | awk '{print $11}') # old method using info from exif.dat
+            black=$(exiftool -S $(get_rawfile $nref) | grep -i black | awk '{print $2}')
+            test ! "$is_calibrated" && test "$black" == "0" && is_dark_subtracted=1 &&
+            echo "$sname: in-camera dark subtracted images"
+        fi
         
         # check if images are calibrated
         test "$dark" == "cal" && test "$flat" == "cal" &&
@@ -22882,6 +23172,7 @@ EOF
             )
             
             test "$flat" == "cal" && flat=""
+            test $mdk -gt 0 && opts="$opts -o $mdk"
             test "$AI_DEBUG" &&
                 echo "AIrawconv $opts $fname $tdir/$num.$outext \"$dark\" \"$bad\" \"$flat\"" >&2
             AIrawconv $opts "$fname" $tdir/$num.$outext "$dark" "$bad" "$flat"
@@ -22895,6 +23186,7 @@ EOF
             do
                 echo "  $num" >&2
                 test "$flat" == "cal" && flat=""
+                test $mdk -gt 0 && opts="$opts -o $mdk"
                 test "$AI_DEBUG" &&
                     echo "AIrawconv $opts $fname $tdir/$num.$outext \"$dark\" \"$bad\" \"$flat\"" >&2
                 AIrawconv $opts "$fname" $tdir/$num.$outext "$dark" "$bad" "$flat"
@@ -22982,6 +23274,7 @@ AIsource () {
     local infmt
     local bands
     local setparam
+    local binning
     local pixscale
     local sopts
     local assocopts
@@ -23093,12 +23386,17 @@ AIsource () {
             magzero=$(grep "^MAGZERO" $hdr | tr '=' ' ' | awk '{if ($2>0) printf("%.2f", $2)}')
             saturation=$(grep "^SATURATE" $hdr | tr '=' ' ' | awk '{if ($2>0) printf("%.2f", $2)}')
             pixscale=$(get_wcspscale $hdr)
+            binning=$(get_header -q $hdr BINNING)
+            test -z "$binning" && binning=$(get_header -q $hdr XBINNING)
+            test -z "$binning" && binning=1
             telid=$(get_header -q $hdr AI_TELID)
             if [ "$telid" ]
             then
                 test -z "$gain"       && gain=$(get_param       camera.dat gain     $telid)
-                test -z "$pixscale"   && pixscale=$(get_param   camera.dat pixscale $telid)
-                test -z "$magzero"    && magzero=$(get_param    camera.dat magzero  $telid) &&
+                test -z "$pixscale"   && pixscale=$(get_param   camera.dat pixscale $telid | \
+                    awk -v b=$binning '{print $1*b}')
+                test -z "$magzero"    && magzero=$(get_param    camera.dat magzero  $telid | \
+                    awk -v dmag=$(di2dmag $binning) '{print $1+dmag}') &&
                     set_header $hdr MAGZERO=$magzero
                 test -z "$saturation" && saturation=$(get_param camera.dat satur    $telid) &&
                     set_header $hdr SATURATE=$saturation
@@ -23155,13 +23453,17 @@ AIsource () {
             test $n -eq 0 && echo "WARNING: skipping set $sname" && continue
             echo "processing $n images in set $sname ..."
 
+            # determine binning
+            binning=$(get_binning $sname)
             # read data from camera.dat or environment
             get_telescope $sname > /dev/null
             test $? -ne 0 && continue
             saturation=$(get_param camera.dat satur    $sname AI_SATURATION)
             gain=$(get_param       camera.dat gain     $sname AI_GAIN)
-            pixscale=$(get_param   camera.dat pixscale $sname AI_PIXSCALE)
-            magzero=$(get_param    camera.dat magzero  $sname AI_MAGZERO)
+            pixscale=$(get_param   camera.dat pixscale $sname | \
+                awk -v b=$binning '{print $1*b}')
+            magzero=$(get_param    camera.dat magzero  $sname | \
+                awk -v dmag=$(di2dmag $((binning*binning))) '{print $1+dmag}')
         else
             set - $(get_imformat_bands $setname) err
             test $1 == "err" && break
@@ -23397,6 +23699,7 @@ AIregister () {
     local cx
     local cy
     local pixscale
+    local binning
     local pscale
     local crad
     local posmaxerr
@@ -23507,7 +23810,9 @@ AIregister () {
             echo "processing $n source lists in set $sname ..." >&2
 
             # read data from camera.dat or environment
-            pixscale=$(get_param camera.dat pixscale $sname AI_PIXSCALE)
+            binning=$(get_binning $sname)
+            pixscale=$(get_param camera.dat pixscale $sname | \
+                awk -v b=$binning '{print $1*b}')
         else
             n=1; nlist="$(basename ${setname%.*})"
         fi
@@ -23838,10 +24143,8 @@ EOF
                                 set_header ${acat%.*}.head MJD_OBS=$x/"Time of observation in julian days"
                             else
                                 # get texp jd from rawfilesdat
-                                set - $(test -e $rawfilesdat && grep -v "^#" $rawfilesdat | \
-                                    awk -v n=$num '{if($1==n){printf("%s", $0)}}' | lines 1) x
-                                set_header ${acat%.*}.head EXPTIME=$4/"Exposure time in seconds"
-                                set_header ${acat%.*}.head MJD_OBS=$5/"Time of observation in julian days"                                
+                                set_header ${acat%.*}.head EXPTIME=$(get_rdat texp $num)/"Exposure time in seconds"
+                                set_header ${acat%.*}.head MJD_OBS=$(get_rdat jd $num)/"Time of observation in julian days"                                
                             fi
                             x=$(echo $day | awk '{
                                     y=substr($1,1,2)
@@ -25440,6 +25743,13 @@ AIbgmodel () {
         do
             test ! -f $x && echo "ERROR: image $x is missing." >&2 && return 255
         done
+        if [ -f $cdir/$target.bgm${bgmult}model.$ext ]
+        then
+            echo "# merging $cdir/$target.bgm${bgmult}model.$ext" >&2
+            pnmccdred2 -a $bgres -d $cdir/$target.bgm${mbgmult}model.$ext $resimg \
+                $wdir/$target.bgm${mbgmult}newres.$ext
+            resimg=$wdir/$target.bgm${mbgmult}newres.$ext
+        fi
         
         local tmprot=$wdir/x.rot.$ext
         local tmpmask=$wdir/x.mask.pgm
@@ -25509,7 +25819,7 @@ AIbgmodel () {
         # note: "convert $tmpim2 -rotate $angle out.pnm" rotates opposite to pnmrotate
         pnmrotate $angle $tmpim2 | \
             imcrop -1 - $(imsize $resimg) | \
-            convert - -blur 0x$x $wdir/$target.bgm${bgmult}model.$ext
+            convert - -blur 0x$x $wdir/$target.bgm${bgmult}patmodel.$ext
     fi
 
 
@@ -25518,21 +25828,47 @@ AIbgmodel () {
     if [ "$target" != "xxx" ]
     then
         echo "# applying bg model ..." >&2
+
+        # residual image after subtraction of (initial) gradient (not modified)
         resimg=$cdir/$target.bgm${mbgmult}res.$ext
-        pnmccdred2 -a $bgres -d $wdir/$target.bgm${mbgmult}model.$ext $resimg $wdir/$target.bgm${mbgmult}allres.$ext
+
+        # new combined gradient image, refsets-model and bgpattern-model:
+        bgcorrimg=$cdir/$target.bgm${mbgmult}all.$ext
+        # new residual image after subtraction of gradient and combined model
+        allresimg=$cdir/$target.bgm${mbgmult}allres.$ext
         
-        cp -p $wdir/$target.bgm${mbgmult}model.$ext  $cdir/
-        cp -p $wdir/$target.bgm${mbgmult}allres.$ext $cdir/
-        
-        # combine gradient image and residual model for later use by AIcomet
-        pnmarith -a $cdir/$target.bgm${mbgmult}.$ext $cdir/$target.bgm${mbgmult}model.$ext | \
-            pnmccdred -a -1000 - $cdir/$target.bgm${mbgmult}all.$ext
+        # combine gradient image, refsets-model and bgpattern-model
+        if [ "$mode" == "refsets" ]
+        then 
+            cp -p $wdir/$target.bgm${mbgmult}model.$ext $cdir/
+            pnmarith -a $cdir/$target.bgm${mbgmult}.$ext $cdir/$target.bgm${mbgmult}model.$ext | \
+                pnmccdred -a -$bgres - $bgcorrimg
+            # new residual image
+            pnmccdred2 -a $bgres -d $cdir/$target.bgm${mbgmult}model.$ext $resimg $allresimg
+        fi
+        if [ "$mode" == "bgpattern" ]
+        then
+            cp -p $wdir/$target.bgm${bgmult}patmodel.$ext $cdir/
+            if [ -f $cdir/$target.bgm${mbgmult}model.$ext ]
+            then
+                pnmarith -a $cdir/$target.bgm${mbgmult}patmodel.$ext $cdir/$target.bgm${mbgmult}model.$ext | \
+                    pnmccdred -a -$bgres - $wdir/$target.bgm${mbgmult}summodel.$ext
+                pnmarith -a $cdir/$target.bgm${mbgmult}.$ext $wdir/$target.bgm${mbgmult}summodel.$ext | \
+                    pnmccdred -a -$bgres - $bgcorrimg
+                # new residual image
+                pnmccdred2 -a $bgres -d $wdir/$target.bgm${mbgmult}summodel.$ext $resimg $allresimg
+            else
+                pnmarith -a $cdir/$target.bgm${mbgmult}.$ext $cdir/$target.bgm${mbgmult}patmodel.$ext | \
+                    pnmccdred -a -$bgres - $bgcorrimg
+                # new residual image
+                pnmccdred2 -a $bgres -d $cdir/$target.bgm${mbgmult}patmodel.$ext $resimg $allresimg
+            fi
+        fi
         
         # rerun bg subtraction for stacks
-        bgimg=$cdir/$target.bgm${mbgmult}all.$ext
-        imbgsub -infits $target.$ext $bgimg "" $mbgmult > $target.bgs.$ext
+        imbgsub -infits $target.$ext $bgcorrimg "" $mbgmult > $target.bgs.$ext
         test -f ${target}_m.$ext &&
-            imbgsub -infits ${target}_m.$ext $bgimg "" $mbgmult > ${target}_m.bgs.$ext
+            imbgsub -infits ${target}_m.$ext $bgcorrimg "" $mbgmult > ${target}_m.bgs.$ext
     fi
 
     test "${verbose}${AI_DEBUG}" && echo $wdir >&2 && return
@@ -25560,7 +25896,7 @@ AIwcs () {
     local quiet         # suppress most of scamps output
     local north         # user defined north position angle (up=0, left=90)
                         # default is using value AI_NPA or entry in camera.dat
-    local binning       # detector pixel binning
+    local bin           # detector pixel binning (overwriting value from header)
     local ra            # approx. image center
     local de
     local crossrad      # if given then set value of -crossid_radius (arcsec)
@@ -25579,7 +25915,7 @@ AIwcs () {
         test "$1" == "-o" && maxoff=$2 && shift 2
         test "$1" == "-d" && fitdegrees=$2 && shift 2
         test "$1" == "-n" && north=$2 && shift 2
-        test "$1" == "-b" && binning=$2 && shift 2
+        test "$1" == "-b" && bin=$2 && shift 2
         test "$1" == "-c" && ra="$2" && de="$3" && shift 3
         test "$1" == "-cr" && crossrad="$2" && shift 2
         test "$1" == "-x" && sopts="$2" && shift 2
@@ -25616,6 +25952,7 @@ AIwcs () {
     local img
     local w
     local h
+    local binning
     local pixscale
     local magzero
     local posmaxerr
@@ -25646,9 +25983,7 @@ AIwcs () {
         if [ -f $hdr ]
         then
             magzero=$(get_header -q $hdr MAGZERO)
-            test -z "$binning" && binning=$(get_header -q $hdr BINNING)
-            test -z "$binning" && binning=1
-            pixscale=$(get_wcspscale $hdr | awk -v b=$binning '{print $1*b}')
+            pixscale=$(get_wcspscale $hdr)
         fi
         test "$AI_PIXSCALE" && pixscale=$AI_PIXSCALE
         test "$AI_MAGZERO"  && magzero=$AI_MAGZERO
@@ -25716,20 +26051,14 @@ AIwcs () {
             test -z "$img" && test -e $sname.src.dat && img=$sname.pgm &&
                 test $(listhead $sname.src.dat | grep LDAC_OBJECTS | wc -l) -eq 3 &&
                 img=$sname.ppm
-                    
+            
+            binning="$bin"
+            test -z "$binning" && binning=$(get_binning $sname)
             pixscale=$AI_PIXSCALE
-            if [ -z "$pixscale" ]
-            then
-                if [ -e $sname.head ]
-                then
-                    test -z "$binning" && binning=$(get_header -q $sname.head BINNING)
-                    test -z "$binning" && binning=$(get_header -q $sname.head XBINNING)
-                fi
-                test -z "$binning" && binning=1
-                pixscale=$(get_param camera.dat pixscale $sname | \
-                    awk -v b=$binning '{print $1*b}')
-            fi
-            magzero=$(get_param    camera.dat magzero  $sname AI_MAGZERO)
+            test -z "$pixscale" && pixscale=$(get_param camera.dat pixscale $sname | \
+                awk -v b=$binning '{print $1*b}')
+            magzero=$(get_param camera.dat magzero $sname AI_MAGZERO | \
+                awk -v dmag=$(di2dmag $((binning*binning))) '{print $1+dmag}')
         fi
         
         # determine parameters depending on set (e.g. pixscale, magzero)
@@ -26816,6 +27145,7 @@ AIstack () {
     local pierside
     local filter
     local binning
+    local isogain   # ISO or camera gain setting
     local popts
     local retval=0
     local tmpsh=$(mktemp "/tmp/tmp_script_XXXXXX.sh")
@@ -26941,11 +27271,23 @@ AIstack () {
             outlist="${sname}$outsuffix"
             test "$do_halfset" && outlist="${sname}a$outsuffix ${sname}b$outsuffix"
 
+            # get binning
+            binning="$bin"
+            test -z "$binning" && binning=$(get_binning $sname)
+
+            # get ISO or camera gain setting
+            isogain=$(get_rdat gain $nref 2>/dev/null)
+            test "isogain" == "-" && isogain=""
+
             # read data from camera.dat or environment
             saturation=$(get_param camera.dat satur    $sname AI_SATURATION)
             gain=$(get_param       camera.dat gain     $sname AI_GAIN       $gain)
-            pixscale=$(get_param   camera.dat pixscale $sname AI_PIXSCALE)
-            magzero=$(get_param    camera.dat magzero  $sname AI_MAGZERO)
+            pixscale="$AI_PIXSCALE"
+            magzero="$AI_MAGZERO"
+            test -z "$pixscale" && pixscale=$(get_param -q camera.dat pixscale $sname | \
+                awk -v b=$binning '{print $1*b}')
+            test -z "$magzero" && magzero=$(get_param -q camera.dat magzero  $sname | \
+                 awk -v dmag=$(di2dmag $((binning*binning))) '{print $1+dmag}')
             test -z "$pixscale" &&
                 echo "ERROR: cannot determine pixscale for $sname, skipping set." >&2 &&
                 retval=1 && continue
@@ -27098,7 +27440,7 @@ AIstack () {
             echo "ERROR: not enough disk space to process set $sname." >&2 && retval=1 && continue
         
         # get jd, filter, pierside, imgroll from reference image header
-        jdref=""; filter=""; binning="$bin"; pierside=""; imgroll=""
+        jdref=""; filter=""; pierside=""; imgroll=""
         href=$nref.head
         test ! -f $href && href=measure/$nref.src.head
         if [ -f $href ]
@@ -27116,8 +27458,6 @@ AIstack () {
             grep "^IMGROLL =" $href | tr -d "'" | grep -q -w Y &&
                 imgroll="yes"
             filter=$(get_header -q $href FILTER)
-            test -z "$binning" && binning=$(get_header -q $href BINNING)
-            test -z "$binning" && binning=$(get_header -q $href XBINNING)
             pierside=$(get_header -q $href PIERSIDE)
         fi
         test -z "$jdref" &&
@@ -27128,10 +27468,6 @@ AIstack () {
         test -z "$jdmean" &&
             echo "ERROR: cannot determine mean jd (from get_jd_dmag $sname)." >&2 &&
             retval=1 && continue
-        # correct pixscale for binning
-        false && test "$binning" &&
-            pixscale=$(echo $pixscale $binning | awk '{print $1*$2}') &&
-            echo "# binning=$binning, pixscale=$pixscale" >&2
 
         # determine output image color channels
         clist="gray"
@@ -27530,6 +27866,10 @@ EOF
                 set_header  $out.head BINNING=$binning &&
                 test "$do_keepfits" &&
                     sethead $out.fits BINNING=$binning
+            test "$isogain" &&
+                set_header  $out.head ISOGAIN="$isogain/ISO or camera gain setting" &&
+                test "$do_keepfits" &&
+                    sethead $out.fits ISOGAIN="'$isogain'" / "ISO or camera gain setting"
             test "$pierside" &&
                 set_header  $out.head PIERSIDE=$pierside &&
                 test "$do_keepfits" &&
@@ -28669,6 +29009,7 @@ AIphotcal () {
     local nexp
     local magzero
     local pixscale
+    local binning
     local flen
     local xoff=0
     local yoff=0
@@ -28828,13 +29169,15 @@ AIphotcal () {
     nexp=$(grep    "^NEXP"    $head | tr '=' ' ' | awk '{if ($2>0) printf("%d", $2)}')
     magzero=$(grep "^MAGZERO" $head | tr '=' ' ' | awk '{if ($2>0) printf("%.3f", $2)}')
     tel=$(get_header -q $head AI_TELID)
-    test -z "$texp"    && texp=1
-    test -z "$nexp"    && nexp=1
-    texp=$(echo $texp $nexp | awk '{printf("%f", $1/$2)}')
+    test -z "$texp"    && echo "WARNING: assuming TEXP=1" >&2 && texp=1
+    test -z "$nexp"    && echo "WARNING: assuming NEXP=1" >&2 && nexp=1
+    texp=$(echo $texp $nexp | awk '{printf("%f", $1/$2)}')  # per exposure
     test "$AI_MAGZERO" && magzero=$AI_MAGZERO
     if [ -z "$magzero" ] && [ "$tel" ]
     then
-        magzero=$(get_param camera.dat magzero $tel)
+        binning=$(get_binning $setname)
+        magzero=$(get_param camera.dat magzero $tel | \
+            awk -v dmag=$(di2dmag $((binning*binning))) '{print $1+dmag}')
     fi
     test -z "$magzero"    &&
         echo "ERROR: magzero unknown." >&2 && return 255
@@ -30323,6 +30666,7 @@ AIcomet () {
     local y
     local texp
     local nexp
+    local binning
     local magzero
     local mcorr
     local str
@@ -30415,6 +30759,8 @@ AIcomet () {
     test -s $cosubmult && test -s $newphot && test -s $starphot &&
         test -s $coreg && test -s $bgreg &&
         test $cosubmult -nt $newphot &&
+        test $cosubmult -nt $ststack &&
+        test $cosubmult -nt $costack &&
         test $newphot -nt $starphot &&
         skip_cosub=1
 
@@ -30481,13 +30827,16 @@ AIcomet () {
         nexp=$(grep    "^NEXP"    $hdr | tr '=' ' ' | awk '{if ($2>0) printf("%d", $2)}')
         magzero=$(grep "^MAGZERO" $hdr | tr '=' ' ' | awk '{if ($2>0) printf("%.2f", $2)}')
         filter=$(get_header -q $hdr FILTER)
+        binning=$(get_binning $set)
     fi
     test -z "$texp" &&
         echo "ERROR: missing keyword EXPTIME." >&2 && return 255
-    test -z "$nexp" && nexp=1
+    test -z "$nexp" && echo "WARNING: assuming NEXP=1" >&2 && nexp=1
     texp=$(echo $texp $nexp | awk '{printf("%f", $1/$2)}')  # single exposure
+    test "$AI_MAGZERO" && magzero=$AI_MAGZERO
     test -z "$magzero" &&
-        magzero=$(get_param camera.dat magzero $sname AI_MAGZERO)
+        magzero=$(get_param camera.dat magzero $sname | \
+            awk -v dmag=$(di2dmag $((binning*binning))) '{print $1+dmag}')
     test -z "$magzero" &&
         echo "ERROR: magzero unknown." >&2 && return 255
 
@@ -30526,14 +30875,17 @@ AIcomet () {
             echo "WARNING: unknown AI_PSFMC, using mcorr=$mcorr" >&2
         fi
         set - $(echo $omove | awk -F '@' '{printf("%s", $NF)}' | tr ',' ' ')
-        grep -v "^#" $starphot | awk -v rlim=${rlim:-"100"} -v w=$w -v h=$h -v xc=$1 -v yc=$2 -v mcorr=$mcorr \
-            'BEGIN{ncol=split(mcorr,mc,","); rmax=rlim/100*sqrt(w*w+h*h)}{
-            dx=$2-xc; dy=$3-yc; dr=sqrt(dx*dx+dy*dy)
-            if (dr > rmax) next
-            r=$4+mc[1]
-            if (ncol==3) {g=$5+mc[2]; b=$6+mc[3]} else {g=r; b=r}
-            printf("%-10s  %7.2f %7.2f  %6.3f %6.3f %6.3f  %3d %3d  %4d %3d %.3f\n",
-            $1, $2, $3, r, g, b, $7, $8, $9, $10, $11)}' > $tmpphot
+        if [ "$rlim" ] && is_number $rlim
+        then
+            grep -v "^#" $starphot | awk -v rlim=${rlim:-"100"} -v w=$w -v h=$h -v xc=$1 -v yc=$2 -v mcorr=$mcorr \
+                'BEGIN{ncol=split(mcorr,mc,","); rmax=rlim/100*sqrt(w*w+h*h)}{
+                dx=$2-xc; dy=$3-yc; dr=sqrt(dx*dx+dy*dy)
+                if (dr > rmax) next
+                r=$4+mc[1]
+                if (ncol==3) {g=$5+mc[2]; b=$6+mc[3]} else {g=r; b=r}
+                printf("%-10s  %7.2f %7.2f  %6.3f %6.3f %6.3f  %3d %3d  %4d %3d %.3f\n",
+                $1, $2, $3, r, g, b, $7, $8, $9, $10, $11)}' > $tmpphot
+        fi
         y=$(cat $starphot | grep -v "^#" | wc -l)
 
         # merging newphot
@@ -30673,7 +31025,7 @@ AIcomet () {
             nref=$(get_header -q $hdr NREF)
             test -z "$nref" && nref=$(AIsetinfo -b $sname | lines 1 | awk '{printf("%s", $8)}')
             test "$nref" && test -s rawfiles.dat &&
-                jdref=$(grep "^$nref " rawfiles.dat | awk '{printf("%s", $5)}') &&
+                jdref=$(get_rdat jd $nref) &&
                 echo "# nref=$nref jdref=$jdref (rawfiles.dat)"
         fi
         
@@ -31504,7 +31856,8 @@ AIcosnap () {
     # output image <sname>.cosnap.<ext>
     local showhelp
     local blurscale=2   # used by cometsmooth to smooth transition between core/inner/outer
-    local outmult=2
+    local outmult       # default: equals comult
+    local do_overwrite  # if set then do overwrite intermittent results
     local keep_cosnap   # if set then do not overwrite cosnap image
     local wbmult="2.0,1.0,1.3"  # not used anymore
     local compthres=5   # threshold for intensity compression of comet image
@@ -31515,7 +31868,7 @@ AIcosnap () {
     # local wbmul="2.302,0.927,1.263"  # Pentax K5II, dcraw: BGGR
     # local wbmul="2.198,0.933,1.343"  # Canon EOS 6D Mark II, dcraw: RGGB
     local i
-    for i in $(seq 1 7)
+    for i in $(seq 1 11)    # note: -e might be used multiple times
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-s" && blurscale=$2 && shift 2
@@ -31525,6 +31878,7 @@ AIcosnap () {
         test "$1" == "-w" && wbmul=$2 && shift 2 &&
             echo "WARNING: deprecated option not used" >&2
         test "$1" == "-k" && keep_cosnap=1 && shift 1
+        test "$1" == "-o" && do_overwrite=1 && shift 1
         test "$1" == "-e" && enhance_comet=$((enhance_comet + 1)) && shift 1
         #test "$1" == "-q" && quality=$2 && shift 2
     done
@@ -31558,7 +31912,7 @@ AIcosnap () {
     local msg
     
     (test "$showhelp" || test $# -lt 1) &&
-        echo "usage: AIcosnap [-k] [-e] [-s blurscale|$blurscale] [-m mult|$outmult]" \
+        echo "usage: AIcosnap [-k] [-e] [-s blurscale|$blurscale] [-m mult]" \
             "[-c contrast|$contrast] [-t compthres|$compthres] <set>" >&2 &&
         return 1
 
@@ -31592,7 +31946,7 @@ AIcosnap () {
         comult=10 && cosub=comet/$set.cosub10.$ext
     test -z "$cosub" &&
         echo "ERROR: missing cosub image" >&2 && return 255
-    
+
     # extract some header data
     rmsg=$(get_header $set.$ext AI_RMSG)
     aprad=$(get_header $set.head AI_FWHM | awk '{printf("%.1f", sqrt($3*$3+3)-0.3)}')
@@ -31602,7 +31956,30 @@ AIcosnap () {
     (test -z "$rmsg" || test -z "$aprad" || test -z "$omove" || test -z "$ocenter") &&
         echo "ERROR: some header keywords are missing." >&2 && return 255
 
-    # determine background and noise in stack using cosub
+    # skip contrast boost (of comet image) if enhance_comet is zero
+    test $contrast -gt 1 && test $enhance_comet -eq 0 &&
+        echo "# WARNING: resetting contrast to 1 (-e not used)" >&2 &&
+        contrast=1
+
+    # determine max value for comet in the comet stack using cosub
+    max=-1
+    if [ $ext == "ppm" ]
+	then
+        grep -q core $smoothreg &&
+            max=$(grep core $smoothreg | regstat2 -m $cosub - | tr ', ' '\n' | \
+                lines 9 | sort -n | tail -1 | awk -v m=$comult '{printf("%.0f", $1/m)}')
+        test $max -lt 0 && grep -q inner $smoothreg &&
+            max=$(grep inner $smoothreg | regstat2 -m $cosub - | tr ', ' '\n' | \
+                lines 9 | sort -n | tail -1 | awk -v m=$comult '{printf("%.0f", $1/m)}')
+    else
+        grep -q core $smoothreg &&
+            max=$(grep core $smoothreg | regstat2 -m $cosub - | tr ', ' '\n' | \
+                lines 3 | sort -n | tail -1 | awk -v m=$comult '{printf("%.0f", $1/m)}')
+        test $max -lt 0 && grep -q inner $smoothreg &&
+            max=$(grep inner $smoothreg | regstat2 -m $cosub - | tr ', ' '\n' | \
+                lines 3 | sort -n | tail -1 | awk -v m=$comult '{printf("%.0f", $1/m)}')
+    fi
+    # determine background and noise in comet stack using cosub
     # (scaled back to correspond to comult=1)
     regstat $cosub $bgreg $badreg | tr ',' ' ' > $tmp1
     if [ $ext == "ppm" ]
@@ -31615,29 +31992,48 @@ AIcosnap () {
         	printf("%.1f\n", o+($1-o)/m)}')
         sd=$(mean $tmp1 2 | awk -v m=$comult '{printf("%.1f\n", $1/m)}')
     fi
-    echo "# cosub=$cosub  bg1=$bg  sd1=$sd  move=$omove@$oxy" >&2
+    echo "# cosub=$cosub  move=$omove@$oxy" >&2
+    echo "# bg1=$bg  sd1=$sd  max1=$max" >&2
 
-    if [ -e $set.cosnap.$ext ] && [ "$keep_cosnap" ]
+    cosnap=$set.cosnap.$ext
+    test $enhance_comet -gt 0 && cosnap=$set.cosnap$((enhance_comet + 1)).$ext
+    stimage="x.$set.st.$ext"
+    test $enhance_comet -gt 0 && stimage="x.$set.st.bg.$ext"
+    
+    # TODO: if parameters blurscale or outmult have changed then
+    #   run cometsmooth again
+    test -z "$outmult" && outmult=$comult
+    if [ -e x.$set.comet.$ext ] && [ ! "$do_overwrite" ]
     then
-        echo "# WARNING: reusing existing $set.cosnap.$ext" >&2
+        echo "# reusing existing x.$set.comet.$ext" >&2
     else
         # smooth cosub image, scale to outmult and create trail
+        echo "smoothing startrail subtracted comet image ..."
         m=$(echo $comult | awk -v s=$outmult '{print s/$1}')
         a=$(echo $comult | awk -v s=$outmult '{print 2000*(1-s/$1)}')
         msg="cometsmooth -bg $bg -b $blurscale $set $cosub $smoothreg"
         cometsmooth -bg $bg -b $blurscale $set $cosub $smoothreg | \
-            pnmccdred -m $m -a $a - x.comet.$ext
+            pnmccdred -m $m -a $a - x.$set.comet.$ext
         test $? -ne 0 &&
             echo "ERROR: failed command: $msg" >&2 && return 255
-        
-        echo "# bluring comet image ..."
+    fi
+    
+    if [ -e x.$set.cotrail.$ext ] && [ ! "$do_overwrite" ]
+    then
+        echo "# reusing existing x.$set.cotrail.$ext" >&2
+    else
+        echo "motion bluring of comet image ..."
         get_jd_dmag $set > x.obs.dat
-        msg="mkcotrail -o x.cotrail.$ext $set x.comet.$ext $omove@$oxy x.obs.dat $bgoff"
-        mkcotrail -o x.cotrail.$ext -m $comult $set x.comet.$ext $omove@$oxy x.obs.dat $bgoff
+        msg="mkcotrail -o x.$set.cotrail.$ext $set x.$set.comet.$ext $omove@$oxy x.obs.dat $bgoff"
+        mkcotrail -o x.$set.cotrail.$ext -m $comult $set x.$set.comet.$ext $omove@$oxy x.obs.dat $bgoff
         test $? -ne 0 &&
             echo "ERROR: failed command: $msg" >&2 && return 255
+    fi
 
-
+    if [ -e x.$set.st.$ext ] && [ ! "$do_overwrite" ]
+    then
+        echo "# reusing existing x.$set.st.$ext" >&2
+    else
         # bg gradient image, preferring model corrected image ("all") and bgmult=1
         test -f bgcorr/$set.bgm1all.$ext &&
             bgmult=1 && bgimg=bgcorr/$set.bgm1all.$ext
@@ -31650,41 +32046,57 @@ AIcosnap () {
         
         # create star image, scaled to outmult
         imbgsub -infits -m $outmult $set.$ext $bgimg "" $bgmult | \
-            pnmccdred -d x.cotrail.$ext - x.st.$ext
+            pnmccdred -d x.$set.cotrail.$ext - x.$set.st.$ext
         #convert x.st.$ext -blur 0x1.0 x.st.blur.$ext
-        
-        # blur stars to enhance comet if requested
-        if [ $enhance_comet -gt 0 ]
-        then
-            echo "# smoothing star image ..."
-            AIbgmap -q x.st.ppm $((enhance_comet + 1)) 3 "" $contrast
-            stimage="x.st.bg.$ext"
-            cosnap=$set.cosnap$((enhance_comet + 1)).$ext
-        else
-            stimage="x.st.$ext"
-            cosnap=$set.cosnap.$ext
-        fi
-        
-        # dynamical compression of high intensities in comet image
-        thres=$(echo $sd $compthres $outmult $bgoff | awk '{printf("%.1f", $1*$2*$3+$4)}')
-        echo "# threshold for start of compression in comet image: $thres"
-        airfun.py imcompress x.comet.$ext $bgoff $contrast x.comet2.$ext
-        # offset to be added to comet image
-        a=$(echo $thres $bgoff $contrast | awk '{printf("%.0f", ($1-$2)*($3-1))}')
-
-        # glue star and comet images together
-        pnmccdred -a $((100-bgoff+a)) x.comet2.$ext - | \
-            pnmarith -a - $stimage | \
-            pnmccdred -a $((-100-(contrast-1)*1000)) - $cosnap
     fi
     
+    if [ $enhance_comet -gt 0 ]
+    then
+        if [ -e x.$set.st.bg.$ext ] && [ ! "$do_overwrite" ]
+        then
+            echo "# reusing existing x.$set.st.bg.$ext" >&2
+        else
+            # blur stars to enhance comet if requested
+            echo "smoothing star image ..."
+            AIbgmap -q x.$set.st.ppm $((enhance_comet + 1)) 3 "" $contrast
+        fi
+    fi
     
-    # show background and noise in cosnap
-    regstat $cosnap $bgreg $badreg | tr ',' ' ' > $tmp1
-    bg=$(echo $(mean $tmp1 1) $(mean $tmp1 2) $(mean $tmp1 3) | awk '{
-        printf("%.1f,%.1f,%.1f\n", $1, $2, $3)}')
-    sd=$(mean $tmp1 5)
-    echo "# $cosnap: bg=$bg sd=$(round $sd 1)" >&2
+    thres=$(echo $sd $compthres $outmult $bgoff | awk '{printf("%.1f", $1*$2*$3+$4)}')
+    if [ -e x.$set.comet2.$ext ] && [ ! "$do_overwrite" ]
+    then
+        echo "# reusing existing x.$set.comet2.$ext" >&2
+    else
+        # dynamical compression of high intensities in comet image
+        # note: we are using bgoff instead of thres
+        echo "dynamic compression of comet image ..."
+        airfun.py imcompress x.$set.comet.$ext $bgoff $contrast x.$set.comet2.$ext
+    fi
+
+    # offset to be added to comet image
+    a=$(echo $thres $bgoff $contrast | awk '{printf("%.0f", ($1-$2)*($3-1))}')
+    #test "$AI_DEBUG" &&
+        echo "# a=$a  thres=$thres  bgoff=$bgoff  contrast=$contrast" >&2
+    a=0 # because we have used bgoff instead of thres
+    
+    if [ -e $cosnap ] && ([ "$keep_cosnap" ] || [ ! "$do_overwrite" ])
+    then
+        echo "# WARNING: not overwriting existing $cosnap" >&2
+    else
+        # glue star and comet images together
+        echo "combining star and comet images ..."
+        pnmccdred -a $((100-bgoff+a)) x.$set.comet2.$ext - | \
+            pnmarith -a - $stimage | \
+            pnmccdred -a $((-100-(contrast-1)*1000)) - $cosnap
+    
+        # show background and noise in cosnap
+        regstat $cosnap $bgreg $badreg | tr ',' ' ' > $tmp1
+        bg=$(echo $(mean $tmp1 1) $(mean $tmp1 2) $(mean $tmp1 3) | awk '{
+            printf("%.1f,%.1f,%.1f\n", $1, $2, $3)}')
+        sd=$(mean $tmp1 5)
+        echo "# $cosnap: bg=$bg sd=$(round $sd 1)" >&2
+    fi
+    
 
     rm -f $tmp1
     return
@@ -32027,7 +32439,25 @@ AImapphot () {
             dist=$7
             echo "# using dist=$dist" >&2
         fi
-        
+
+        # check max mapphot radius < 0.2 * image width
+        # TODO: this check shoud be placed before loop and use the smallest distance
+        val=$(echo ${aplist//,/ } | tr ' ' '\n' | sort -n | tail -1)
+        if [ "$apunit" == "tkm" ]
+        then
+            dkm=$((val*1000))
+            rpix=$(echo $dkm $dist $pscale | awk '{
+                au=149597871
+                pi=4*atan2(1,1)
+                x=atan2($1,$2*au)*180*3600/pi
+                printf("%.0f", x/$3)}')
+        else
+            rpix=$(echo $val $pscale | awk '{printf("%.0f", $1/$2)}')
+        fi
+        test $rpix -gt $(imsize $cosub | awk '{printf("%.0f", 0.2*($1+$2)/2)}') &&
+            echo "ERROR: max aperture value $val is too large (rpix=$rpix)." >&2 &&
+            return 255
+
         # get index of comet aperture measurements in G color band
         # using catalog with highest priority
         xlist=$(get_header $hdr all | grep "^AP_AIDX[1-9]=" | cut -c8 | sort -nu)
@@ -33902,7 +34332,7 @@ ds9cmd () {
                 done
                 
                 # touch newphot.dat to force new star subtraction in comet extraction
-                touch comet/$set.newphot.dat
+                test -f comet/$set.newphot.dat && touch comet/$set.newphot.dat
                 ;;
         imload) fname=$(yad --title="Open Image or Region file:" \
                     --borders=10 --width=800 --height=600 --file --multiple \
@@ -34011,11 +34441,8 @@ ds9cmd () {
                     echo "ERROR: missing $set.head" >&2 && echo >&2 && return 255
                 
                 # get initial magzero and saturation
-                # TODO: should be implemented by AIsource
                 mzero=$(get_header -q $set.head MAGZERO)
-                test -z "$mzero" && mzero=$(get_param camera.dat magzero $set AI_MAGZERO)
                 x=$(get_header -q $set.head SATURATE)
-                test -z "$x" && x=$(get_param camera.dat satur $set AI_SATURATION)
                 echo "# magzero=$mzero saturation=$(echo $x | awk '{printf("%.0f", $1)}')"
                 
                 test "$north" && north="-n $north"
@@ -34038,6 +34465,7 @@ ds9cmd () {
                 # fittype option for AIbgmap
                 opts="-p"
                 test "$fittype" == "surface" && opts="-s"
+                test "$fittype" == "center" && opts="-c"
                 
                 # get image name
                 if [ -z "$img" ]
@@ -35100,6 +35528,8 @@ wait_for_frame () {
 # collect some information about image sets
 #   default: set target type nref flen fr iso texp n ts black tel
 #   long:    day set object ra+de ha jd_ref texp n rms bg fwhm tel site
+# note: useful info about DSLR raw image files also comes from
+#   "CFA|FNumber|ISO|BlackPoint|PictureMode" (last 2 for Pentax only)
 AIsetinfo () {
     local showhelp
     local otype
@@ -35144,7 +35574,8 @@ AIsetinfo () {
     local fwhm
     local flength
     local fratio
-    local iso
+    local rfile
+    local gain
     local tsens
     local black
     local rhdr
@@ -35175,7 +35606,7 @@ AIsetinfo () {
     then
         if [ ! "$baseinfo" ] && [ ! "$longinfo" ]
         then
-            echo "#set target type nref flen fr   iso  texp  n  ts black tel"
+            echo "#set target type nref flen fr  gain  texp  n  ts black tel"
             #     dk01 bias     d  0011  530 5.0    -   0.0 10 -15    -  T14
         else
             if [ "$baseinfo" ]
@@ -35300,7 +35731,6 @@ AIsetinfo () {
             fi
         fi
         
-        
         # if $sname.head does not contain jd try to read from measure/$nref.src.head
         if [ "$jdref" == "0" ] && [ -f measure/$nref.src.head ]
         then
@@ -35396,7 +35826,7 @@ AIsetinfo () {
         fi
 
         # extract some exif data
-        iso="-"
+        gain="-"
         tsens="-"
         black="-"
         # TODO: determine mean of all images instead of using values from nref 
@@ -35404,18 +35834,27 @@ AIsetinfo () {
             awk -v n=$nref '{if($2==n){print $0}}') x
         if [ $# -le 9 ]
         then
-            set - $(test -s rawfiles.dat && grep -v "^#" $rawfilesdat | grep -w $nref | \
-                awk -v n=$nref '{if($1==n){print $0}}') x
-            if [ $# -gt 8 ]
+            x=$(get_rdat ts $nref 2>/dev/null)
+            test "$x" && tsens=$x
+            x=$(get_rdat gain $nref 2>/dev/null)
+            test "$x" && gain=$x
+            # TODO: try to get Gain/ISO and Black from header of stack
+            rfile=$(get_rawfile -q $nref)
+            if [ -e "$rfile" ] && is_raw $rfile
             then
-                tsens=$8
-            else
-                echo "# WARNING: $sname: image $nref has no entry in $exifdat/$rawfilesdat." >&2
+                if [ "$gain" == "-" ]
+                then
+                    x=$(exiftool -S $rfile | grep -iw ISO | awk '{print $2}')
+                    test "$x" && gain=$x
+                fi
+                x=$(exiftool -S $rfile | grep -iw BlackPoint | awk '{print $2}')
+                test "$x" && black=$x
             fi
         else
+            # using old $exifdat
             test -z "$flength" && flength="$7"
             test -z "$fratio"  && fratio="${6/F/}"
-            iso=$5
+            gain=$5 # ISO
             tsens=$8
             black=$9
         fi
@@ -35433,8 +35872,8 @@ AIsetinfo () {
             printf "%-8s %-5s %-8s %s %s %3d %2d %011.3f %3s %2s %4.1f %4d %3.1f  %s %s\n" \
             $(basename $(pwd)) $sname $target $pos $pierside $az $alt $jdref $texp $nexp $rms $bg $fwhm $inst $AI_SITE
         else
-            printf "%s %-8s %s  %-4s %4.0f %3.1f %4s %5.1f %2d %2s %4s  %s\n" \
-                $sname $target $type $nref "$flength" "$fratio" $iso $texp $nexp $tsens $black $telid
+            printf "%s %-8s %s  %-4s %4.0f %3.1f %4s %5.1f %2d %3s %4s  %s\n" \
+                $sname $target $type $nref "$flength" "$fratio" $gain $texp $nexp $tsens $black $telid
         fi
     done < $sdat
     rm -f $tmp1 $tmphead

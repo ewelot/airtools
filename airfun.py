@@ -1,8 +1,16 @@
 #!/usr/bin/python3
 
-VERSION="2.3.4"
+VERSION="2.3.6"
 """
 CHANGELOG
+    2.3.6 - 11 May 2024
+        * cleanhotpixel: interpret bayerpattern top-down
+
+    2.3.5 - 21 Apr 2024
+        * pnmccdred: if operating on DSLR raw image then get bayerpattern using
+            rawpy/libraw (if not set by user parameter)
+        * debayer*: parameter bpat is now interpreted top down
+
     2.3.4 - 15 Mar 2024
         * enhanced lrgb, it now defaults to operate in Lch color space and
             applies gaussian blur on hue only
@@ -635,13 +643,13 @@ def rawtorgb(param):
 #   - interpolate bad pixels
 #   - debayer image
 # syntax: pnmccdred [-v] [-fmt outfmt|pnm] [-8|-16] [-gray] [-preadd val] [-premult val] [-flip] [-prerot]
-#   [-bpat bayerpattern_up] [-debayer mode] [-cgeom wxh+x+y ] [-resize wxh|mult] [-rot] [-mult mult] [-add add] inpnm outpnm <dark> <flat> <bad>
+#   [-bpat bayerpattern] [-debayer mode] [-cgeom wxh+x+y ] [-resize wxh|mult] [-rot] [-mult mult] [-add add] inpnm outpnm <dark> <flat> <bad>
 def pnmccdred(param):
     outfmt='pnm'
     outgray=False
     preadd=0
     premult=1
-    bayerpattern="" # only used if bad is provided, row-order is bottom-up
+    bayerpattern="" # CFA pattern of input image as displayed by SAOImage, row-order is top-down
     debayer_mode="" # simple or malvar
     cgeom=""
     size=""   # either wxh or size multiplier
@@ -734,8 +742,12 @@ def pnmccdred(param):
                 # stretch to 16bit
                 premult=premult * int(2**16 / raw.white_level)
                 cfa = raw.raw_image_visible.copy()
+                if (not bayerpattern):
+                    for ind in raw.raw_pattern.flatten():
+                        bayerpattern += "RGBG"[ind]
                 if verbose:
                     print("# raw DSLR image loaded by rawpy", file=sys.stderr)
+                    print("# bayer pattern:", bayerpattern, file=sys.stderr)
             except:
                 print("ERROR: unsupported input image format.", file=sys.stderr)
                 exit(-1)
@@ -762,8 +774,10 @@ def pnmccdred(param):
         code += """.linear(premult, 0)"""
     if flip:
         code += """.flip('vertical')"""
+        if bayerpattern: bayerpattern=bayerpattern[2:4]+bayerpattern[0:2]
     if prerot:
         code += """.rot180()"""
+        if bayerpattern: bayerpattern=bayerpattern[::-1]
     if dark:
         if (dark != '-'):
             darkimg = pyvips.Image.new_from_file(dark)
@@ -1413,19 +1427,25 @@ def debayer(param):
 
 
 # debayer (demosaic) using simple bilinear interpolation
-# usage: debayer_simple [-fmt outfmt] [-b bayerpattern_up] <image> [outimage]
+# usage: debayer_simple [-fmt outfmt] [-v] [-b bayerpattern] <image> [outimage]
 def debayer_simple(param):
-    bpat_up="RGGB"     # row-order: bottom up
+    bpat="RGGB"     # row-order: top down
     outfilename="-"
     outfmt="ppm"
+    verbose=False
     for i in range(2):
         if (not param or not isinstance(param[0], str)): break
         if(param[0]=='-fmt'):
             outfmt=param[1]
             del param[0:2]
         elif(param[0]=='-b'):
-            bpat_up=param[1]
+            bpat=param[1]
             del param[0:2]
+        elif(param[0]=='-v'):
+            verbose=True
+            del param[0]
+    if verbose:
+        print("# debayer_simple using bpat =", bpat, file=sys.stdout)
 
     # reading input image
     if isinstance(param[0], pyvips.vimage.Image):
@@ -1451,28 +1471,26 @@ def debayer_simple(param):
          [2, 4, 2],
          [1, 2, 1]]) / 4)
 
-    # convert bottom-up bayer pattern into top-down pattern
-    bpat_down=bpat_up[2]+bpat_up[3]+bpat_up[0]+bpat_up[1]
 
     # mask for green/red/blue pixels
     w = image.width
     h = image.height
-    if (bpat_down[1:2] == "G"):  # e.g. RGGB
+    if (bpat[1:2] == "G"):  # e.g. RGGB
         gmask = pyvips.Image.new_from_array([[0, 1], [1, 0]]).replicate(w/2, h/2)
-        if (bpat_down[1] == "R"):
-            rmask = pyvips.Image.new_from_array([[0, 0], [0, 1]]).replicate(w/2, h/2)
-            bmask = pyvips.Image.new_from_array([[1, 0], [0, 0]]).replicate(w/2, h/2)
-        else:
+        if (bpat[0] == "R"):
             rmask = pyvips.Image.new_from_array([[1, 0], [0, 0]]).replicate(w/2, h/2)
             bmask = pyvips.Image.new_from_array([[0, 0], [0, 1]]).replicate(w/2, h/2)
+        else:
+            rmask = pyvips.Image.new_from_array([[0, 0], [0, 1]]).replicate(w/2, h/2)
+            bmask = pyvips.Image.new_from_array([[1, 0], [0, 0]]).replicate(w/2, h/2)
     else:
         gmask = pyvips.Image.new_from_array([[1, 0], [0, 1]]).replicate(w/2, h/2)
-        if (bpat_down[0] == "R"):
-            rmask = pyvips.Image.new_from_array([[0, 0], [1, 0]]).replicate(w/2, h/2)
-            bmask = pyvips.Image.new_from_array([[0, 1], [0, 0]]).replicate(w/2, h/2)
-        else:
+        if (bpat[1] == "R"):
             rmask = pyvips.Image.new_from_array([[0, 1], [0, 0]]).replicate(w/2, h/2)
             bmask = pyvips.Image.new_from_array([[0, 0], [1, 0]]).replicate(w/2, h/2)
+        else:
+            rmask = pyvips.Image.new_from_array([[0, 0], [1, 0]]).replicate(w/2, h/2)
+            bmask = pyvips.Image.new_from_array([[0, 1], [0, 0]]).replicate(w/2, h/2)
     
 
     # convolve image and create color bands
@@ -1490,7 +1508,7 @@ def debayer_simple(param):
 # no interpolation, creating 1 color pixel from 2x2 bayer cells
 # usage: debayer_halfsize [-fmt outfmt] [-b bayerpattern_up] <image> [outimage]
 def debayer_halfsize(param):
-    bpat_up="RGGB"     # after flipping, row-order: bottom up
+    bpat="RGGB"     # row-order: top down
     outfilename="-"
     outfmt="ppm"
     for i in range(2):
@@ -1499,7 +1517,7 @@ def debayer_halfsize(param):
             outfmt=param[1]
             del param[0:2]
         elif(param[0]=='-b'):
-            bpat_up=param[1]
+            bpat=param[1]
             del param[0:2]
 
     # reading input image
@@ -1519,29 +1537,29 @@ def debayer_halfsize(param):
     w = image.width
     h = image.height
 
-    # extract bayer cells (1=bottom-left)
-    p3 = image.subsample(2, 2)
-    p4 = image.embed(-1, 0, w, h).subsample(2, 2)
-    p1 = image.embed(0, -1, w, h).subsample(2, 2)
-    p2 = image.embed(-1, -1, w, h).subsample(2, 2)
+    # extract bayer cells (1=top-left)
+    p1 = image.subsample(2, 2)
+    p2 = image.embed(-1, 0, w, h).subsample(2, 2)
+    p3 = image.embed(0, -1, w, h).subsample(2, 2)
+    p4 = image.embed(-1, -1, w, h).subsample(2, 2)
 
     # create half-size color image
-    if (bpat_up == "RGGB"):
+    if (bpat == "RGGB"):
         red = p1
         #green = ptl
         green = (p2+p3)/2
         blue = p4
-    if (bpat_up == "BGGR"):
+    if (bpat == "BGGR"):
         red = p4
         #green = ptl
         green = (p2+p3)/2
         blue = p1
-    if (bpat_up == "GBRG"):
+    if (bpat == "GBRG"):
         red = p3
         #green = ptl
         green = (p1+p4)/2
         blue = p2
-    if (bpat_up == "GRBG"):
+    if (bpat == "GRBG"):
         red = p2
         #green = ptl
         green = (p1+p4)/2
@@ -1557,7 +1575,7 @@ def debayer_halfsize(param):
 # https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/Demosaicing_ICASSP04.pdf
 # usage: debayer_malvar [-fmt outfmt] [-b bayerpattern_up] <image> [outimage]
 def debayer_malvar(param):
-    bpat_up="RGGB"     # row-order: bottom up
+    bpat="RGGB"     # row-order: top down
     outfilename="-"
     outfmt="ppm"
     for i in range(2):
@@ -1566,7 +1584,7 @@ def debayer_malvar(param):
             outfmt=param[1]
             del param[0:2]
         elif(param[0]=='-b'):
-            bpat_up=param[1]
+            bpat=param[1]
             del param[0:2]
 
     # reading input image
@@ -1609,52 +1627,33 @@ def debayer_malvar(param):
          [ 0,   -1,  4,   -1,  0  ],
          [ 0,    0, -1,    0,  0  ]]) / 8)
 
-    # convert bottom-up bayer pattern into top-down pattern
-    bpat_down=bpat_up[2]+bpat_up[3]+bpat_up[0]+bpat_up[1]
-
     # mask for green/red/blue pixels
     w = image.width
     h = image.height
-    if (bpat_down[1:2] == "G"):
+    if (bpat[1:2] == "G"):  # e.g. RGGB
         gmask = pyvips.Image.new_from_array([[0, 1], [1, 0]]).replicate(w/2, h/2)
-        if (bpat_down[1] == "R"):
-            #  JPG              FITS
-            #  B G B G ...      . . . .
-            #  G R G R ...      G R G R ...
-            #  . . . .          B G B G ...
-            rmask = pyvips.Image.new_from_array([[0, 0], [0, 1]]).replicate(w/2, h/2)
-            bmask = pyvips.Image.new_from_array([[1, 0], [0, 0]]).replicate(w/2, h/2)
-            g_in_r_row_mask = pyvips.Image.new_from_array([[0, 0], [1, 0]]).replicate(w/2, h/2)
-            g_in_b_row_mask = pyvips.Image.new_from_array([[0, 1], [0, 0]]).replicate(w/2, h/2)
-        else:
-            #  JPG              FITS
-            #  R G R G ...      . . . .
-            #  G B G B ...      G B G B ...
-            #  . . . .          R G R G ...
+        if (bpat[0] == "R"):
             rmask = pyvips.Image.new_from_array([[1, 0], [0, 0]]).replicate(w/2, h/2)
             bmask = pyvips.Image.new_from_array([[0, 0], [0, 1]]).replicate(w/2, h/2)
             g_in_r_row_mask = pyvips.Image.new_from_array([[0, 1], [0, 0]]).replicate(w/2, h/2)
             g_in_b_row_mask = pyvips.Image.new_from_array([[0, 0], [1, 0]]).replicate(w/2, h/2)
+        else:
+            rmask = pyvips.Image.new_from_array([[0, 0], [0, 1]]).replicate(w/2, h/2)
+            bmask = pyvips.Image.new_from_array([[1, 0], [0, 0]]).replicate(w/2, h/2)
+            g_in_r_row_mask = pyvips.Image.new_from_array([[0, 0], [1, 0]]).replicate(w/2, h/2)
+            g_in_b_row_mask = pyvips.Image.new_from_array([[0, 1], [0, 0]]).replicate(w/2, h/2)
     else:
         gmask = pyvips.Image.new_from_array([[1, 0], [0, 1]]).replicate(w/2, h/2)
-        if (bpat_down[0] == "R"):
-            #  JPG              FITS
-            #  G B G B ...      . . . .
-            #  R G R G ...      R G R G ...
-            #  . . . .          G B G B ...
-            rmask = pyvips.Image.new_from_array([[0, 0], [1, 0]]).replicate(w/2, h/2)
-            bmask = pyvips.Image.new_from_array([[0, 1], [0, 0]]).replicate(w/2, h/2)
-            g_in_r_row_mask = pyvips.Image.new_from_array([[0, 0], [0, 1]]).replicate(w/2, h/2)
-            g_in_b_row_mask = pyvips.Image.new_from_array([[1, 0], [0, 0]]).replicate(w/2, h/2)
-        else:
-            #  JPG              FITS
-            #  G R G R ...      . . . .
-            #  B G B G ...      B G B G ...
-            #  . . . .          G R G R ...
+        if (bpat[1] == "R"):
             rmask = pyvips.Image.new_from_array([[0, 1], [0, 0]]).replicate(w/2, h/2)
             bmask = pyvips.Image.new_from_array([[0, 0], [1, 0]]).replicate(w/2, h/2)
             g_in_r_row_mask = pyvips.Image.new_from_array([[1, 0], [0, 0]]).replicate(w/2, h/2)
             g_in_b_row_mask = pyvips.Image.new_from_array([[0, 0], [0, 1]]).replicate(w/2, h/2)
+        else:
+            rmask = pyvips.Image.new_from_array([[0, 0], [1, 0]]).replicate(w/2, h/2)
+            bmask = pyvips.Image.new_from_array([[0, 1], [0, 0]]).replicate(w/2, h/2)
+            g_in_r_row_mask = pyvips.Image.new_from_array([[0, 0], [0, 1]]).replicate(w/2, h/2)
+            g_in_b_row_mask = pyvips.Image.new_from_array([[1, 0], [0, 0]]).replicate(w/2, h/2)
     
 
     # convolve image and create color bands
@@ -1681,7 +1680,7 @@ def debayer_ahd(param):
     debayer_bayer2rgb('AHD', param)
 
 def debayer_bayer2rgb(method, param):
-    bpat_up="RGGB"     # row-order: bottom up
+    bpat="RGGB"     # row-order: top down
     outfilename="-"
     outfmt="ppm"
     verbose=False
@@ -1691,7 +1690,7 @@ def debayer_bayer2rgb(method, param):
             outfmt=param[1]
             del param[0:2]
         elif(param[0]=='-b'):
-            bpat_up=param[1]
+            bpat=param[1]
             del param[0:2]
         elif(param[0]=='-v'):
             verbose=True
@@ -1711,9 +1710,6 @@ def debayer_bayer2rgb(method, param):
     if(len(param)>1):
         outfilename = param[1]
 
-    # convert bottom-up bayer pattern into top-down pattern
-    bpat_down=bpat_up[2]+bpat_up[3]+bpat_up[0]+bpat_up[1]
-
     # call external program bayer2rgb for demosaicing
     # create temp files for input/output of bayer2rgb
     tmpdir=os.getenv('AI_TMPDIR')
@@ -1726,7 +1722,7 @@ def debayer_bayer2rgb(method, param):
     #v2np(image.cast('ushort')).tofile(tmp_infilename)
     v2np(image.cast('ushort')).tofile(tmp_infilename)
     # bayer2rgb -f $flippat -m $method -b 16 -s -t -w $1 -v $2 -i $tmpraw -o $tmptif
-    command = ['bayer2rgb', '-f', bpat_down, '-m', method, '-b 16', '-t',
+    command = ['bayer2rgb', '-f', bpat, '-m', method, '-b 16', '-t',
         '-w', str(image.width), '-v', str(image.height),
         '-i', tmp_infilename, '-o', tmp_outfilename]
     if verbose:
@@ -1952,11 +1948,14 @@ def imcompress(param):
 
 # clean bad pixels in image according to mask (bilinear interpolation)
 # usage: cleanhotpixel [-fmt outfmt] [-b bayerpattern] <image> <badmask> [outimage]
-# default: write result to stdout (pgm format)              . . . . ...
-# note: bayerpattern describes filter pattern at the        G B G B ...
-#   lower left corner (SAOImage ds9), e.g. RGGB is like:    R G R G ...
+# default: write result to stdout (pgm format)
+# note: bayerpattern describes filter pattern at the top left corner (as viewed
+#   by SAOImage ds9), e.g. RGGB is like:
+#   R G R G ...
+#   G B G B ...
+#   . . . . ...
 def cleanhotpixel(param):
-    bayerpattern="" # roworder bottom-up
+    bayerpattern="" # row-order: top-down
     outfilename=""
     outfmt="pgm"
     method="median"     # if median use median otherwise mean
@@ -2018,7 +2017,7 @@ def cleanhotpixel(param):
         outimg = (badmask > 0).ifthenelse(pgray, image)
     else:
         # bayered image
-        if (bayerpattern[1:2] == "G"):
+        if (bayerpattern[0:1] == "G"):
             greenmask = pyvips.Image.new_from_array([[1, 0], [0, 1]]).replicate(w/2, h/2)
         else:
             greenmask = pyvips.Image.new_from_array([[0, 1], [1, 0]]).replicate(w/2, h/2)
