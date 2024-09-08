@@ -1,3 +1,12 @@
+airtools (5.1.1-1) experimental; urgency=medium
+
+  * Replaced python3-ephem by python3-astroquery
+  * Removed dcraw-tl and pnmcombine
+  * Update to airfun.sh version 5.4.1, airfun.py version 2.3.7 and
+    airtools-cli version 1.5.9
+
+ -- Thomas Lehmann <t.lehmann@mailbox.org>  Fri, 06 Sep 2024 18:31:27 +0200
+
 airtools (5.1-1) experimental; urgency=medium
 
   * Update to airfun.sh version 5.4, airfun.py version 2.3.6 and

@@ -16,7 +16,7 @@ DOCS	= README* doc/manual-en.html
 IMAGESDIR	= $(DOCDIR)/images
 IMAGES	= doc/images/*
 
-BIN 	= bayer2rgb dcraw-tl pnmtomef pnmccdred pnmcombine pnmrowsort
+BIN 	= bayer2rgb pnmtomef pnmccdred pnmrowsort
 BINSH 	= airtools airtools-cli airfun.sh aircmd.sh
 BINPY	= airfun.py
 JAR	= airtools-gui.jar
@@ -52,17 +52,11 @@ all:	$(BIN)
 bayer2rgb: bayer2rgb.c bayer.o
 	$(CC) $(CFLAGS) -o $@ bayer.o bayer2rgb.c -lm
 
-dcraw-tl: dcraw-tl.c
-	$(CC) $(CFLAGS) -o $@ dcraw-tl.c $(LIBDCRAW)
-
 pnmtomef: pnmtomef.c
 	$(CC) $(CFLAGS) -o $@ pnmtomef.c $(LIBPNM)
 
 pnmccdred: pnmccdred.c
 	$(CC) $(CFLAGS) -o $@ pnmccdred.c $(LIBPNM)
-
-pnmcombine: pnmcombine.o functions.o
-	$(CC) $(CFLAGS) -o $@ $^ $(LIBPNM)
 
 pnmrowsort: pnmrowsort.c
 	$(CC) $(CFLAGS) -o $@ pnmrowsort.c $(LIBPNM)

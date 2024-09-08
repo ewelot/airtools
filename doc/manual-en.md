@@ -1191,10 +1191,12 @@ the VirtualBox documentation.
     download the [sample data
     archive](https://fg-kometen.vdsastro.de/airtools/testdata/230216_shf_raw.zip)
 
--   Open the archive and extract files and directories into the raw
-    files folder corresponding to your project. After extraction the raw
-    folder will look like the following screenshot when using default
-    directory names during initial setup.
+-   Open the archive and extract files and directories. The archive
+    contents has to be placed into the raw files folder corresponding to
+    your project. In case of using the default settings during setup of
+    the project it is named `/user/raw/230216` and it must be created
+    first. After extraction the raw folder will look like the following
+    screenshot when using the file managers list view.
 
 <figure>
 <img src="images/sample_rawfolder.png" title="rawfolder"

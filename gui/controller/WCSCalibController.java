@@ -18,7 +18,6 @@ import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.beans.property.StringProperty;
-import javafx.beans.value.ObservableValue;
 import javafx.collections.FXCollections;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
@@ -69,6 +68,8 @@ public class WCSCalibController implements Initializable {
     private TextField tfMinSN;
     @FXML
     private TextField tfCrossRadius;
+    @FXML
+    private TextField tfMatchResolution;
     @FXML
     private ChoiceBox<String> cbDegree;
     @FXML
@@ -347,10 +348,11 @@ public class WCSCalibController implements Initializable {
     
     private boolean isValidInputs() {
         String msg="";
+        double val;
         // TODO: Check for valid coordinate strings
         // TODO: Check for valid region mask file name
         if (! tfCrossRadius.getText().isBlank()) {
-            double val=-1;
+            val=-1;
             try {
                 val=Double.parseDouble(tfCrossRadius.getText());
             } catch (Exception e) {
@@ -359,8 +361,25 @@ public class WCSCalibController implements Initializable {
                 logger.log(msg);
                 return false;
             }
-            if (val<1 || val>100) {
-                msg="ERROR: value of CrossID radius out of limits (1..100).";
+            if (val<1 || val>400) {
+                msg="ERROR: value of CrossID radius out of limits (1..400).";
+                labelWarning.setText(msg);
+                logger.log(msg);
+                return false;
+            }
+        }
+        if (! tfMatchResolution.getText().isBlank()) {
+            val=-1;
+            try {
+                val=Double.parseDouble(tfMatchResolution.getText());
+            } catch (Exception e2) {
+                msg="ERROR: invalid Match resolution.";
+                labelWarning.setText(msg);
+                logger.log(msg);
+                return false;
+            }
+            if (val<1 || val>400) {
+                msg="ERROR: value of Match resolution out of limits (1..400).";
                 labelWarning.setText(msg);
                 logger.log(msg);
                 return false;
@@ -415,6 +434,10 @@ public class WCSCalibController implements Initializable {
         
         if (! tfCrossRadius.getText().isBlank()) {
             aircliCmdArgs.add("-cr " + tfCrossRadius.getText());
+        }
+        
+        if (! tfMatchResolution.getText().isBlank()) {
+            aircliCmdArgs.add("-mr " + tfMatchResolution.getText());
         }
         
         aircliCmdArgs.add("-d " + cbDegree.getSelectionModel().getSelectedItem());

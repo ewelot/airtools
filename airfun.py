@@ -1,8 +1,21 @@
 #!/usr/bin/python3
 
-VERSION="2.3.6"
+VERSION="2.3.7"
 """
 CHANGELOG
+    2.3.7 - 06 Sep 2024
+        * new requirements: astroquery.jplhorizons, astropy.time (replacing ephem)
+        * ignore AstropyDeprecationWarning (reqired due to astroquery versions
+          in older Xubuntu distributions)
+        * addephem, mkephem: modified to use astroquery.jplhorizons
+        * regstat: added option -g to only analyze green channel of RGB image
+        * ymd2jd, ymd2time, jd2ymd: modified to use astropy.time
+
+    2.3.7a1 - 10 Jul 2024
+        * impatsub: enhanced to support blurring of row/column pattern by
+            using new option -b <gaussblur>
+        * new function np2v
+
     2.3.6 - 11 May 2024
         * cleanhotpixel: interpret bayerpattern top-down
 
@@ -62,14 +75,21 @@ from tempfile import NamedTemporaryFile
 from collections import defaultdict
 from csv import DictReader
 from subprocess import run, Popen, PIPE
-import ephem
 import numpy as np
 import exifread
+
+import warnings
+from astropy.utils.exceptions import AstropyDeprecationWarning
+warnings.simplefilter('ignore', AstropyDeprecationWarning)
+from astropy.time import Time
+from astropy.time import TimeDelta
+from astropy.table import vstack
+from astroquery.jplhorizons import Horizons
 
 import pyvips
 import rawpy
 
-# csv file parser (column names are in first row)
+# csv file parser (column names are in first row, rows starting with # are ignored)
 def parse_csv(filename, fieldnames=None, delimiter=','):
     result = defaultdict(list)
     with open(filename) as infile:
@@ -77,26 +97,33 @@ def parse_csv(filename, fieldnames=None, delimiter=','):
             infile, fieldnames=fieldnames, delimiter=delimiter
         )
         for row in reader:
-            for fieldname, value in row.items():
-                result[fieldname].append(value)
+            if (not list(row.values())[0].startswith('#')):
+                for fieldname, value in row.items():
+                    result[fieldname].append(value)
     return result
 
 #---------------------------------------------
 #   functions for calculation of ephemerides
 #---------------------------------------------
 
-# convert UT date string yyyymmdd to JD
-def ymd2jd (ymd):
-    s=str(ymd)
-    datestr=s[0:4] + '/' + s[4:6] + '/' + s[6:]
-    return ephem.julian_date(datestr)
+# convert UT date (format YYYYMMDD[.dd]) to Time object
+def ymd2time(date):
+    s=str(date)
+    isoday=s[0:4] + '-' + s[4:6] + '-' + s[6:8]
+    if(len(s)>8): dayfrac=float(s[8:])
+    else: dayfrac=0
+    time = Time(isoday) + TimeDelta(dayfrac, format='jd')
+    return time
 
-# convert JD to UT date string yyyymmdd.dd
+# convert UT date (format YYYYMMDD[.dd]) to JD
+def ymd2jd(ymd):
+    return ymd2time(ymd).jd
+
+# convert JD to UT date (output format YYYYMMDD.dd)
 def jd2ymd (jd):
-    d=ephem.Date(jd - ephem.julian_date(0))
-    x=d.triple()
-    s='{:04d}{:02d}{:05.2f}'.format(x[0],x[1],x[2])
-    return s
+    t=Time(jd, format='jd').ymdhms
+    ymd=t.year*10000+t.month*100+t.day+t.hour/24+t.minute/60/24+t.second/3600/24
+    return '{:.2f}'.format(ymd)
 
 # convert mag to heliocentric mag
 def hmag(mag, d_earth):
@@ -109,38 +136,130 @@ def hmag(mag, d_earth):
 def lcoma(coma, d_earth):
     coma=float(coma)
     if coma < 0: return coma
-    val=d_earth*ephem.meters_per_au*math.tan(math.pi*coma/60/180)/1000
+    au=149597870700 # au in meters 
+    val=d_earth*au*math.tan(math.pi*coma/60/180)/1000
     return val
+
+
+def daterange (dates, interval):
+    # dates is list of values using format YYYYMMDD.dd
+    s=min(dates)
+    start=Time(s[0:4] + '-' + s[4:6] + '-' + s[6:8])
+    s=max(dates)
+    stop=Time(s[0:4] + '-' + s[4:6] + '-' + s[6:8]) + TimeDelta(1, format='jd')
+    print('# date range spans:', stop-start, 'days')
+    return {'start':start.iso, 'stop':stop.iso, 'step':f'{24*60*interval:.0f}m'}
 
 
 def addephem (param):
     # param
     #   csvfile   reqired fields: utime, date, source, obsid, mag, coma, method, filter, soft
     #               where utime is unix time in seconds and date is yyyymmdd.dd
-    #   cephem    comet ephemeris record from xephem edb file
+    #   comet     (short) comet name
+    #
+    # options
+    #   -p phase0 if set then apply phase effect correction to magnitudes
     #
     # output: text file with following fields:
-    #   position 1     2    3      4     5   6    7    8     9      10     11   12         13    14
-    #   fields:  utime date source obsid mag hmag coma lcoma method filter soft log(r_sun) r_sun d_earth
+    #   position 1     2    3      4     5   6    7    8     9      10     11   12         13    14      15
+    #   fields:  utime date source obsid mag hmag coma lcoma method filter soft log(r_sun) r_sun d_earth ph_angle
+    phase0=None
+    doCache=True
+    verbose=False
+    for i in range(2):
+        if(param[0] == '-p'):
+            phase0=float(param[1])
+            del param[0:2]
     if (len(param) != 2):
-        print("usage: addephem csvfile cephem")
+        print("usage: addephem csvfile comet", file=sys.stderr)
         exit(-1)
     else:
         csvfile=param[0]
-        cephem=param[1]
+        comet=param[1]
+    
+    # derive long comet name
+    longcometname=cometname(comet)
+    if (longcometname == ""):
+        print("ERROR: unsupported comet name", file=sys.stderr)
+        exit(-1)
 
-    # TODO: parse comet ephem database (xephem edb format)
-    k2=ephem.readdb(cephem)
-
+    # read CSV input data
     data=parse_csv(csvfile)
-    n=len(data['date'])
+    nobs=len(data['date'])
+    if verbose: print('#', nobs, 'records read', file=sys.stderr)
+    spandays=(float(max(data['utime'])) - float(min(data['utime'])))/3600/24
+
+    # limit list of epoches by rounding dates
+    if verbose:
+        for i in range(10):
+            print(data['date'][i], ymd2time(data['date'][i]).jd, file=sys.stderr)
+    if (spandays < 30):
+        # no rounding
+        jdlist = [ymd2time(datestr).jd for datestr in data['date']]
+    else:
+        if (spandays < 100):
+            # rounding to 0.1 days
+            jdlist = [round(ymd2time(datestr).jd * 10)/10 for datestr in data['date']]
+        else:
+            if (spandays < 200):
+                # rounding to 0.2 days
+                jdlist = [round(ymd2time(datestr).jd * 5)/5 for datestr in data['date']]
+            else:
+                if (spandays < 400):
+                    # rounding to 0.5 days
+                    jdlist = [round(ymd2time(datestr).jd * 2)/2 for datestr in data['date']]
+                else:
+                    # rounding to 1 day
+                    jdlist = [round(ymd2time(datestr).jd) for datestr in data['date']]
+                    
+    if verbose: print(len(jdlist), file=sys.stderr)
+    
+    # collect ephemerides data
+    junk=0
+    junksize=100
+    ujdlist=np.unique(jdlist)
+    n=len(ujdlist)
+    # TODO: use np.unique(jdlist)
+    if verbose:
+        print("# using {:d} dates to match {:d} observations".format(n,nobs), file=sys.stderr)
     for i in range(n):
-        if (data['utime'][i][0]=='#'):
-            continue
-        str=data['date'][i]
-        datestr=str[0:4] + '/' + str[4:6] + '/' + str[6:]
-        k2.compute(datestr)
-        #ephem.julian_date(datestr),
+        if (i%junksize == 0):
+            # need to operate on junks because JPL queries are limited to ~100 epoches
+            first=junk*junksize
+            last=min(first+junksize, n)
+            hor=Horizons(id=longcometname, epochs=list(ujdlist[first:last]), id_type='designation')
+            if (hor == None):
+                print('ERROR: object "' + longcometname + '" not known by JPL Horizons', file=sys.stderr)
+                exit(-1)
+            if (i==0):
+                eph=hor.ephemerides(closest_apparition=True, cache=doCache)
+            else:
+                eph=vstack([eph, hor.ephemerides(closest_apparition=True, cache=doCache)])
+            junk=junk+1
+
+    for i in range(nobs):
+        jd=jdlist[i]
+        # note: eph is sorted by date, not by list of epoches, therefore we
+        #   need to match the valid entry by its jd
+        curr_eph = eph[eph["datetime_jd"] == jd][0]
+        earth_dist = curr_eph["delta"]
+        sun_dist = curr_eph["r"]
+        phase_angle = curr_eph["alpha"] # angle between sun-target-observer
+        if (phase0):
+            # ref: https://asteroid.lowell.edu/comet/dustphase/
+            # TODO: curve only valid for phase_angle<60
+            phase_corr = 2.5 * (\
+                -0.01807 * (phase_angle - phase0) +\
+                0.000177 * (phase_angle**2 - phase0**2))
+            if (data['mag'][i][-1]==':'):
+                mag='{:.2f}:'.format(float(data['mag'][i][0:-1]) + phase_corr)
+            else:
+                mag='{:.2f}'.format(float(data['mag'][i]) + phase_corr)
+        else:
+            phase_corr=0
+            mag=data['mag'][i]
+
+        # print records
         print('{} {} {} {}'.format(
             data['utime'][i],
             data['date'][i],
@@ -149,43 +268,48 @@ def addephem (param):
             ),
             end='')
         print(' {} {:.2f} {} {:.0f}'.format(
-            data['mag'][i],
-            hmag(data['mag'][i], k2.earth_distance),
+            mag,
+            hmag(data['mag'][i], earth_dist) + phase_corr,
             data['coma'][i],
-            lcoma(data['coma'][i], k2.earth_distance)
+            lcoma(data['coma'][i], earth_dist)
             ),
             end='')
-        print(' {} {} {} {:.4f} {:.4f} {:.4f}'.format(
+        print(' {} {} {} {:.4f} {:.4f} {:.4f} {:.1f}'.format(
             data['method'][i],
             data['filter'][i],
             data['soft'][i],
-            math.log10(k2.sun_distance),
-            k2.sun_distance,
-            k2.earth_distance
+            math.log10(sun_dist),
+            sun_dist,
+            earth_dist,
+            phase_angle
             ))
     exit()
 
 
 def mkephem (param):
     # param
-    #   cephem    comet ephemeris record from xephem edb file
+    #   cname     comet name like 13P or 2017K2
     #   start     start date (yyyymmdd or jd)
     #   end       end date (yyyymmdd or jd)
-    #   g         model parameter
-    #   k         model parameter
+    #   g         model parameter (defaults to value provided by JPL Horizons elements)
+    #   k         model parameter (defaults to value provided by JPL Horizons elements)
+    #   num       number of equally spaced data points
     # output: text file with following fields:
     #   position 1     2    3   4    5          6     7
     #   fields:  utime date mag hmag log(r_sun) r_sun d_earth
     # reading command line parameters
+    num=100
     dateunit="yyyymmdd"
+    verbose=False
+    doCache=True
     if (param[0] == "-s"):
         dateunit="unixseconds"
         del param[0]
     if (len(param) < 3):
-        print("usage: mkephem [-s] cephem start end [g] [k] [num]")
+        print("usage: mkephem [-s] comet start end [g] [k] [num]")
         exit(-1)
     else:
-        cephem=param[0]
+        comet=param[0]
         start=float(param[1])
         end=float(param[2])
     if (len(param) > 3):
@@ -193,6 +317,12 @@ def mkephem (param):
         if param[4]: k=float(param[4])
     if (len(param) > 5):
         num=int(param[5])
+    
+    # derive long comet name
+    longcometname=cometname(comet)
+    if (longcometname == ""):
+        print("ERROR: unsupported comet name", file=sys.stderr)
+        exit(-1)
 
     # convert start and end from yyyymmdd or unix time to JD
     if (dateunit == "yyyymmdd"):
@@ -203,38 +333,81 @@ def mkephem (param):
         start=2440587.5+start/86400.0
         end=2440587.5+end/86400.0
     
-    # TODO: parse comet ephem database
-    k2=ephem.readdb(cephem)
-    if 'g' in locals(): k2._g=g
-    if 'k' in locals(): k2._k=k
-    print('# model: m = {:.2f} + 5log(D) + {:.2f}*2.5log(r)'.format(k2._g,k2._k))
+    # get elements from JPL
+    hor=Horizons(id=longcometname, epochs=(start+end)/2, id_type='designation')
+    if (hor == None):
+        print('ERROR: object "' + longcometname + '" not known by JPL Horizons')
+        exit(-1)
+    eph=hor.ephemerides(closest_apparition=True, cache=doCache)
+    # if not given use magnitude model parameters from JPL Horizons
+    if not 'g' in locals(): g=eph[0]["M1"]
+    if not 'k' in locals(): k=eph[0]["k1"]/2.5
+    print('# model: m = {:.2f} + 5log(D) + {:.2f}*2.5log(r)'.format(g, k))
 
+    # list of epoches
+    if verbose:
+        for i in range(10):
+            print(data['date'][i], ymd2time(data['date'][i]).jd, file=sys.stderr)
+    jdlist = np.linspace(start, end, num)
+    if verbose: print(len(jdlist), file=sys.stderr)
 
     # print header line
     print('# utime        date        mag   hmag  log(r) r      d')
 
-    if not 'num' in locals(): num=100   # number of intervals
-    for i in range(num+1):
-        jd=start+i*(end-start)/(num)
+    junk=0
+    junksize=50
+    for i in range(num):
+        if (i%junksize == 0):
+            # need to operate on junks because JPL queries are limited to ~50 epoches
+            first=junk*junksize
+            last=min(first+junksize, num)
+            hor=Horizons(id=longcometname, epochs=list(jdlist[first:last]), id_type='designation')
+            if (hor == None):
+                print('ERROR: object "' + longcometname + '" not known by JPL Horizons')
+                exit(-1)
+            eph=hor.ephemerides(closest_apparition=True, cache=doCache)
+            junk=junk+1
+        jd=jdlist[i]
+        # note: eph is sorted by date, not by list of epoches, therefore we
+        #   prefer to match the currently valid entry by its jd
+        e = eph[i%junksize]
+        mag=g+5*math.log10(e["delta"])+k*2.5*math.log10(e["r"])
         unixtime=(jd-2440587.5)*86400.0
         utdate=jd2ymd(jd)
-        k2.compute(ephem.Date(jd - ephem.julian_date(0)))
         print('{:.0f} {}'.format(
             unixtime,
             utdate
             ),
             end='')
         print(' {:.3f} {:.3f}'.format(
-            k2.mag,
-            hmag(k2.mag, k2.earth_distance)
+            mag,
+            hmag(mag, e["delta"])
             ),
             end='')
         print(' {:.4f} {:.4f} {:.4f}'.format(
-            math.log10(k2.sun_distance),
-            k2.sun_distance,
-            k2.earth_distance
+            math.log10(e["r"]),
+            e["r"],
+            e["delta"]
             ))
-    exit()
+
+
+def cometname (scname):
+    # check for numbered periodic comet
+    if re.compile('^[0-9]+P$').match(scname):
+        return scname
+    # convert comet name [ACP]YYYYXX to [ACP]/YYYY XX
+    if re.compile('^[ACP][0-9][0-9][0-9][0-9][A-Z]').match(scname):
+        return scname[0]+"/"+scname[1:5]+" "+scname[5:]
+    # convert comet name YYYYAN to C/YYYY AN
+    if re.compile('^[0-9][0-9][0-9][0-9][A-Z]').match(scname):
+        return "C/"+scname[0:4]+" "+scname[4:]
+    # check for numbered asteroid or asteroid name
+    if re.compile('^([0-9]+)$').match(scname) or \
+        re.compile('^[0-9]+$').match(scname) or \
+        re.compile('^[^0-9]+$').match(scname):
+        return ""
+    return ""
+
 
 
 #---------------------------------------
@@ -337,8 +510,12 @@ def imcrop(param):
         source = pyvips.Source.new_from_descriptor(sys.stdin.fileno())
         inimg = pyvips.Image.new_from_source(source, "")
 
-    outimg=inimg.crop(xoff, yoff, width, height)
-
+    try:
+        outimg=inimg.crop(xoff, yoff, width, height)
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}", file=sys.stderr)
+        print("ERROR: unable to crop at {:s} {:s}".format(xoff, yoff), file=sys.stderr)
+    
     # writing output image
     writeimage(["-fmt", outfmt, outimg, outfile])
 
@@ -1236,11 +1413,15 @@ def mkcluster(param):
 
 
 # get statistics on image region defined by mask (svg image)
-# syntax: regstat [-m] image mask badmask
+# syntax: regstat [-m] [-g] image mask badmask
 def regstat(param):
     mode=''
+    greenonly=False
     if(param[0]=='-m'):
         mode='minmax'
+        del param[0]
+    if(param[0]=='-g'):
+        greenonly=True
         del param[0]
     infilename = param[0]
     maskfilename = param[1]
@@ -1275,6 +1456,10 @@ def regstat(param):
 
     # image histogram
     ncol=inimg.bands
+    if (greenonly and ncol == 3):
+        xximg=inimg[1]
+        inimg=xximg
+        ncol=1
     histimg=inimg.multiply(maskimg).hist_find()
     # remove pixel counts outside mask
     histimg2=histimg.draw_rect([x-outcnt for x in histimg.getpoint(0, 0)], 0, 0, 1, 1)
@@ -1794,61 +1979,6 @@ def immedian(param):
         return outimg
 
 
-# dynamic compression by factor compval above a given threshold (intensity)
-# usage: imcompress [-fmt outfmt] [-c compmult] <image> <threshold> <compval> [outimage]
-def imcompress_old(param):
-    outfilename=""
-    outfmt="pnm"
-    for i in range(2):
-        if (not param or not isinstance(param[0], str)): break
-        if(param[0]=='-fmt'):
-            outfmt=param[1]
-            del param[0:2]
-        elif(param[0]=='-xxx'):
-            unused=param[1]
-            del param[0:2]
- 
-    if(len(param)<3):
-        print("ERROR: imcompress: wrong number of parameters.", file=sys.stderr)
-        exit(-1)
-        
-    # parameters
-    infilename=param[0]
-    threshold=float(param[1])
-    compmult=float(param[2])    # only used by mode=sqrt
-    if(len(param)>3):
-        outfilename = param[3]
-    
-    # read input image
-    if isinstance(infilename, pyvips.vimage.Image):
-        image = infilename
-    else:
-        image = pyvips.Image.new_from_file(infilename)
-
-    # bandwise thresholding by mean value within statsmask
-    npix=(statsmask > 0).ifthenelse(1,0).stats().getpoint(2, 0)[0]
-    print("npix=", npix, file=sys.stderr)
-    
-    # apply compression above mean
-    for i in range(image.bands):
-        imband=image.extract_band(i)
-        mean=(statsmask > 0).ifthenelse(imband, 0).stats().getpoint(2, 0)[0]/npix
-        print(i, " mean=", mean, file=sys.stderr)
-        add=(1-compmult)*mean
-        #imband2=(imband > mean).ifthenelse(imband.linear(compmult, add), imband)
-        imband2=(imband > mean).ifthenelse(imband.linear(1, -1*mean).math2_const("pow", compmult).linear(1,mean), imband)
-        if (i==0):
-            outimg = imband2
-        else:
-            outimg = outimg.bandjoin(imband2)
-            
-    # writing output image
-    if (outfilename):
-        writeimage(["-fmt", outfmt, outimg, outfilename])
-    else:
-        return outimg
-
-
 # dynamic compression (above a given threshold)
 # usage: imcompress [-fmt outfmt] [-m mode] <image> <threshold> <compmult> [outimage]
 def imcompress(param):
@@ -2132,11 +2262,12 @@ def imbgsub(param):
 
 
 # subtract column- or row-pattern
-# syntax: impatsub [-r] [-fmt outfmt] [-m badmask] [-a add] infile [outfile]
+# syntax: impatsub [-r] [-fmt outfmt] [-m badmask] [-a add] [-b gaussblur] infile [outfile]
 def impatsub(param):
     pattern='column'
     outfmt='pnm'
     outadd=0
+    sigma=0.01
     maskname=''
     for i in range(4):
         if (not param or not isinstance(param[0], str)): break
@@ -2151,6 +2282,9 @@ def impatsub(param):
             del param[0:2]
         elif(param[0]=='-m'):
             maskname=param[1]
+            del param[0:2]
+        elif(param[0]=='-b'):
+            sigma=float(param[1])
             del param[0:2]
     #if(param[0]=='-m'):
     #    outmult=float(param[1])
@@ -2192,12 +2326,16 @@ def impatsub(param):
             tmpimg=imslice
         if (pattern == 'column'):
             index=int(w/2)
-            patimg=tmpimg.rank(w, 1, index).crop(index, 0, 1, h).replicate(w,1)
+            sortimg=np2v(np.sort(v2np(tmpimg), axis=1))
+            patimg=sortimg.gaussblur(sigma).crop(index, 0, 1, h).replicate(w,1)
         else:
             index=int(h/2)
-            patimg=tmpimg.rank(1, h, index).crop(0, index, w, 1).replicate(1,h)
+            sortimg=np2v(np.sort(v2np(tmpimg), axis=0))
+            patimg=sortimg.gaussblur(sigma).crop(0, index, w, 1).replicate(1,h)
         if (i==0):
             outimg=imslice.subtract(patimg)
+            #writeimage(["-fmt", outfmt, tmpimg, "x.check.pgm"])
+            #writeimage(["-fmt", outfmt, sortimg, "x.sorted.pgm"])
         else:
             outimg=outimg.bandjoin(imslice.subtract(patimg))
 
@@ -2527,12 +2665,18 @@ vips_format_to_np_dtype = {
     'dpcomplex': np.complex128,
 }
 
-# convert vips image into numpy array
+# convert vips image to numpy array
 def v2np(vipsimage):
     return np.ndarray(buffer=vipsimage.write_to_memory(),
         dtype=vips_format_to_np_dtype[vipsimage.format],
         shape=[vipsimage.height, vipsimage.width, vipsimage.bands])
     
+# convert numpy array to vips image
+def np2v(array):
+    return pyvips.Image.new_from_array(array)
+        #, array.shape[1], array.shape[0], 1,
+        #np_dtype_to_vips_format[array.dtype])
+
 
 if __name__ == "__main__":
     import sys

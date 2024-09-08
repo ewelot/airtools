@@ -19,8 +19,8 @@
 ########################################################################
 AOVARS="AO_SKIP AO_FLATS AO_LIGHT AO_BGVAR AO_REGIS AO_STACK AO_AMASK AO_ACOOR AO_ABINN"
 
-VERSION="1.5.7"
-VINFO="T. Lehmann, Feb. 2024"
+VERSION="1.5.9"
+VINFO="T. Lehmann, Aug. 2024"
 PINFO="\
     options:
       -h            show this help text
@@ -34,6 +34,17 @@ PINFO="\
       task          run given task    
 "
 CHANGELOG="
+    1.5.9 - 31 Aug 2024
+        * badpix: include bad pixels from bad.saturated.$tel.png
+        * darks: if necessary create missing dark images to determine dark
+            variation
+
+    1.5.9a1 - 02 Aug 2024
+        * imageinfo: added check for not allowed characters in image file names
+
+    1.5.8 - 30 May 2024
+        * badpix: use function get_binning for improved error checking
+
     1.5.7 - 07 May 2024
         * badpix: rework to take binning into account
         * flats, lights: choose badpix file according to binning
@@ -631,6 +642,15 @@ _imageinfo () {
         done
     fi
     
+    # check if input files contain spaces/brackets
+    if [ "$(eval find $AI_RAWDIR/ -type f $skipargs | grep "[ ()]")" ]
+    then
+        echo "ERROR: Space character or characters '()' are not allowed
+    in raw image file names. You may run fix_rawfile_names
+    to replace those characters by '_'." >&2
+        return 255
+    fi
+    
     if ! match proc "$SKIPPARTS"
     then
         echo $msg
@@ -719,7 +739,6 @@ _darks () {
     local dklist
     local set
     local scale
-    local flip
     local opts
     local nlist
     local exlist
@@ -832,6 +851,17 @@ EOF
     do
         test -s dk.var10.$tel.pgm && test -z "$has_new_dark" && continue
         
+        # options for raw dark image conversion (AIrawconv)
+        scale=""    # intensity scaling for non-DSLR images
+        test $(get_param camera.dat ctype $tel) != "DSLR" &&
+            scale=$(get_param camera.dat rawbits $tel | awk '{
+                if ($1!="-" && $1<16) print 2^(16-$1)}')
+        opts=""
+        test "$AI_CCDREGION" && opts="-c"   # apply AI_CCDREGION
+        test "$scale"        && opts="$opts -s $scale"
+        test "$(get_param camera.dat flip $tel)" == "1" && opts="$opts -f"
+        test "$opts" && echo "# applying AIrawconv options:" $opts >&2
+
         # populate $tmpargs to be used by parallel
         rm -f $tmpargs
         for set in $(AIsetinfo -b | grep -w d | \
@@ -846,21 +876,22 @@ EOF
             test $x -lt 3000 && bs=32
             test $x -lt 2000 && bs=24
             test $x -lt 1400 && bs=18
+
             #for num in $(AI_EXCLUDE="" AIimlist -n $set "" raw)
             for num in $(AIimlist -n $set "" raw)
             do
-                # TODO: create missing dark images
+                # if neccessary create missing dark images
                 test ! -f $AI_TMPDIR/$num.pgm &&
-                    echo "ERROR: file $AI_TMPDIR/$num.pgm is missing." >&2 &&
-                    return 255
+                    test "$msg" && echo $msg && msg="" &&
+                    AIrawconv $opts "$(get_rawfile $num)" $AI_TMPDIR/$num.pgm
                 echo $num $bs $set $tel
             done
         done >> $tmpargs
         
         if [ -s $tmpargs ]
         then
-            test "$msg" && echo $msg && msg="" &&
-                echo "#" $(cat $tmpargs | wc -l) "images"
+            test "$msg" && echo $msg && msg=""
+            echo "#" $(cat $tmpargs | wc -l) "images"
             chmod u+x $tmpsh
             cat <<EOF > $tmpsh
 #!/bin/bash
@@ -1444,11 +1475,7 @@ _badpix () {
     AIsetinfo -b -o | grep -v "^#" | while read x s x x texp x x nref x x tel
     do
         n=$(get_nraw -q $s | wc -l)
-        f=$(get_rawfile $nref)
-        #echo $nref $f >&2
-        bin=$(get_header -q $f BINNING)
-        test -z "$bin" && bin=$(get_header -q $f XBINNING)
-        test -z "$bin" && bin=1
+        bin=$(get_binning $s)
         echo $s $tel $bin $n $texp
     done > $tmpsetinfo
 
@@ -1593,6 +1620,7 @@ _badpix () {
             # adding masks provided manually
             test -e bad.columns.${telbin,,}.png && badlist="bad.columns.${telbin,,}.png $badlist"
             test -e bad.dust.${telbin,,}.png    && badlist="bad.dust.${telbin,,}.png    $badlist"
+            test -e bad.saturated.${telbin,,}.png   && badlist="bad.saturated.${telbin,,}.png   $badlist"
             test -e bad.other.${telbin,,}.png   && badlist="bad.other.${telbin,,}.png   $badlist"
             n=$(echo $badlist | wc -w)
             # combine masks to create daily badpix image

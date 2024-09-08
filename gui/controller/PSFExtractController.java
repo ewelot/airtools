@@ -54,7 +54,7 @@ public class PSFExtractController implements Initializable {
         labelWarning.setText("");
         cbPsfSize.getItems().addAll("", "80", "128", "184", "256");        
 
-        tfRLim.setText("8");
+        tfRLim.setText("6");
         setDefaultValues();
     }
     

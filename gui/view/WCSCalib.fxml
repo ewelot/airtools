@@ -17,7 +17,7 @@
 <?import javafx.scene.layout.VBox?>
 <?import javafx.scene.text.Font?>
 
-<AnchorPane fx:id="paneWCSCalib" xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" fx:controller="tl.airtoolsgui.controller.WCSCalibController">
+<AnchorPane fx:id="paneWCSCalib" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="tl.airtoolsgui.controller.WCSCalibController">
    <children>
       <VBox spacing="16.0" AnchorPane.bottomAnchor="0.0" AnchorPane.leftAnchor="0.0" AnchorPane.rightAnchor="0.0" AnchorPane.topAnchor="0.0">
          <children>
@@ -29,6 +29,7 @@
                         <ColumnConstraints hgrow="ALWAYS" minWidth="150.0" />
                      </columnConstraints>
                      <rowConstraints>
+                        <RowConstraints vgrow="SOMETIMES" />
                         <RowConstraints vgrow="SOMETIMES" />
                         <RowConstraints vgrow="SOMETIMES" />
                         <RowConstraints vgrow="SOMETIMES" />
@@ -79,15 +80,17 @@
                         </HBox>
                         <Label text="CrossID radius (arcsec):" GridPane.rowIndex="8" />
                         <TextField fx:id="tfCrossRadius" maxWidth="100.0" prefWidth="100.0" promptText="empty=auto" GridPane.columnIndex="1" GridPane.rowIndex="8" />
-                        <Label text="Polynom degree of distortion:" GridPane.rowIndex="9" />
-                        <ChoiceBox fx:id="cbDegree" prefWidth="100.0" GridPane.columnIndex="1" GridPane.rowIndex="9" />
-                        <Label text="Display check plots:" GridPane.rowIndex="10" />
-                        <CheckBox fx:id="cbShowPlots" minHeight="26.0" mnemonicParsing="false" selected="true" GridPane.columnIndex="1" GridPane.rowIndex="10" />
-                        <Separator maxHeight="16.0" minHeight="16.0" orientation="VERTICAL" prefHeight="16.0" visible="false" GridPane.rowIndex="11" />
-                        <Label text="Expert options:" GridPane.rowIndex="12" />
-                        <TextField fx:id="tfExpert" promptText="-b &lt;bin&gt; -o &lt;maxoff_deg&gt; ..." GridPane.columnIndex="1" GridPane.rowIndex="12" />
-                        <Label text="Force Reset of Previous Data?" GridPane.rowIndex="13" />
-                        <CheckBox fx:id="cbDelete" minHeight="26.0" mnemonicParsing="false" GridPane.columnIndex="1" GridPane.rowIndex="13" />
+                        <Label text="Match resolution (arcsec):" GridPane.rowIndex="9" />
+                        <TextField fx:id="tfMatchResolution" maxWidth="100.0" prefWidth="100.0" promptText="empty=auto" GridPane.columnIndex="1" GridPane.rowIndex="9" />
+                        <Label text="Polynom degree of distortion:" GridPane.rowIndex="10" />
+                        <ChoiceBox fx:id="cbDegree" prefWidth="100.0" GridPane.columnIndex="1" GridPane.rowIndex="10" />
+                        <Label text="Display check plots:" GridPane.rowIndex="11" />
+                        <CheckBox fx:id="cbShowPlots" minHeight="26.0" mnemonicParsing="false" selected="true" GridPane.columnIndex="1" GridPane.rowIndex="11" />
+                        <Separator maxHeight="16.0" minHeight="16.0" orientation="VERTICAL" prefHeight="16.0" visible="false" GridPane.rowIndex="12" />
+                        <Label text="Expert options:" GridPane.rowIndex="13" />
+                        <TextField fx:id="tfExpert" promptText="-b &lt;bin&gt; -o &lt;maxoff_deg&gt; ..." GridPane.columnIndex="1" GridPane.rowIndex="13" />
+                        <Label text="Force Reset of Previous Data?" GridPane.rowIndex="14" />
+                        <CheckBox fx:id="cbDelete" minHeight="26.0" mnemonicParsing="false" GridPane.columnIndex="1" GridPane.rowIndex="14" />
                      </children>
                   </GridPane>
                   <Label fx:id="labelWarning" text="&lt;Warnings&gt;" textFill="#d00000" />

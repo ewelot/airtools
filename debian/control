@@ -26,7 +26,7 @@ Depends: imagemagick, graphicsmagick, netpbm, gnuplot-x11, librsvg2-bin, exiv2,
  potrace, plplot12-driver-cairo | plplot-driver-cairo, exiftool, bc, curl, wget,
  w3m, gawk, yad, parallel, pigz, dstat, jq, at, xdotool, x11-utils, mousepad,
  feh, libvips42 (>=8.13.3), libvips-tools (>=8.13.3),
- python3-numpy, python3-ephem, python3-pip, python3-exifread,
+ python3-numpy, python3-pip, python3-exifread, python3-astroquery,
  python3-pyvips (>=2.2.1), python3-rawpy,
  cfitsio-examples (>=0.3), libcfitsio-bin, xpa-tools, wcstools, fitsverify,
  default-jre-headless, openjfx, ${shlibs:Depends}, ${misc:Depends}
