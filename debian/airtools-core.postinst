@@ -35,7 +35,7 @@ case "$1" in
             su - $xuser -c "xdg-desktop-icon install --novendor $dfile"
             # mark as trusted executable (required for thunar >= 4.17.4)
             dfile=/home/$xuser/Desktop/$(basename $dfile)
-            adr="unix:path=/run/$xuser/1000/bus"
+            adr="unix:path=/run/user/$(id -u $xuser)/bus"
             key="metadata::xfce-exe-checksum"
             value=$(sha256sum $dfile | awk '{print $1}')
             su - $xuser -c "DBUS_SESSION_BUS_ADDRESS=$adr gio set -t string $dfile $key $value"
