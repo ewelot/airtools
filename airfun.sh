@@ -14,9 +14,15 @@
 # - in order to use SAOImage DS9 analysis tasks (via AIexamine) you must
 #   have installed files airds9.ana and aircmd.sh
 ########################################################################
-AI_VERSION="5.4.1"
+AI_VERSION="5.4.2"
 : << '----'
 CHANGELOG
+    5.4.2 - 11 Okt 2024
+        * AIbgmap: bugfix to use random names for temp files (fields, wfits)
+        * AIregister: increased radius for matching of stars for estimation of
+            dmag from 2 to 2+fwhm/2 to improve matching on poor images
+        * added support for gnuplot version 6 (starting in Ubuntu 24.04)
+
     5.4.1 - 06 Sep 2024
         * removed functions: AImedian AIraw2gray AIraw2fullgray AIraw2rgb
         * GUI changes:
@@ -4262,10 +4268,12 @@ mknlist () {
     do
         if [ "${str/-//}" != "$str" ]
         then
+            ! is_number ${str%-*} &&
+                echo "ERROR: ${str%-*} is not a number" >&2 && return 255
+            ! is_number ${str#*-} &&
+                echo "ERROR: ${str#*-} is not a number" >&2 && return 255
             for x in $(seq ${str%-*} ${str#*-})
             do
-                ! is_number $x &&
-                    echo "ERROR: $x is not a number" >&2 && return 255
                 if [ -z "$do_calib" ]
                 then
                     printf "$fmt\n" $x
@@ -6814,7 +6822,7 @@ eps2png () {
 
     (test "$showhelp" || test $# -lt 1) &&
         echo "usage: $(basename $0) [-d dpi|$dpi] <eps> [out]" &&
-        exit 1
+        return 1
 
     test -z "$out" && out=${eps%.*}.png
     convert -render -density $dpi -flatten $eps $out
@@ -11109,8 +11117,7 @@ plot2d () {
 
     gpversion=$(gnuplot -V | awk '{printf("%s", $2)}')
     case "$gpversion" in
-        4*) ;;
-        5*) ;;
+        4*|5*|6*) ;;
         *)  echo "ERROR: unsupported gnuplot version $gpversion." >&2
             return 255
     esac
@@ -11206,8 +11213,7 @@ gpsurfit () {
 
     gpversion=$(gnuplot -V | awk '{printf("%s", $2)}')
     case "$gpversion" in
-        4*) ;;
-        5*) ;;
+        4*|5*|6*) ;;
         *)  echo "ERROR: unsupported gnuplot version $gpversion." >&2
             return 255
     esac
@@ -11299,7 +11305,7 @@ gpsurfit () {
             echo "   " \
             "fit f(x,y) '$tmp1' using 1:2:3:(1) via $fitvars" >> $tmpgp
             ;;
-        5*) echo "   " \
+        5*|6*) echo "   " \
             "fit f(x,y) '$tmp1' using 1:2:3 via $fitvars" >> $tmpgp
             ;;
     esac
@@ -12906,7 +12912,7 @@ pbm2reg () {
         return 1
     
     echo "ERROR: program under construction (autotrace -> potrace transition)" >&2
-    exit 255
+    return 255
     
     h=$(imsize $pbm | cut -d " " -f2)
     # TODO: replace autotrace by potrace
@@ -14333,6 +14339,12 @@ xy2rade () {
 
 
 parangle () {
+    local showhelp
+    local i
+    for i in 1 2 3 4
+    do
+        (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
+    done
     local par1=$1
     local num
     local ra        # degrees
@@ -14342,6 +14354,10 @@ parangle () {
     local lat
     local long
     
+    (test "$showhelp" || test $# -lt 1 || test $# -eq 2 || test $# -gt 3) &&
+        echo -e "usage: parangle <set> | <num> | <ra_deg> <dec_deg> <st_hr>" >&2 &&
+        return 1
+
     # decide about first parameter
     case $# in
         1)  if is_setname $par1
@@ -14405,6 +14421,7 @@ rade2altaz () {
     local showhelp
     local use_image_center  # if set then use image center instead of radedat
     local use_jd_now        # if set use current date/time
+    local i
     for i in 1 2 3 4
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
@@ -16760,9 +16777,9 @@ imsize () {
     
     if [ -s "$img" ]
     then
-        test -z "$type" && is_raw "$img" && type=RAW
         test -z "$type" && is_pnm "$img" && type=PNM
         test -z "$type" && is_fits "$img" && type=FITS
+        test -z "$type" && is_raw "$img" && type=RAW
         test -z "$type" && is_fitsgz "$img" && type=FITSGZ
         test -z "$type" && is_fitzip "$img" && type=FITZIP
     else
@@ -18744,8 +18761,7 @@ AIsfit () {
     # check gnuplot version
     gpversion=$(gnuplot -V | awk '{printf("%s", $2)}')
     case "$gpversion" in
-        4*) ;;
-        5*) ;;
+        4*|5*|6*) ;;
         *)  echo "ERROR: unsupported gnuplot version $gpversion." >&2
             return 255
     esac
@@ -18775,7 +18791,7 @@ AIsfit () {
                 echo "       " \
                 "fit f(x,y) '$tmp1' using 1:2:$((c+2)):(1) via $fitvars" >> $tmpgp
                 ;;
-            5*) echo "       " \
+            5*|6*) echo "       " \
                 "fit f(x,y) '$tmp1' using 1:2:$((c+2)) via $fitvars" >> $tmpgp
                 ;;
         esac
@@ -23108,7 +23124,6 @@ EOF
             export -f _aiccd_parallel
             popts="-P ${AI_MAXPROCS:-$(get_maxprocs)}"
             #cat $imlist2 | parallel $popts -k $tmpsh
-            cp $imlist2 x.imlist2.dat
             cat $imlist2 | parallel $popts $tmpsh
     		# TODO: error handling
             unset -f _aiccd_parallel
@@ -23630,6 +23645,11 @@ AIregister () {
     local mm
     local rfile
     local popts
+    local rmax
+    local a
+    local e
+    local fw
+    local dmax
     local tmpsh=$(mktemp "/tmp/tmp_script_XXXXXX.sh")
     chmod u+x $tmpsh
     
@@ -24118,7 +24138,8 @@ EOF
             #echo "" > $tmp1
             #xymatch $xydat $xyref 2 $sx $sy $da $w $h | grep -v "^#" | \
             #    (head -250; dd of=/dev/null status=none) > $tmp1
-            xymatch $xydat $xyref 2 $sx $sy $da $w $h | grep -v "^#" | \
+            dmax=$(echo 2 $fw | awk '{printf("%.1f", $1+$2/2)}')
+            xymatch $xydat $xyref $dmax $sx $sy $da $w $h | grep -v "^#" | \
                 lines 250 > $tmp1
             nmag=$(cat $tmp1 | wc -l | awk '{x=$1; if($1>12) x=0.9*$1; if($1>25) x=0.8*$1+6;
                 if($1>40) x=0.7*$1; if($1>70) x=0.6*$1; printf("%.0f", x)}')
@@ -24911,8 +24932,8 @@ AIbgmap () {
     local outfmt
     local bands
     local param="-filter N -detect_thresh 100 -write_xml Y"
-    local fields=$tdir/sex.$$.fields
-    local wfits=$tdir/weight.$$.fits
+    local fields=$(mktemp "$tdir/tmp_sex_XXXXXX.fields")
+    local wfits=$(mktemp "$tdir/tmp_weight_XXXXXX.fits")
     local sat   # not used anymore
     local rgb
     local mrgb
@@ -29030,7 +29051,7 @@ AIphotcal () {
     # check gnuplot version
     gpversion=$(gnuplot -V | awk '{printf("%s", $2)}')
     case "$gpversion" in
-        5*) ;;
+        5*|6*) ;;
         *)  echo "ERROR: unsupported gnuplot version $gpversion." >&2
             return 255
     esac

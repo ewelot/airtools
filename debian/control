@@ -11,9 +11,10 @@ Package: airtools
 Architecture: any
 Depends: airtools-core (= ${binary:Version}), saods9 | saods9-bin, stilts,
  astrometry.net, astrometry-data-tycho2-10-19, astrometry-data-tycho2-09,
- missfits, scamp, sextractor, skymaker, stiff, swarp,
+ astrometry-data-tycho2-08, missfits, scamp, sextractor | source-extractor,
+ skymaker, stiff, swarp,
  ${misc:Depends}
-Recommends: airtools-doc, aladin, darktable, astrometry-data-tycho2-08
+Recommends: airtools-doc, aladin, darktable
 Description: Astronomical Image Reduction TOOLSet
  AIRTOOLS is a collection of programs to aim at astronomical image reduction
  of both CCD and DSLR observations on Linux. The main tasks are implemented as
