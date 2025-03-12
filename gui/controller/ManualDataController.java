@@ -81,7 +81,8 @@ public class ManualDataController implements Initializable {
             } else {
                 this.imgSet = imgSet;
                 tfImageSet.setText(imgSet.toString());
-                if (imgSet.getStarStack().endsWith(".ppm")) {
+                // TODO: deal with FITS, use imgSet.isColor()
+                if (imgSet.isColor()) {
                     cbChannel.getItems().setAll("1", "2", "3");
                 } else {
                     cbChannel.getItems().setAll("1");
@@ -100,7 +101,7 @@ public class ManualDataController implements Initializable {
 
     private void setDefaultValues() {
         String channel = "1";
-        if (imgSet.getStarStack().endsWith(".ppm")) channel="2";
+        if (imgSet.isColor()) channel="2";
 
         cbChannel.setValue(channel);
         updateFromHeader(Integer.parseInt(channel));

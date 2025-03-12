@@ -6,8 +6,8 @@
 #   a wrapper around airtools-gui.jar
 #
 ########################################################################
-VERSION="1.0"
-VINFO="T. Lehmann, Dec. 2019"
+VERSION="1.1"
+VINFO="T. Lehmann, Nov. 2024"
 PINFO="\
     options:
       h         show this help text
@@ -16,6 +16,9 @@ PINFO="\
       args      program arguments passed over to java program
 "
 CHANGELOG="
+    1.1  - 30 Nov 2024
+        * added libs to classpath
+
     1.0  - 17 Dec 2019
         * handle startup options for java and openjfx versions 9 and later
 	    due to new modules system
@@ -35,6 +38,7 @@ CHANGELOG="
 jar=airtools-gui.jar
 mainclass=tl.airtoolsgui.AirtoolsGUI
 datadir=/usr/share/airtools
+libs=/usr/share/java/fits.jar
 
 
 #--------------------
@@ -102,7 +106,7 @@ test ${jvers/.*/} -gt 8 &&
 # start java program
 if [ "$testonly" ]
 then
-    echo $javaprog $jargs -cp $prog $mainclass "$@"
+    echo $javaprog $jargs -cp $prog:$libs $mainclass "$@"
 else
-    $javaprog $jargs -cp $prog $mainclass "$@"
+    $javaprog $jargs -cp $prog:$libs $mainclass "$@"
 fi

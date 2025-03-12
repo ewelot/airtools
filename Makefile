@@ -7,10 +7,13 @@ prefix	= /usr/local
 
 # files/directories
 BINDIR  = $(DESTDIR)/$(prefix)/bin
+PYLIBDIR	= $(DESTDIR)/$(prefix)/lib/$(PACKAGE)/python3
 DATADIR = $(DESTDIR)/$(prefix)/share/$(PACKAGE)
 DOCDIR  = $(DESTDIR)/$(prefix)/share/doc/$(PACKAGE)
 APPDIR  = $(DESTDIR)/$(prefix)/share/applications
 PIXMAPSDIR = $(DESTDIR)/$(prefix)/share/pixmaps
+SRCDIR	= src
+PYLIB	= python/*
 DATA	= data/*
 DOCS	= README* doc/manual-en.html
 IMAGESDIR	= $(DOCDIR)/images
@@ -19,7 +22,7 @@ IMAGES	= doc/images/*
 BIN 	= bayer2rgb pnmtomef pnmccdred pnmrowsort
 BINSH 	= airtools airtools-cli airfun.sh aircmd.sh
 BINPY	= airfun.py
-JAR	= airtools-gui.jar
+JAR		= airtools-gui.jar
 ANALYSIS = airds9.ana
 DESKTOP	= airtools.desktop
 ICON	= airtools.png
@@ -49,28 +52,29 @@ endif
 
 all:	$(BIN)
 
-bayer2rgb: bayer2rgb.c bayer.o
-	$(CC) $(CFLAGS) -o $@ bayer.o bayer2rgb.c -lm
+bayer2rgb: $(SRCDIR)/bayer2rgb.c
+	$(CC) $(CFLAGS) -o $@ $(SRCDIR)/bayer.c $(SRCDIR)/bayer2rgb.c -lm
 
-pnmtomef: pnmtomef.c
-	$(CC) $(CFLAGS) -o $@ pnmtomef.c $(LIBPNM)
+pnmtomef: $(SRCDIR)/pnmtomef.c
+	$(CC) $(CFLAGS) -o $@ $(SRCDIR)/pnmtomef.c $(LIBPNM)
 
-pnmccdred: pnmccdred.c
-	$(CC) $(CFLAGS) -o $@ pnmccdred.c $(LIBPNM)
+pnmccdred: $(SRCDIR)/pnmccdred.c
+	$(CC) $(CFLAGS) -o $@ $(SRCDIR)/pnmccdred.c $(LIBPNM)
 
-pnmrowsort: pnmrowsort.c
-	$(CC) $(CFLAGS) -o $@ pnmrowsort.c $(LIBPNM)
+pnmrowsort: $(SRCDIR)/pnmrowsort.c
+	$(CC) $(CFLAGS) -o $@ $(SRCDIR)/pnmrowsort.c $(LIBPNM)
 
 icon: $(ICONSVG)
 	inkscape -o $(ICON) -C -w 64 -h 64 $(ICONSVG)
 
 clean:
-	-rm -f *.o
 	rm -f $(BIN)
 	#rm -f $(ICON)
 
 install: all
 	install -m 0755 -p $(BIN) $(BINSH) $(BINPY) $(BINDIR)
+	install -m 0755 -d $(PYLIBDIR)
+	install -m 0644 -p $(PYLIB) $(PYLIBDIR)
 	install -m 0755 -d $(DATADIR)
 	install -m 0644 -p $(DATA) $(DATADIR)
 	install -m 0644 -p $(ANALYSIS) $(DATADIR)

@@ -116,4 +116,13 @@ public class Header {
         return null;
     }
     
+    public boolean isColor () {
+        String str;
+        String default_str = "1";
+        int num_bands;
+
+        str=prop.getProperty("NAXIS3", default_str).replaceAll("/.*", "").strip().replaceAll("'", "");
+        num_bands=Integer.parseInt(str);
+        return num_bands == 3;
+    }
 }

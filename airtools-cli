@@ -4,7 +4,7 @@
 # airtools-cli
 #   AIRTOOLS tasks command-line interface
 #
-# Copyright: Thomas Lehmann, 2018-2024
+# Copyright: Thomas Lehmann, 2018-2025
 # License: GPL v3
 #
 # note: the following environment variables may be used
@@ -19,8 +19,8 @@
 ########################################################################
 AOVARS="AO_SKIP AO_FLATS AO_LIGHT AO_BGVAR AO_REGIS AO_STACK AO_AMASK AO_ACOOR AO_ABINN"
 
-VERSION="1.5.9"
-VINFO="T. Lehmann, Aug. 2024"
+VERSION="1.6.0"
+VINFO="T. Lehmann, Feb. 2025"
 PINFO="\
     options:
       -h            show this help text
@@ -34,6 +34,17 @@ PINFO="\
       task          run given task    
 "
 CHANGELOG="
+    1.6.0 - 28 Feb 2025
+        * bgvar:
+            - remove option -a when calling AIbgdiff (to avoid using images
+              containing bad areas when creating reference image, if possible)
+            - improve calculation for changing gradient image (varbgm)
+        * ds9cmd: added option -d to display stacked image before running the
+            given command
+
+    1.6.0a1 - 19 Nov 2024
+        * stack, load_stacks, ds9cmd: prefer FITS over PNM images
+
     1.5.9 - 31 Aug 2024
         * badpix: include bad pixels from bad.saturated.$tel.png
         * darks: if necessary create missing dark images to determine dark
@@ -941,7 +952,7 @@ EOF
         grep -v "^#" set.dat | awk -v s=$set '{
             if ($2==s) printf("%s n%s\n", $1, substr($0,7))}' > $AI_TMPDIR/x.nset.dat
         AI_SETS=$AI_TMPDIR/x.nset.dat AInoise -s n$set
-        rm -f ndk??.mn.pgm
+        rm -f ndk??.mn.pgm $AI_TMPDIR/x.nset.dat
     done
     
     # show some stats of darks
@@ -1220,7 +1231,7 @@ _bgvar () {
         then
             for set in $slist
             do                
-                AIbgdiff -k -a -p $AO_BGVAR "$set" >> bgdiff.dat
+                AIbgdiff -k -p $AO_BGVAR "$set" >> bgdiff.dat
                 test $? -ne 0 && return 255
             done
         fi
@@ -1260,15 +1271,20 @@ _bgvar () {
     do
         set - $(AIsetinfo $set)
         test $9 -le 1 && continue
-        inext="pgm"
-        test -f $AI_TMPDIR/$4.ppm && inext="ppm"
-        test -f $AI_TMPDIR/$4.fits && inext="fits"
+        nref=$4
+        inext=""
+        test -z "$inext" && test -f $AI_TMPDIR/$nref.fits && inext="fits"
+        test -z "$inext" && test -f $AI_TMPDIR/$nref.ppm && inext="ppm"
+        test -z "$inext" && test -f $AI_TMPDIR/$nref.pgm && inext="pgm"
+        test -z "$inext" &&
+            echo "ERROR: missing calibrated image of $nref" >&2 &&
+            return 255
         if [ $inext != "fits" ]
         then
             outext=$inext
         else
             outext="pgm"
-            test "$(get_header -q $AI_TMPDIR/$4.fits NAXIS3)" == "3" &&
+            test "$(get_header -q $AI_TMPDIR/$nref.fits NAXIS3)" == "3" &&
                 outext="ppm"
         fi
         nlist=$(AIimlist -n $set)
@@ -1282,9 +1298,10 @@ _bgvar () {
         do
             f=bgvar/$num.$suffix.$inext
             test -f $f || continue
-            imcrop $f 70 > tmp1.$$.$inext
-            add=$(AIstat tmp1.$$.$inext | awk -v m=$mult -v b=$newbg '{
-                printf("%d",b-m*$5); if(NF>8) printf(",%d,%d", b-m*$9, b-m*$13)}')
+            add=$(grep "^$num." bgdiff.dat | awk -v m=$mult -v bg=$newbg '{
+                printf("%d", bg-m*$5)
+                if (NF > 7) printf(",%d,%d", bg-m*$9, bg-m*$13)
+                }')
             echo $num $f $mult $add
             pnmccdred2 -a $add -m $mult $f - | pnmscale 4 - > z.$set.$num.$outext
         done
@@ -1294,7 +1311,7 @@ _bgvar () {
         fg=$(printf "%04x\n" $(($newbg+60*$mult)) | tr '[a-f]' '[A-F]')
         montage -background "#$bg$bg$bg" -fill "#$fg$fg$fg" -label '%t' \
             z.$set.????.$outext -geometry +4+2 ppm:- | ppm2gray - 0,1,0 > varbgm$mult.$set.$outext
-        rm z.$set.????.$outext tmp1.$$.$inext
+        rm z.$set.????.$outext
     done
     imlist=$(for set in $slist
         do
@@ -1779,8 +1796,11 @@ _stack () {
     # display stacked images
     imlist=$(for set in $slist
         do
-            ext="pgm"; test -f $set.ppm && ext="ppm"
-            test -f $set.$ext && echo $set.$ext
+            ext="";
+            test -z "$ext" && test -f $set.fits && ext="fits"
+            test -z "$ext" && test -f $set.ppm && ext="ppm"
+            test -z "$ext" && test -f $set.pgm && ext="pgm"
+            test "$ext" && echo $set.$ext
         done)
     if ! match image "$SKIPPARTS"
     then
@@ -1978,10 +1998,6 @@ _astrometry () {
             echo "sexselect -f $x -fm $fmax $set.src.dat \"\" 0.01 \"$rlim\" \"\" \"\" 99" >&2
             sexselect -f $x -fm $fmax $set.src.dat "" 0.01 "$rlim" "" "" 99 > $tmpcat
             #sexselect -f $x -fm $fmax $set.src.dat "" 0.002 "$rlim" "" "" 99 > $tmpcat
-
-            ####
-            #cp $tmpcat x.tmpcat.dat
-            #return 255
             
             stilts tcopy ifmt=fits ofmt=fits-basic in=$tmpcat"#2" out=$tmpxy
             nsrc=$(get_header $tmpxy NAXIS2)
@@ -2129,9 +2145,12 @@ _astrometry () {
         if [ $? -ne 0 ]
         then
             nsat=$(sexselect $set.src.dat "" "" "" "" "" 99 | grep -v "^#" | awk '{if(and($NF,4)) print $0}' | wc -l)
-            echo "$(tail -1 $wcslog | cut -d ')' -f1), nsat=$nsat)"
+            echo "$(tail -1 $wcslog | cut -d ')' -f1), nsat=$nsat"
             nimg=$(tail -1 $wcslog | tr ' ,)' '\n' | grep nimg= | cut -d '=' -f2)
             ncat=$(tail -1 $wcslog | tr ' ,)' '\n' | grep ncat= | cut -d '=' -f2)
+            (! is_number "$nimg" || ! is_number "$ncat") &&
+                echo "ERROR: unable to determine nimg and/or ncat from $wcslog" >&2 &&
+                return 255
             if [ $ncat -lt $((nimg * 15/10)) ] && [ $ncat -lt 5000 ]
             then
                 maglim=$(echo $maglim 16 | awk '{print $1+1.0}')
@@ -2308,10 +2327,12 @@ _load_stacks () {
         msg=""
         ststack=""
         ext=""
-        test -f $set.pgm && ststack=$set.pgm && ext="pgm"
-        test -f $set.ppm && ststack=$set.ppm && ext="ppm"
-        test -z "$ststack" &&
+        test -z "$ext" && test -f $set.fits && ext="fits"
+        test -z "$ext" && test -f $set.ppm  && ext="ppm"
+        test -z "$ext" && test -f $set.pgm  && ext="pgm"
+        test -z "$ext" &&
             error "missing star stack for set $set"
+        ststack=$set.$ext
         test ! -e $set.head &&
             error "missing header file $set.head"
         #test ! -f $set.wcs.head &&
@@ -2319,8 +2340,11 @@ _load_stacks () {
         costack=$(get_header $set.head AI_COMST)
         #test -z "$costack" &&
         #    echo "WARNING: missing comet stack for set $set"
+        test "$costack" && test $ext == "fits" && test -f ${costack%.*}.fits &&
+            costack=${costack%.*}.fits
         test "$costack" && test ! -f $costack &&
-            echo "WARNING: missing comet stack $costack for set $set"
+            echo "WARNING: missing comet stack $costack for set $set" &&
+            costack=""
         
         # check for bg subtracted images
         test -f ${ststack%.*}.bgs.$ext &&
@@ -2355,6 +2379,8 @@ _ds9cmd () {
     # note: all tasks related to comet photometry must start with set name or image
     #   image - bggradient
     #   set   - psfextract, cometextract, manualdata, photcal
+    local do_displaystack
+    test "$1" == "-d" && do_displaystack=1 && shift 1
     local cmd=$1
     local set=$2
     local msg="# ds9cmd"
@@ -2382,17 +2408,20 @@ _ds9cmd () {
     then
         ! is_setname "$set" &&
             error "unknown image set $set"
-        test -f $set.bgs.ppm && ststack=$set.bgs.ppm
-        test -z "$ststack" && test -f $set.bgs.pgm && ststack=$set.bgs.pgm
-        test -z "$ststack" && test -f $set.ppm && ststack=$set.ppm
-        test -z "$ststack" && test -f $set.pgm && ststack=$set.pgm
+        test -z "$ststack" && test -f $set.bgs.fits && ststack=$set.bgs.fits
+        test -z "$ststack" && test -f $set.bgs.ppm  && ststack=$set.bgs.ppm
+        test -z "$ststack" && test -f $set.bgs.pgm  && ststack=$set.bgs.pgm
+        
+        test -z "$ststack" && test -f $set.fits && ststack=$set.fits
+        test -z "$ststack" && test -f $set.ppm  && ststack=$set.ppm
+        test -z "$ststack" && test -f $set.pgm  && ststack=$set.pgm
         test -z "$ststack" &&
             error "missing star stack for set $set"
         test ! -e $set.head &&
             error "missing header file $set.head"
     fi
     # check for running SAOImage AIRTOOLS
-    if [ "$cmd" != "photcal" ] && [ "$cmd" != "manualdata" ]
+    if [ "$do_displaystack" ]
     then
         xpaaccess -c -t "2,2" AIRTOOLS > /dev/null
         if [ $? -eq 0 ]

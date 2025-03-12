@@ -89,7 +89,7 @@ public class PhotCalibrationController implements Initializable {
         // add combobox change listeners
         cbCatalog.setOnAction((event) -> {
             PhotCatalog newPhotCat = cbCatalog.getValue(); //getSelectionModel().getSelectedItem();
-            int plane = Integer.valueOf(cbChannel.getValue());
+            int plane = Integer.parseInt(cbChannel.getValue());
             cbColor.getItems().clear();
             cbColor.getItems().addAll(newPhotCat.getColorFit());
             updateFromHeader(newPhotCat, plane);
@@ -108,7 +108,7 @@ public class PhotCalibrationController implements Initializable {
             } else {
                 this.imgSet = imgSet;
                 tfImageSet.setText(imgSet.toString());
-                if (imgSet.getStarStack().endsWith(".ppm")) {
+                if (imgSet.isColor()) {
                     cbChannel.getItems().setAll("1", "2", "3");
                 } else {
                     cbChannel.getItems().setAll("1");
@@ -129,7 +129,7 @@ public class PhotCalibrationController implements Initializable {
     private void setDefaultValues() {
         // set default values in GUI widgets
         int plane       = 1;
-        if (imgSet != null && imgSet.getStarStack().endsWith(".ppm")) plane=2;
+        if (imgSet != null && imgSet.isColor()) plane=2;
         PhotCatalog refcat  = cbCatalog.getItems().get(0);
         
         // update widgets

@@ -83,18 +83,20 @@ public class CometExtractController implements Initializable {
         /* initialize widgets with default values upon change of image set */
         tfBgImage.setText(getBgImage());
         cbCoMult.setValue("10");
-        cbMaxRadius.setValue("100");
+        cbMaxRadius.setValue("10");
         cbDelete.setSelected(false);
     }
 
     private String getBgImage() {
-        String ext = "pgm";
         String bgImage="";
-        if (imgSet.getStarStack().endsWith(".ppm")) ext="ppm";
         
         // choose the latest bgcorr image
-        final String patternStr = imgSet.getSetname() + ".bgm[0-9]+." + ext
-                + "|" + imgSet.getSetname() + ".bgm[0-9]+all." + ext;
+        final String patternStr =
+            imgSet.getSetname() + ".bgm[0-9]+.fits"     + "|" +
+            imgSet.getSetname() + ".bgm[0-9]+all.fits"  + "|" +
+            imgSet.getSetname() + ".bgm[0-9]+.p[pg]m"   + "|" +
+            imgSet.getSetname() + ".bgm[0-9]+all.p[pg]m"
+            ;
         System.out.println("# pattern = " + patternStr);
         File bgcorrDir = new File(imgSet.getProjectDir() + "/bgcorr");
         if (bgcorrDir.exists()) {

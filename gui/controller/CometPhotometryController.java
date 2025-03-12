@@ -380,21 +380,26 @@ public class CometPhotometryController implements Initializable {
     
     private void runDs9Command (String taskName, String[] taskParams, boolean doOverwrite, Button btn) {
         System.out.println("runDs9Command(" + taskName + ", ...)");
-        String str="";
         ImageSet imgSet = cbImageSet.getSelectionModel().getSelectedItem();
+        String ds9cmdOpts="";
+        String taskArgs="";
+
+        if (taskName.equalsIgnoreCase("bggradient"))   ds9cmdOpts="-d";
+        if (taskName.equalsIgnoreCase("cometextract")) ds9cmdOpts="-d";
         
-        if (taskName.equalsIgnoreCase("bggradient")) str=imgSet.getStarStack();
-        if (taskName.equalsIgnoreCase("psfextract")) str=imgSet.getSetname() + " " + imgSet.getStarStack();
-        if (taskName.equalsIgnoreCase("cometextract")) str=imgSet.getSetname() + " " + imgSet.getStarStack();
-        if (taskName.equalsIgnoreCase("manualdata")) str=imgSet.getSetname();
-        if (taskName.equalsIgnoreCase("photcal")) str=imgSet.getSetname();
+        if (taskName.equalsIgnoreCase("bggradient"))   taskArgs=imgSet.getStarStack();
+        if (taskName.equalsIgnoreCase("psfextract"))   taskArgs=imgSet.getSetname() + " " + imgSet.getStarStack();
+        if (taskName.equalsIgnoreCase("cometextract")) taskArgs=imgSet.getSetname() + " " + imgSet.getStarStack();
+        if (taskName.equalsIgnoreCase("manualdata"))   taskArgs=imgSet.getSetname();
+        if (taskName.equalsIgnoreCase("photcal"))      taskArgs=imgSet.getSetname();
         
         int i;
         for (i=0; i<taskParams.length; i++) {
-             if (! str.isEmpty()) str = str + " ";
-             str = str + "\"" + taskParams[i] + "\"";
+             if (! taskArgs.isEmpty()) taskArgs = taskArgs + " ";
+             taskArgs = taskArgs + "\"" + taskParams[i] + "\"";
         }
-        final String args = str;
+        final String opts = ds9cmdOpts;
+        final String args = taskArgs;
 
         if (task == null) {
             // ready for new task
@@ -414,7 +419,11 @@ public class CometPhotometryController implements Initializable {
                     sh.setEnvVars("");
                     sh.setOpts("");
                     if (doOverwrite) sh.setOpts("-o");
-                    sh.setArgs(taskName + " " + args);
+                    if (opts.isEmpty()) {
+                        sh.setArgs(taskName + " " + args);
+                    } else {
+                        sh.setArgs(opts + " " + taskName + " " + args);
+                    }
                     sh.runFunction("ds9cmd");
                     exitCode=sh.getExitCode();
                     //logger.log("shell script finished with " + exitCode);

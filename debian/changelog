@@ -1,3 +1,28 @@
+airtools (5.2.0-1) experimental; urgency=medium
+
+  * Update to airfun.sh version 5.5.0, starting transition to using 32bit
+    floating point FITS images
+  * Split of airfun.py into multiple files
+  * debian/control: added dependencies on python3-photutilsi, python3-pyregion
+    and aladin
+  * Bug fix in debian/airtools-core.postinst
+
+ -- Thomas Lehmann <t.lehmann@mailbox.org>  Sun, 09 Mar 2025 18:09:55 +0100
+
+airtools (5.2.0a5-1) experimental; urgency=medium
+
+  * Update to airfun.sh version 5.5.0a5
+  * debian/control: added dependencies on python3-photutils python3-pyregion
+
+ -- Thomas Lehmann <t.lehmann@mailbox.org>  Wed, 29 Jan 2025 21:43:49 +0100
+
+airtools (5.2.0a4-1) experimental; urgency=medium
+
+  * Update to airfun.sh version 5.5.0a4
+  * airfun.py is now splitted into multiple separate files
+
+ -- Thomas Lehmann <t.lehmann@mailbox.org>  Tue, 24 Dec 2024 12:22:38 +0100
+
 airtools (5.1.2-1) experimental; urgency=medium
 
   * Update to airfun.sh version 5.4.2

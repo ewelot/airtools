@@ -6,6 +6,14 @@
 package tl.airtoolsgui.model;
 
 import java.io.File;
+import java.io.IOException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import nom.tam.fits.Fits;
+import nom.tam.fits.FitsException;
+import nom.tam.fits.Header;
+
 
 /**
  *
@@ -37,20 +45,56 @@ public class ImageSet {
         //  returns relative path to projectDir
         String fname;
         File f;
-        fname = setname + ".ppm";
+        fname = setname + ".fits";
         f = new File(projectDir + "/" + fname);
         if (f.exists() && f.isFile()) {
             return fname;
         } else {
-            fname = setname + ".pgm";
+            fname = setname + ".ppm";
             f = new File(projectDir + "/" + fname);
-            if (f.exists() && f.isFile()) return fname;
+            if (f.exists() && f.isFile()) {
+                return fname;
+            } else {
+                fname = setname + ".pgm";
+                f = new File(projectDir + "/" + fname);
+                if (f.exists() && f.isFile()) return fname;
+            }
         }
         
         // no file found
         return "";
     }
 
+    public boolean isColor() {
+        String fname;
+
+        fname = getStarStack();
+        if (fname.isEmpty()) {
+            System.out.println("ERROR: isColor(): unable to find star stack image.");
+            return false;
+        }
+        if (fname.endsWith(".ppm")) return true;
+        if (fname.endsWith(".pgm")) return false;
+        if (fname.endsWith(".fits")) {
+            try {        
+                Fits f = new Fits(projectDir + "/" + fname);
+                Header header = f.getHDU(0).getHeader();
+                int naxis3 =  header.getIntValue("NAXIS3");
+                boolean isColor = naxis3 == 3;
+                System.out.println("ImageSet.isColor = " + isColor);
+                return isColor;
+            } catch (FitsException ex1) {
+                Logger.getLogger(ImageSet.class.getName()).log(Level.SEVERE, null, ex1);
+                System.out.println("ERROR: file " + fname + " is not a valid FITS file.");
+            } catch (IOException ex2) {
+                Logger.getLogger(ImageSet.class.getName()).log(Level.SEVERE, null, ex2);
+                System.out.println("ERROR: file " + fname + " cannot be read (no FITS header?).");
+            }
+        }
+        System.out.println("WARNING: isColor(): file " + fname + " has unsupported format.");
+        return false;
+    }
+    
     public String getHeader() {
         //  returns relative path to projectDir
         String fname;

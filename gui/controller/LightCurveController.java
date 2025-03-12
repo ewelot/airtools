@@ -110,6 +110,7 @@ public class LightCurveController implements Initializable {
         MAG("Observed Magnitude"),
         HMAG("Heliocentric Magnitude vs. Date"),
         HMAGDIST("Heliocentric Magnitude vs. Distance"),
+        ABSMAG("Absolute Magnitude vs. Date"),
         COMA("Apparent Coma Diameter"),
         LCOMA("Linear Coma Diameter vs. Date"),
         LCOMADIST("Linear Coma Diameter vs. Distance");
@@ -275,6 +276,29 @@ public class LightCurveController implements Initializable {
         if (dpStart.getValue() != null && dpEnd.getValue() != null &&
                 dpStart.getValue().isAfter(dpEnd.getValue())) {
             msg="ERROR: start date is after end date.";
+            labelWarning.setText(msg);
+            logger.log(msg);
+            return false;
+        }
+        
+        // plottype ABSMAG requires model parameters
+        if ((cbPlotType.getValue() == PlotType.ABSMAG) && tfModelN.getText().isBlank()) {
+            msg="ERROR: Model parameters are required.";
+            labelWarning.setText(msg);
+            logger.log(msg);
+            return false;
+        }
+        
+        // either none or both model parameters have to be set
+        if ((! tfModelM.getText().isBlank()) && tfModelN.getText().isBlank()) {
+            msg="ERROR: Model parameters n is missing.";
+            labelWarning.setText(msg);
+            logger.log(msg);
+            return false;
+        }
+        // either none or both model parameters have to be set
+        if ((! tfModelN.getText().isBlank()) && tfModelM.getText().isBlank()) {
+            msg="ERROR: Model parameters H0 is missing.";
             labelWarning.setText(msg);
             logger.log(msg);
             return false;
