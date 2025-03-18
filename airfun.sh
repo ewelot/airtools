@@ -17,7 +17,7 @@
 AI_VERSION="5.5.0"
 : << '----'
 CHANGELOG
-    5.5.0 - 28 Feb 2025
+    5.5.0 - 09 Mar 2025
         * added new dependency on aladin
         * AIbgdiff: prefer images with no bad area when creating reference image
         * AIbgmap:
@@ -36874,6 +36874,7 @@ AIsetinfo () {
     #local baseinfo          # query set.dat only
     local do_skip_header    # if set skip header line
     local do_skip_no_images=1
+    local rawfilesdat="rawfiles.dat"
     local i
     for i in 1 2 3 4 5 6 7
     do
@@ -36934,9 +36935,9 @@ AIsetinfo () {
     test ! -f $sdat &&
         echo "ERROR: set data file $sdat is missing." >&2 &&
         return 255
-    #test ! -f $exifdat &&
-    #    echo "ERROR: exif data file $exifdat is missing." >&2 &&
-    #    return 255
+    test ! -f $rawfilesdat &&
+        echo "ERROR: image info ($rawfilesdat) is missing." >&2 &&
+        return 255
 
     test "$setname" && ! is_setname $setname &&
         echo "ERROR: set name $setname is not defined in $sdat." >&2 &&
@@ -37052,7 +37053,8 @@ AIsetinfo () {
                 test "$x" && pierside=${x:0:1}
             fi
         else
-            # examine rawfile
+            jdref=$(echo $(grep "^$nref " $rawfilesdat) | cut -d ' ' -f5)
+            # try to read pierside from header of raw file
             rhdr=$(get_rawfile -q $nref)
             if [ "$rhdr" ] && (is_fits $rhdr || is_fitsgz $rhdr || is_fitzip $rhdr)
             then
@@ -37062,27 +37064,11 @@ AIsetinfo () {
                 else
                     listhead $rhdr | grep -vE "^Header listing|^$" > $tmphead
                 fi
-                x=$(get_jd -q $tmphead)
-                test "$x" && jdref=$x
                 x=$(get_header -q $tmphead PIERSIDE)
                 test "$x" && pierside=${x:0:1}
-            else
-                # try to examine <nref>.hdr as created by gacam
-                rhdr=$(get_rawfile -q $nref | sed -e 's,\.[a-zA-Z]*$,.hdr,')
-                if [ "$rhdr" ] && [ -f "$rhdr" ]
-                then
-                    x=$(grep "^jdmid=" $rhdr | cut -d "=" -f2)
-                    test "$x" && jdref=$x
-                fi
             fi
         fi
         
-        # if $sname.head does not contain jd try to read from measure/$nref.src.head
-        if [ "$jdref" == "0" ] && [ -f measure/$nref.src.head ]
-        then
-            x=$(grep -E "^MJD_OBS|^JD " measure/$nref.src.head | lines 1 | \
-                awk '{printf("%.3f\n", $3)}'); test "$x" && jdref=$x
-        fi
         (test -z "$jdref" || test "$jdref" == "0") &&
             echo "ERROR: unable to determine jdref." >&2 && continue
         st=$(jd2st $jdref)
