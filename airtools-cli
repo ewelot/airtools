@@ -19,8 +19,8 @@
 ########################################################################
 AOVARS="AO_SKIP AO_FLATS AO_LIGHT AO_BGVAR AO_REGIS AO_STACK AO_AMASK AO_ACOOR AO_ABINN"
 
-VERSION="1.6.0"
-VINFO="T. Lehmann, Feb. 2025"
+VERSION="1.6.1"
+VINFO="T. Lehmann, Mar. 2025"
 PINFO="\
     options:
       -h            show this help text
@@ -34,6 +34,10 @@ PINFO="\
       task          run given task    
 "
 CHANGELOG="
+    1.6.1 - 27 Mar 2025
+        * imageinfo: output from img_info (DSLR files) is not resorted anymore
+        * bgvar: deal with satellite trails from directory satpath
+
     1.6.0 - 28 Feb 2025
         * bgvar:
             - remove option -a when calling AIbgdiff (to avoid using images
@@ -688,7 +692,8 @@ _imageinfo () {
             test "$AI_DEBUG" && echo find $AI_RAWDIR/ -type f $extargs $skipargs "..." >&2
             flist=$(eval find $AI_RAWDIR/ -type f $extargs $skipargs \
                 -not -path "$AI_RAWDIR/unused/\*")
-            img_info $flist | sort -n -k 2,2 >> $rdat
+            #img_info $flist | sort -n -k 2,2 >> $rdat
+            img_info $flist >> $rdat
             test $? -ne 0 && return 255
         done
         
@@ -1155,6 +1160,7 @@ _lights () {
 }
 
 _bgvar () {
+    local satpathdir="satpath"
     local slist
     local bgcol
     local suffix
@@ -1176,6 +1182,7 @@ _bgvar () {
     local nref
     local mult
     local outext
+    local msg
     
     slist=$(AIsetinfo -b | awk '{if($4=="o"){print $2}}')
     test "$setname" && slist=$setname
@@ -1215,11 +1222,23 @@ _bgvar () {
             done
         fi
         
-        # check if bad region masks/images are black-and-white
-        if [ "$doit" ] && [ -d "bgvar" ]
+        # bad region masks/images
+        if [ "$doit" ]
         then
+            msg="copying satpaths to bad regions ..."
             for num in $nlist
             do
+                # create bad region from satpath
+                if [ ! -s bgvar/$num.bad.reg ] && [ -s $satpathdir/$num.sat.reg ]
+                then
+                    test "$msg" && echo $msg >&2 && msg=""
+                    sat2badreg -f -num $num
+                    sat2badreg -c -num $num
+                fi
+            done
+            test -d "$bgvar" && for num in $nlist
+            do
+                # check if mask image is b/w
                 test -e bgvar/$num.bad.png &&
                     ! is_mask bgvar/$num.bad.png white &&
                     return 255

@@ -14,9 +14,18 @@
 # - in order to use SAOImage DS9 analysis tasks (via AIexamine) you must
 #   have installed files airds9.ana and aircmd.sh
 ########################################################################
-AI_VERSION="5.5.0"
+AI_VERSION="5.5.1"
 : << '----'
 CHANGELOG
+    5.5.1 - 28 Mar 2025
+        * pnmccdred2: bigfix, option -cgeom <cgeom> was ignored
+        * parangle: bugfix, parangle was wrong when larger than 90
+        * AIpreview: bugfix to take process id of main shell into account
+        * img_info: DSLR files are now sorted by date and always numbered
+            starting at 0001
+        * sat2badreg: added option -num <num> to operate on single image
+        * new functions azalt2hadec hadec2azalt
+
     5.5.0 - 09 Mar 2025
         * added new dependency on aladin
         * AIbgdiff: prefer images with no bad area when creating reference image
@@ -7134,6 +7143,7 @@ img_info () {
     local slen=12
     local popts
     local tmpargs=$(mktemp "/tmp/tmp_args_XXXXXX")
+    local tmpout=$(mktemp "/tmp/tmp_out_XXXXXX.dat")
     local tmpsh=$(mktemp "/tmp/tmp_script_XXXXXX.sh")
     chmod u+x $tmpsh
     cat <<EOF > $tmpsh
@@ -7166,10 +7176,16 @@ FocalLength|SRFocalLength"
             grep -q "^[0-9][0-9][0-9][0-9] $shortname " $rdat && continue
         echo $f $tzoff
     done > $tmpargs
+    echo "### slen=$slen" >&2
 
-    
     if [ -s $tmpargs ]
     then
+        # find highest image number already in use by rdat
+        nmax=0
+        test -s $rdat &&
+            nmax=$(grep -v "^#" $rdat | awk '{if($1~/^[0-9]{4}$/) {printf("%s\n", $1)}}' | \
+                sort | tail -1)
+
         echo "# scanning exif header of" $(cat $tmpargs | wc -l) "images ..." >&2
         # header
         #printf "# num %-${slen}s hms       texp jd            w     h     ts\n" name
@@ -7178,9 +7194,10 @@ FocalLength|SRFocalLength"
             fname=$1
             tzoff=$2
             shortname=$(echo $fname | sed -e 's,^'$AI_RAWDIR',,; s,^/,,')
-            num=$(basename "$fname" | sed -e 's/\.[A-Za-z0-9]*$//; s/^[^0-9]*//')
-            test -z "$num" && num="-"
-            ! is_number $num && num="-"
+            #num=$(basename "$fname" | sed -e 's/\.[A-Za-z0-9]*$//; s/^[^0-9]*//')
+            #test -z "$num" && num="-"
+            #! is_number $num && num="-"
+            num="-"
             printf "%-4s %-${slen}s  " $num $shortname
             exiftool -S -c "%.5f" "$fname" | grep -wE "$filter" | awk -v tzoff=$tzoff 'BEGIN{
                 iso="-"; fn="-"; fl="-"; ms=0; temp="-"; black="-"; mode="-"
@@ -7230,7 +7247,8 @@ FocalLength|SRFocalLength"
         export -f _run_parallel
         popts=""; test "$AI_MAXPROCS" && popts="-P $AI_MAXPROCS"
         #cat $tmpargs | parallel -P 1 $tmpsh
-        cat $tmpargs | parallel $popts -k $tmpsh
+        cat $tmpargs | parallel $popts -k $tmpsh | LANG=C sort -n -k5,5 | awk -v n=$nmax '{
+            printf("%04d %s\n", n+NR, substr($0,6))}'
         unset -f _run_parallel
     fi
     rm -f $tmpsh $tmpargs
@@ -8136,7 +8154,12 @@ raw2obs () {
              tolower(fname)~/^fs[0-9]/ || tolower(fname)~/^fw[0-9]/)) {
             type="focus"
         }
-    
+        if (obs=="local" &&
+            (tolower(fname)~/flip/ || tolower(fname)~/^end/ ||
+             tolower(fname)~/^xx/ || tolower(fname)~/^zz/)) {
+            type="focus"
+        }
+ 
         # determine target
         if (obs=="local") {
             split(fname, a, /_/)
@@ -13630,45 +13653,64 @@ sat2badreg () {
     # save regions in each frame loaded in SAOImage into bgvar/<num>.bad.reg
     # any vector region is converted to polygon using python function findpath
     # directory satpathdir is used to store originally drawn regions and paths
-    local ds9name="AIRTOOLS"
+    local ds9name
     local baddir="bgvar"
     local mode="all"    # savereg, findpath, copy
+    local num
     local verbose
     local showhelp
     local i
-    for i in 1 2
+    for i in $(seq 1 8)
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
         test "$1" == "-s" && mode="savereg" && shift 1
         test "$1" == "-f" && mode="findpath" && shift 1
         test "$1" == "-c" && mode="copy" && shift 1
         test "$1" == "-e" && mode="showerror" && shift 1
+        test "$1" == "-num" && num=$2 && shift 2
         test "$1" == "-v" && verbose=1 && shift 1
         test "$1" == "-n" && ds9name=$2 && shift 2
     done
     local satpathdir=${1:-"satpath"}
     local pathdat="path.dat"
+    local satreglist
     local reg
-    local num
+    local pathreg
+    local b
+    local badreg
+    local tstamp=$(mktemp /tmp/tmp_tstamp_XXXXXX)
 
     (test "$showhelp" || test $# -gt 1) &&
         echo "usage: sat2badreg [-s|-f|-c|-e] [-n ds9name|$ds9name] [satpathdir]" >&2 &&
         return 1
 
-    local tstamp=$(mktemp /tmp/tmp_tstamp_XXXXXX)
-
     touch $tstamp
     # save new/modified regions (using SAOImage preview or AIRTOOLS)
     if [ $mode == "savereg" ] || [ $mode == "all" ]
     then
-        savereg -n $ds9name $satpathdir sat
+        test -z "$ds9name" && savereg $satpathdir sat
+        test "$ds9name"    && savereg -n $ds9name $satpathdir sat
     fi
 
+    test "$num"    && satreglist="$satpathdir/$(printf "%04g" $num).sat.reg"
+    test -z "$num" && satreglist=$satpathdir/[0-9]*.sat.reg
+    
     # extract paths from vectors
     if [ $mode == "findpath" ] || [ $mode == "all" ]
     then
+        # check for calibrated images
+        for reg in $satreglist
+        do
+            pathreg=${reg/.sat.reg/.path.reg}
+            test -f $pathreg && test $pathreg -nt $reg && continue
+            num=$(basename ${reg/.sat.reg/})
+            test -f $AI_TMPDIR/$num.fits && has_calib=1 && break
+        done
+        test -z "$has_calib" &&
+            echo "WARNING: calibrated images are missing." &&
+            rm -f $tstamp && return
         test -d $baddir || mkdir $baddir
-        for reg in $satpathdir/[0-9]*.sat.reg
+        for reg in $satreglist
         do
             pathreg=${reg/.sat.reg/.path.reg}
             test -f $pathreg && test $pathreg -nt $reg && continue
@@ -13683,7 +13725,7 @@ sat2badreg () {
     # copy new/modified region files created by findpath
     if [ $mode == "copy" ] || [ $mode == "all" ]
     then
-        for reg in $satpathdir/[0-9]*.sat.reg
+        for reg in $satreglist
         do
             pathreg=${reg/.sat.reg/.path.reg}
             test ! -f $pathreg && continue
@@ -13722,7 +13764,7 @@ sat2badreg () {
 savereg () {
     # save regions for each image loaded
     # filenames: $outdir/$num.$outsuffix.reg
-    local ds9name1="preview"    # first choice
+    local ds9name1="Preview"    # first choice
     local ds9name2="AIRTOOLS"   # second choice
     local ds9name
     local showhelp
@@ -14859,11 +14901,13 @@ xy2rade () {
 
 parangle () {
     local showhelp
+    local azalt
     local verbose
     local i
     for i in 1 2 3 4
     do
         (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
+        test "$1" == "-a" && azalt=1 && shift 1
         test "$1" == "-v" && verbose=1 && shift 1
     done
     local par1=$1
@@ -14872,6 +14916,8 @@ parangle () {
     local dec       # degrees
     local st        # hours
     local ha        # hour angle in hours
+    local az        # south azimuth in degrees
+    local alt       # altitude in degrees
     local jd
     local lat
     local long
@@ -14891,7 +14937,8 @@ parangle () {
             else
                 num=$par1
             fi;;
-        2)  ha=$1; dec=$2;;
+        2)  test -z "$azalt" && ha=$1; dec=$2
+            test    "$azalt" && az=$1; alt=$2;;
         3)  ra=$1; dec=$2; st=$3;;
         *)  echo "usage: parangle <set> | <num> | <ra_deg> <dec_deg> <st_hr>" >&2
             return 255;;
@@ -14938,15 +14985,15 @@ parangle () {
     then
         
         echo $ra $dec $st $lat | awk 'BEGIN{r=3.14159/180}{
-            x=sin($4*r)/cos($4*r)*cos($2*r)-sin($2*r)*cos(($3*15-$1)*r)
-            x=sin(($3*15-$1)*r)/x
-            printf("%.1f\n", atan2(x,1)/r)
+            ha=($3*15-$1)*r; dec=$2*r; lat=$4*r
+            x=sin(lat)/cos(lat)*cos(dec) - sin(dec)*cos(ha)
+            printf("%.1f\n", atan2(sin(ha),x)/r)
             }'
     else
         echo $ha $dec $lat | awk 'BEGIN{r=3.14159/180}{
-            x=sin($3*r)/cos($3*r)*cos($2*r)-sin($2*r)*cos($1*15*r)
-            x=sin($1*15*r)/x
-            printf("%.1f\n", atan2(x,1)/r)
+            ha=$1*15*r; dec=$2*r; lat=$3*r
+            x=sin(lat)/cos(lat)*cos(dec) - sin(dec)*cos(ha)
+            printf("%.1f\n", atan2(sin(ha),x)/r)
             }'
     fi
 }
@@ -14955,7 +15002,7 @@ parangle () {
 rade2altaz () {
     # for coord. trans ref.: http://star-www.st-and.ac.uk/~fv/webnotes/chapter7.htm
     # sidereal time ref.: http://aa.usno.navy.mil/faq/docs/GAST.php
-    # parallactic angle ref.: https://books.google.de/books?id=e7gGCAAAQBAJ&pg=PA30
+    # parallactic angle ref.: https://astronomy.stackexchange.com/questions/34086/how-to-calculate-parallactic-angle-from-a-fixed-alt-az-position
     local showhelp
     local use_image_center  # if set then use image center instead of radedat
     local use_jd_now        # if set use current date/time
@@ -15068,6 +15115,49 @@ rade2altaz () {
 }
 
 
+azalt2hadec () {
+    local showhelp
+    (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
+    local az=$1
+    local alt=$2
+    local lat
+    
+    (test "$showhelp" || test $# -ne 2) &&
+        echo "usage: azalt2hadec <az> <alt>" >&2 &&
+        return 1
+    
+    lat=$(get_param -k location sites.dat lat $AI_SITE)
+    echo $az $alt $lat | awk '{r=3.14159/180; az=r*$1; alt=r*$2; lat=r*$3
+        x=sin(alt)*sin(lat) + cos(alt)*cos(lat)*cos(az)
+        dec=atan2(x,sqrt(1-x*x))    # asin(x)
+        x=-sin(az)*cos(alt)/cos(dec)
+        y=(sin(alt) - sin(dec)*sin(lat))/(cos(dec)*cos(lat))
+        ha=atan2(x,y)/r     # in degrees
+        dec=dec/r
+        printf("%.1f %.0f\n", ha/15, dec)
+    }'
+}
+
+hadec2azalt () {
+    local showhelp
+    (test "$1" == "-h" || test "$1" == "--help") && showhelp=1 && shift 1
+    local ha=$1     # hour
+    local dec=$2    # dec. degree
+    local lat
+    
+    (test "$showhelp" || test $# -ne 2) &&
+        echo "usage: hadec2azalt <ha> <dec>" >&2 &&
+        return 1
+    
+    lat=$(get_param -k location sites.dat lat $AI_SITE)
+    echo $ha $dec $lat | awk '{r=3.14159/180; ha=r*$1*15; dec=r*$2; lat=r*$3
+        az=0
+        alt=0
+        printf("%.0f %.0f\n", az, alt)
+    }'
+}
+
+
 # affine transformation of xy-image coordinates (y topdown)
 # first rotation, then translation
 xytrans () {
@@ -15126,10 +15216,12 @@ imtrans () {
         #test "$1" == "-p" && pscale="$2" && shift 2
     done
     local img=$1
-    local dx=$2
-    local dy=$3
-    local rot=${4:-0}
+    local dx=$2     # to the left
+    local dy=$3     # to the top
+    local rot=$4
+    local reg=$5
     local shift
+    local opts
     
     # round dx, dy to to nearest integer
     shift=$(echo $dx $dy | awk '{
@@ -15137,13 +15229,10 @@ imtrans () {
         dy=sprintf("%.0f", -1*$2); if (dy>=0) dy="+"dy
         printf("%s%s", dx, dy)
     }')
-    dyi=$(echo $dy | awk '{printf("%.0f", $1)}')
-    if [ "$(echo $rot | awk '{x=int(($1+360+90)/180)%2; if(x==1) print "yes"}')" ]
-    then
-        pnmflip -r180 $img | convert - -page $shift -background black -flatten -
-    else
-        convert $img -page $shift -background black -flatten -
-    fi
+    test "$rot" && test "$(echo $rot | awk '{x=int(($1+360+90)/180)%2; if(x==1) print "yes"}')" &&
+        opts="-rot"
+    test "$reg" && test -f $reg && opts="$opts -cgeom $reg"
+    pnmccdred2 $opts $img | convert - -page $shift -background black -flatten -
 }
 
 
@@ -16022,6 +16111,7 @@ pnmccdred2 () {
         set - $(regextent "$img" $cgeom | tr 'x+' ' ')
         cgeom=$1"x"$2"+"$3"+"$4
     fi
+    test "$cgeom" && pyopts="$pyopts -cgeom $cgeom"
 
     test "$AI_DEBUG" && test -z "$(echo $pyopts | grep "\-v")" &&
         pyopts="-v $pyopts"
@@ -20676,11 +20766,16 @@ AIimcompare () {
     #img1=$image1; ref=$image2; img2=""
     #test "$image3" && ! test "$do_average" && ref=$image3 && img2=$image2
     #test "$image3" &&   test "$do_average" && ref=$image2 && img2=$image3
-
     
     # remove bg structure and warp ref image
     if [ -z "$has_same_wcs" ]
     then
+        echo "ERROR: warping images is not working currently." >&2
+        echo "       Please use matching images and option -w." >&2
+        rm -rf $wdir/tmp*
+        rmdir $wdir
+        return 255
+
         echo "warping images ..."
         ppm2gray $ref > $tmpgray
         pgmtopbm -threshold -value 0.000001 $tmpgray > $mask
@@ -20758,7 +20853,7 @@ AIimcompare () {
     fi
     cp ${img1%.*}.head ${mean%.*}.head
     cp ${tmpref%.*}.warped.pgm $tmpref
-    
+
     
     if [ ! "$dmag" ]
     then
@@ -21452,7 +21547,7 @@ AIpreview () {
     local telid=$1
     shift 1
     local slist=$@  # list of set names or image numbers (space sep.) or file names
-    local ds9name="AIRTOOLS"
+    local ds9name="Preview"
     local setdat="set.dat"
     local flip
     local ctype
@@ -21462,6 +21557,7 @@ AIpreview () {
     local num
     local nimg
     local rfile
+    local pidmain
     local pidarr
     local pnlist
     local size
@@ -21485,7 +21581,7 @@ AIpreview () {
     ctype=$(get_param camera.dat ctype $telid)
     test -z "$use_convpgm" && test "$flip" == "1" && opts="-f"
     test    "$use_convpgm" && test "$flip" != "1" && opts="-f"
-    test "$ctype" == "DSLR" && opts="-d $algo"
+    test "$ctype" == "DSLR" && opts="$opts -d $algo"
     if test "$ctype" != "DSLR" && test "$ctype" != "CMOS" && test "$ctype" != "CCD"
     then
         # bayered CMOS camera
@@ -21554,7 +21650,8 @@ AIpreview () {
     fi
 
     echo "# processing $nimg images ..."
-    test "$verbose" && echo $(date +%T) converting images ... >&2
+    test -z "$dark$flat" && echo $(date +%T) converting images ... >&2
+    test "$dark$flat"    && echo $(date +%T) calibrating images ... >&2
     # echo $nlist >&2
 
     _fitscopygreen () {
@@ -21607,6 +21704,7 @@ AIpreview () {
 
     test "$flat" && AIbnorm $flat > $wdir/flat.norm.pgm && flat=$wdir/flat.norm.pgm
     i=0
+    pidmain=$!  # main shell process id
     pidarr=()
     for num in $nlist
     do
@@ -21638,6 +21736,7 @@ AIpreview () {
                     { AIrawconv $opts -fits $rfile $wdir/$num.fits "$dark" "" $flat & } 2>/dev/null
                 fi
             fi
+            ( test -z "$!" || test "$!" == "$pidmain" ) && continue
             pidarr+=($!)
             if [ $((i%npar)) -eq 0 ] || [ $i -eq $nimg ]
             then
@@ -21696,7 +21795,7 @@ AIpreview () {
                 fi
             fi
         done)
-        test "$verbose" && echo $(date +%T) starting SAOImage ... >&2
+        echo $(date +%T) loading images ... >&2
         (AIexamine -c -n $ds9name $flist
         wait $!
         test "$AI_DEBUG" && echo $wdir >&2
@@ -21716,6 +21815,7 @@ AIpreview () {
         test "$AI_DEBUG" && echo $wdir >&2
         test -z "$AI_DEBUG" && rm -rf $wdir
     fi
+    echo $(date +%T) done >&2
     
     return
 }

@@ -34,7 +34,8 @@ case "$1" in
             # install desktop icon
             su - $xuser -c "xdg-desktop-icon install --novendor $dfile"
             # mark as trusted executable (required for thunar >= 4.17.4)
-            dfile=/home/$xuser/Desktop/$(basename $dfile)
+            ddir=$(su - $xuser -c "xdg-user-dir DESKTOP")
+            dfile=$ddir/$(basename $dfile)
             adr="unix:path=/run/user/$(id -u $xuser)/bus"
             key="metadata::xfce-exe-checksum"
             value=$(sha256sum $dfile | awk '{print $1}')

@@ -1,3 +1,9 @@
+airtools (5.2.1-1) experimental; urgency=medium
+
+  * Update to airfun.sh version 5.5.1
+
+ -- Thomas Lehmann <t.lehmann@mailbox.org>  Sat, 29 Mar 2025 12:34:09 +0100
+
 airtools (5.2.0-1) experimental; urgency=medium
 
   * Update to airfun.sh version 5.5.0, starting transition to using 32bit
