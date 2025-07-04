@@ -165,6 +165,8 @@ def findpath(param):
         for x in np.arange(xstart, xend, length):
             # column to be extracted from image strip
             x = int(x + np.random.normal(0, length/3))
+            if (x<xstart): x=xstart
+            if (x>xend): x=xend
             # pixel index coordinates from top to bottom in imgstrip:
             xdata = np.array(range(swidth))
             # intensity value of single column in imgstrip:
@@ -175,37 +177,41 @@ def findpath(param):
             # note: it is much better to not provide initial guess, e.g. p0=p0guess
             try:
                 popt, pcov = curve_fit(gaussian1D, xdata, ydata)
-                # TODO: ignore: OptimizeWarning: Covariance of the parameters could not be estimated
-                perr = np.sqrt(np.diag(pcov))
-                ybase, ampl, xcenter, sigma = popt
-                err_ybase, err_ampl, err_xcenter, err_sigma = perr
-                
-                fwhm = np.abs(2.355*sigma)
-                err_fwhm = 2.355*err_sigma
-                
-                if False:
-                    yfit = gaussian1D(xdata, ybase, ampl, xcenter, sigma)
-                    plt.plot(xdata, ydata, 'ko', label='data')
-                    plt.plot(xdata, yfit, '-k', label='fit')
-                    plt.show()
-                
-                amplmin=5*stddev/np.sqrt(length)
-                if (fwhm < pwidthmax and ampl > amplmin and
-                    err_xcenter < pwidthmax/2 and err_fwhm < pwidthmax):
-                    line='{:d} {:.0f} {:.1f} {:.0f} {:.1f} {:.1f} {:.1f}\n'.format(
-                        pathnum, x, swidth - xcenter, ampl, fwhm, err_xcenter, err_fwhm)
-                    outdatafile.write(line)
+                perr2 = np.diag(pcov)
+                if np.all(perr2 > 0):
+                    perr = np.sqrt(perr2)
+                    ybase, ampl, xcenter, sigma = popt
+                    err_ybase, err_ampl, err_xcenter, err_sigma = perr
                     
-                    # save data for later plotting
-                    xstrip.append(x)
-                    center.append(xcenter)  # top-down (pixel index y coordinate)
-                    pfwhm.append(fwhm)
+                    fwhm = np.abs(2.355*sigma)
+                    err_fwhm = 2.355*err_sigma
+                    
+                    if False:
+                        yfit = gaussian1D(xdata, ybase, ampl, xcenter, sigma)
+                        plt.plot(xdata, ydata, 'ko', label='data')
+                        plt.plot(xdata, yfit, '-k', label='fit')
+                        plt.show()
+                    
+                    amplmin=5*stddev/np.sqrt(length)
+                    if (fwhm < pwidthmax and ampl > amplmin and
+                        err_xcenter < pwidthmax/2 and err_fwhm < pwidthmax):
+                        line='{:d} {:.0f} {:.1f} {:.0f} {:.1f} {:.1f} {:.1f}\n'.format(
+                            pathnum, x, swidth - xcenter, ampl, fwhm, err_xcenter, err_fwhm)
+                        outdatafile.write(line)
+                        
+                        # save data for later plotting
+                        xstrip.append(x)
+                        center.append(xcenter)  # top-down (pixel index y coordinate)
+                        pfwhm.append(fwhm)
 
-                    # append to output region
-                    line='circle({:.1f},{:.1f},{:.1f}) # color=yellow text={{{:d}}}\n'.format(
-                        x, swidth - xcenter, fwhm, pathnum)
-                    outstripregfile.write(line)
+                        # append to output region
+                        line='circle({:.1f},{:.1f},{:.1f}) # color=yellow text={{{:d}}}\n'.format(
+                            x, swidth - xcenter, fwhm, pathnum)
+                        outstripregfile.write(line)
+                else:
+                    if (verbose): print('WARNING: fitting failed at x=' + str(x))
             except RuntimeError:
+                if (verbose): print('WARNING: RuntimeError at x=' + str(x))
                 pass
 
         # closing output data file

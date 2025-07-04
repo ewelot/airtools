@@ -24,6 +24,8 @@ commonly used in professional astronomy or image analysis projects:
   basic FITS routines
 - [libvips](https://libvips.github.io/libvips/): A fast and memory efficient
   image processing library with bindings to many programming languages
+- [Astropy](https://www.astropy.org): Core functionality and common tools
+  for astronomy and astrophysics research with Python
 
 <img src="doc/images/splash.png" alt="AIRTOOLS in action" width="900" />
 (Screenshot of an AIRTOOLS session)

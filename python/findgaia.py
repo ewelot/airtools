@@ -45,7 +45,7 @@ def findgaia(param):
     maxsize=1000    # max size of plot symbol
     doPlot=False
     verbose=False
-    syntax='syntax: findgaia [-v] setname radeg decdeg raddeg'.format()
+    syntax='syntax: findgaia [-v] [-m maglim] setname radeg decdeg raddeg'.format()
     for i in range(len(param)):
         if(param[0]=='-h'):
             print(syntax, file=sys.stderr)

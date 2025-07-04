@@ -1,12 +1,12 @@
-Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v5.1)
+Astronomical Image Reduction and Comet Photometry with AIRTOOLS (v5.2)
 ======================================================================
 
 ---
 author:
 - Thomas Lehmann
-date: Draft, May 2024
+date: Draft, June 2025
 title: Astronomical Image Reduction and Comet Photometry with AIRTOOLS
-  (v5.1)
+  (v5.2)
 ---
 
 -   [<span class="toc-section-number">1</span>
@@ -47,8 +47,8 @@ title: Astronomical Image Reduction and Comet Photometry with AIRTOOLS
         Files](#parameter-files)
     -   [<span class="toc-section-number">4.5</span> Raw
         Images](#raw-images)
-    -   [<span class="toc-section-number">4.6</span> Image orientation,
-        flip status and Bayer pattern](#image_orientation)
+    -   [<span class="toc-section-number">4.6</span> Image
+        orientation](#image-orientation)
     -   [<span class="toc-section-number">4.7</span> Image Set
         Definition](#image-set-definition)
 -   [<span class="toc-section-number">5</span> Image
@@ -59,6 +59,8 @@ title: Astronomical Image Reduction and Comet Photometry with AIRTOOLS
         Masks](#bad-pixel-masks)
     -   [<span class="toc-section-number">5.3</span> Image
         Calibration](#image-calibration)
+        -   [<span class="toc-section-number">5.3.1</span> Satellite
+            trails](#satellite-trails)
     -   [<span class="toc-section-number">5.4</span> Background
         evaluation](#background-evaluation)
     -   [<span class="toc-section-number">5.5</span> Image
@@ -152,6 +154,8 @@ astronomical image reduction are used as well, e.g.
 -   [libvips](https://libvips.github.io/libvips/): A fast and memory
     efficient image processing library with bindings to many programming
     languages
+-   [Astropy](https://www.astropy.org): Core functionality and common
+    tools for astronomy and astrophysics research with Python
 
 The AIRTOOLS software is freely available. The project - including
 source code - is hosted at <https://github.com/ewelot/airtools>.
@@ -204,8 +208,8 @@ where you can find the latest source code and documentation.
 Pre-compiled binary packages are build for several Debian/Ubuntu based
 Linux distributions:
 
--   Ubuntu 20.04 “Focal”
 -   Ubuntu 22.04 “Jammy”
+-   Ubuntu 24.04 “Noble”
 -   Debian 11 “Bullseye”
 -   Debian 12 “Bookworm”
 
@@ -265,16 +269,15 @@ The AIRTOOLS software can be uninstalled by running
 ### Installing Oracle VirtualBox
 
 VirtualBox (<http://www.virtualbox.org>) is a free and powerful
-virtualization software for enterprise and home users. Get the software
-appropriate for your host operating system from the
+virtualization software for enterprise and home users. Get the
+*VirtualBox Platform Package* software appropriate for your host
+operating system from the
 [Downloads](https://www.virtualbox.org/wiki/Downloads) page and install
 it.
 
-You must also download and install the “Oracle VM VirtualBox Extension
-Pack” for improved performance and additional virtual hardware features.
-Get it from the appropriate section of the previously mentioned download
-page. Click on “All supported platforms” and open it using the Oracle VM
-VirtualBox software.
+You must also download and install the *VirtualBox Extension Pack* for
+improved performance and additional virtual hardware features. Get it
+from the appropriate section of the previously mentioned download page.
 
 In the following chapters the physical computer where you have installed
 the VirtualBox software is sometimes refered to as “host” computer. A
@@ -293,16 +296,17 @@ machine or simply “guest” computer.
     base folder on your host computer. The .ova file size is only 2.5 GB
     and will expand to about 8 GB after importing. The virtual disk file
     will grow from this initial size (containing the Linux OS, AIRTOOLS
-    and all required software compnents) dynamically up to its maximum
-    size of 100 GB upon using the virtual guest system. Therefore you
-    should make sure that you have at least that much of free disk
-    space.
+    and all other required software components) dynamically up to its
+    maximum size of 100 GB upon using the virtual guest system.
+    Therefore you should make sure that you have at least that much of
+    free disk space.
 
 -   Virtual machine settings were choosen to impose low hardware
     requirements: it uses 3 CPU cores and 4 GB of physical RAM only.
-    This is sufficient to run the AIRTOOLS software even on large images
-    (e.g. 30 Mpix single band images). It is possible to adjust those
-    settings at any time later on within the Oracle VirtualBox Manager.
+    This is sufficient to run the AIRTOOLS software even on larger
+    images (e.g. 30 Mpix single band images). It is possible to adjust
+    those settings at any time later on within the Oracle VirtualBox
+    Manager.
 
 -   Start importing the appliance by clicking the button “Import”.
 
@@ -473,7 +477,7 @@ value is made of a single word. In some places you are allowed to use
 the character `-` to indicate an unknown value.
 
 At first the information about your observatory site must be added to
-the corresponding parameter file `sites.dat`. From the AIRTOOLS
+the corresponding parameter file **`sites.dat`**. From the AIRTOOLS
 application’s “Edit” menu select “Edit Site Parameters”. This will start
 a simple text editor (called *mousepad*). The parameter file should have
 a few entries already, which can be used as reference when adding a new
@@ -504,9 +508,9 @@ Altitude of your observatory in meters.
 Save your edits and close the text editor.
 
 The next information you have to provide is those of the instrumentation
-you have used. Open the parameter file `camera.dat` by selecting “Edit”
-and “Edit Camera Parameters”. Each combination of telescope and camera
-must have a dedicated entry. Use the existing sample entries as a
+you have used. Open the parameter file **`camera.dat`** by selecting
+“Edit” and “Edit Camera Parameters”. Each combination of telescope and
+camera must have a dedicated entry. Use the existing sample entries as a
 reference for your newly added lines. The columns used are:
 
 tel:  
@@ -537,7 +541,7 @@ correct entry would be `CDS/CFC`.
 flip:  
 Indicate if the image appears flipped top-down (1) or not (0). More
 information about checking the image orientation is provided in [this
-chapter](#image_orientation).
+chapter](#image-orientation).
 
 rot:  
 Camera rotation with respect to the sky coordinate system. This
@@ -545,14 +549,20 @@ parameter is left for historical reason but not used in current versions
 of the software and should be left undefined (using the string “-”).
 
 rawbits:  
-Original bitdepth or number of bits per pixel in a single color channel.
-Note that at start of the image reduction the counts (ADU, intensities)
-are scaled up to the 16-bit range where needed.
+Number of bits per pixel in a single color channel of the raw image as
+delivered by the image acquisition system. Note that this might be
+different from the sensor hardware bitdepth as the camera electronics
+and/or data acquisition software might apply some internal scaling. The
+best way to estimate this number is to check the intensity of a
+saturated source in the raw image and check it it fits within the number
+range of a given bitdepth. Note that intensities (counts, ADU) are
+scaled up to the 16-bit range at start of the image reduction where
+needed.
 
 satur:  
-Saturation value. Strictly speeking the upper counts (ADU) for which the
-camera response is linear (proportional to the illumination intensity)
-must be provided. We need the value after scaling up to the 16-bit
+Saturation level. Strictly speeking this is the upper counts (ADU) for
+which the camera response is linear (proportional to the illumination
+intensity). The value refers to the data after scaling up to the 16-bit
 range, e.g. if you are using a consumer DSLR where response is linear up
 to 2/3 of its dynamic range then you should enter a value of 40000
 approximately.
@@ -578,8 +588,8 @@ Telescope type: L=reflector, R=refractor, A=photo lens
 ctype:  
 Sensor type: CCD=monochrome CCD, DSLR=DSLR with native camera model RAW
 files, CMOS=monochrome CMOS sensor, RGGB or similar layout pattern for a
-one-shot-color CMOS sensor with a Bayer filter matrix (see also chapter
-4.5).
+one-shot-color CMOS sensor with a Bayer filter matrix (see also [this
+chapter](#image-orientation)).
 
 Save your edits and close the text editor. After any modification you
 can choose if the new parameter file is just applied to your current
@@ -636,7 +646,7 @@ the “Misc. Tools” tab, enter the image number or a sequence into the
 textfield next to the “Load Raw Images” button (e.g. 3-5,9-11) and press
 the button to start, which starts the SAOImage viewer.
 
-## Image orientation, flip status and Bayer pattern
+## Image orientation
 
 Most professional tools in astronomy are storing and displaying image
 data starting at the bottom line, following general conventions provided
@@ -684,8 +694,8 @@ order](images/M101_check_bayer.png "Check bayer pattern")
 An image set is a series of images of the same type and target, e.g. a
 couple of dark exposures with a given exposure time or a bracketed
 sequence of exposures of a comet. All image sets of the project are
-described by a parameter file called `set.dat` which must be created by
-yourself. From the AIRTOOLS application’s main menu select “Edit” and
+described by a parameter file called **`set.dat`** which must be created
+by yourself. From the AIRTOOLS application’s main menu select “Edit” and
 “Edit Image Set Definitions”. Here is an example of a typical file which
 can be used for reference:
 
@@ -837,37 +847,55 @@ DSLR)](images/dark_variation2.png "Dark variation")
 
 Bad pixel masks are derived from light exposures. Up to four image sets
 of a project are evaluated to create a combined mask. Those image sets
-ideally should consist of at about 10 images or more. Images must not be
+ideally should consist of about 10 images or more. Images must not be
 undersampled otherwise the algorithm might fail to distinguish between
 hot pixels and stars.
 
 After processing has finished a couple of check images are created and
-displayed: - the mask image (white means bad pixel) - a combined mask
-image in case masks from other projects have been copied into the
-current project directory - an image highlighting clusters of bad
-pixels - temporary difference images derived for each image set
+displayed:
+
+-   the mask image (white means bad pixel)
+
+-   a combined mask image in case masks from other projects have been
+    copied into the current project directory
+
+-   an image highlighting clusters of bad pixels
+
+-   temporary difference images derived for each image set
 
 ## Image Calibration
 
-Image calibration involves the subtraction of the master dark image and
-division by the master flat image. The calibrated images are stored in
-the temporary directory defined for the project. Their name starts with
-the image number associated with each individual raw image. Calibrated
-images are not overwritten by default and kept throughout the project.
+Image calibration involves the subtraction of the master dark image,
+division by the master flat image, replacement of bad pixels and
+debayering color images where appropriate. The calibrated images are
+stored in the temporary directory defined for the project. Image names
+start with the image number associated with each individual raw image.
+Calibrated images are not overwritten by default and kept throughout the
+project.
 
 By default calibrated images are created but not displayed after
 processing. Though you may display certain calibrated images by using
 actions from the “Misc. Tools” tab: enter an image set name or specific
 image numbers and press the button “Load Calibrated Images”.
 
+### Satellite trails
+
 Calibrated images may be affected by satellite trails or other bad image
 regions you would like to exclude in the stacking process later on.
-Those regions have to be defined manually after loading the affected
-calibrated images in the SAOImage display. You can use any
-two-dimensional region type (e.g. polygon) to enclose the bad areas. The
-bad regions have to be saved under the `bgvar` subdirectory using a file
-name containing the given image number and a fixed prefix,
-e.g. `0003.bad.reg`.
+Those regions have to be defined manually as bad areas in the displayed
+calibrated images.
+
+You should draw a vector region to identify a satellite trail. It is
+sufficient to match the trail by about 10 pixels and you do not need to
+worry about somewhat curved trails. Crossing airplanes or other extended
+bad image areas should be identified by drawing a polygon region (or
+another two-dimensional region type).
+
+After finishing this process on all displayed images you must run the
+following command from “Misc. Tools” tab using the “Run User Command”
+input field: ‘sat2badreg’. This creates bad region files under the
+`bgvar` subdirectory using a file names containing the given image
+number and a fixed suffix, e.g. `0003.bad.reg`.
 
 ## Background evaluation
 
@@ -892,8 +920,7 @@ sets)</figcaption>
 
 Then an average background image is created for each image set as
 reference and difference images are created for each individual
-exposure. A mosaic of those thumbnail difference images is finally
-displayed.
+exposure. A mosaic of those thumbnail difference images is displayed.
 
 ![Background variation (refers to 2nd and 3rd image set in last
 figure)](images/bgvar.png "Background variation")
@@ -942,14 +969,14 @@ alt="FWHM of stars across field of view (FSQ106)" />
 </figure>
 
 A preliminar astrometric solution is derived using an offline
-Astrometry.net solver (using the Tycho2 star catalog). In a subsequent
-step a global model is fitted (using either GAIA EDR3 or PPMX catalog)
-over the whole image including to map some degree of distortion. This
-new WCS model is saved and used later on to identify objects from
-photometric catalogs. The overall astrometric accuracy is printed to the
-log output and several diagnostic plots are created to show residuals
-from catalog position in different axes, a distortion map showing pixel
-scale variation and a sky chart with detected sources.
+Astrometry.net solver. In a subsequent step a precise global model is
+fitted (using either GAIA EDR3 or PPMX catalog) over the whole image
+including to map some degree of distortion. This new WCS model is saved
+and used later on to e.g. identify reference stars from photometric
+catalogs. The overall astrometric accuracy is printed to the log output
+and several diagnostic plots are created to show residuals from catalog
+position in different axes, a distortion map showing pixel scale
+variation across the field of view and a sky chart of detected sources.
 
 <figure>
 <img src="images/distortion3.png" title="Distortion map"
@@ -1032,10 +1059,9 @@ Desktop”.
 
 Download the ISO image file of the latest Xubuntu LTS release from
 <http://xubuntu.org/download>. Please note the important **LTS** version
-label, which indicates a “Long Term Support” release. At the time of
-this writing it is named `xubuntu-22.04.4-desktop-amd64.iso`. This Linux
-OS version is well supported by the AIRTOOLS software. Choose a mirror
-download close to your location and download the 64-bit desktop image.
+label, which indicates a “Long Term Support” release. Those releases are
+supported by the AIRTOOLS software. Choose a mirror download close to
+your location and download the 64-bit desktop image.
 
 The ISO image file is used in place of an install medium for the virtual
 machine. To do so you have to start the VirtualBox software (if not

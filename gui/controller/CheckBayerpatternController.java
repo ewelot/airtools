@@ -63,6 +63,7 @@ public class CheckBayerpatternController implements Initializable {
     private final String airfunFunc = "check_bayerpattern";
 
     private enum CropType {
+        AUTO("(auto)"),
         CENTER30("center 30%"),
         CENTER50("center 50%"),
         NONE("none (full image)")
@@ -88,7 +89,7 @@ public class CheckBayerpatternController implements Initializable {
         labelWarning.setText("");
 
         // add combobox items
-        cbCropType.getItems().addAll(CropType.CENTER30, CropType.CENTER50, CropType.NONE);
+        cbCropType.getItems().addAll(CropType.AUTO, CropType.CENTER30, CropType.CENTER50, CropType.NONE);
         cbCropType.getSelectionModel().select(0);
 
         // hide the slider because it is not implemented yet
@@ -132,19 +133,20 @@ public class CheckBayerpatternController implements Initializable {
             fileChooser.setInitialFileName(fileName);
         }
         fileChooser.getExtensionFilters().addAll(
-            new FileChooser.ExtensionFilter("FITS images", "*.fits", "*.fts", "*.fit")
+            new FileChooser.ExtensionFilter("FITS images", "*.fits", "*.FITS", "*.fts", "*.FTS", "*.fit", "*.FIT")
         );
 
         Stage stage = (Stage) paneCheckBayerpattern.getScene().getWindow();
         File selectedFile = fileChooser.showOpenDialog(stage);
         if (selectedFile != null) {
             String fullName = selectedFile.getAbsolutePath();
+            tfRawImage.setText(selectedFile.getAbsolutePath());
+            tfRawImage.end();
+            /*
             if (fullName.startsWith(pdir.getAbsolutePath())) {
                 tfRawImage.setText(fullName.substring(rawDir.getValue().length()+1));
-            } else {
-                tfRawImage.setText(selectedFile.getAbsolutePath());
-                tfRawImage.end();
             }
+            */
             // load raw image file
         }
     }
@@ -181,10 +183,10 @@ public class CheckBayerpatternController implements Initializable {
         if (cbFlipImage.isSelected())      aircliCmdArgs.add("-f");
         if (cropType == CropType.CENTER30) aircliCmdArgs.add("-c 30");
         if (cropType == CropType.CENTER50) aircliCmdArgs.add("-c 50");
-        if (cropType == CropType.NONE)   aircliCmdArgs.add("-a");
+        if (cropType == CropType.NONE)   aircliCmdArgs.add("-c 100");
 
         // add mandatory positional parameters
-        aircliCmdArgs.add(tfRawImage.getText());
+        aircliCmdArgs.add('"' + tfRawImage.getText() + '"');
 
         // run command
         System.out.println("cmd: " + aircliCmdOpts + " " + aircliTask + " " + aircliCmdArgs);

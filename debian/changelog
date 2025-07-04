@@ -1,3 +1,9 @@
+airtools (5.2.2-1) experimental; urgency=medium
+
+  * Update to airfun.sh version 5.5.2
+
+ -- Thomas Lehmann <t.lehmann@mailbox.org>  Sat, 28 Jun 2025 17:10:18 +0200
+
 airtools (5.2.1-1) experimental; urgency=medium
 
   * Update to airfun.sh version 5.5.1

@@ -10,7 +10,7 @@ import pyvips
 
 
 # write image to file or stdout (default: PNM file)
-# syntax: writeimage [-v] [-16|-8] [-fmt format] image [outfilename]
+# syntax: writeimage [-v] [-32|-16|-8] [-fmt format] image [outfilename]
 # supported output file formats: PBM PGM PPM PNM TIF PNG FITS
 def writeimage(param):
     defaultfmt='pnm'
@@ -24,6 +24,9 @@ def writeimage(param):
         if(param[0]=='-fmt'):
             fmt=param[1].lower()
             del param[0:2]
+        elif(param[0]=="-32"):
+            depth=32
+            del param[0]
         elif(param[0]=="-16"):
             depth=16
             del param[0]
@@ -78,6 +81,9 @@ def writeimage(param):
         if (image.format == "float" or image.format == "double"):
             if (verbose): print("# casting image to ushort", file=sys.stderr)
             image=image.rint().cast('ushort')
+    if (depth == 32 and image.format == 'double'):
+        if (verbose): print("# casting image to float", file=sys.stderr)
+        image=image.cast('float')
     if (depth == 16 and image.format != 'ushort'):
         if (verbose): print("# casting image to ushort", file=sys.stderr)
         image=image.rint().cast('ushort')
@@ -541,9 +547,13 @@ vips_format_to_np_dtype = {
 
 # convert vips image to numpy array
 def v2np(vipsimage):
+    if (vipsimage.bands == 1):
+        shape=[vipsimage.height, vipsimage.width]
+    else:
+        shape=[vipsimage.height, vipsimage.width, vipsimage.bands]
     return np.ndarray(buffer=vipsimage.write_to_memory(),
         dtype=vips_format_to_np_dtype[vipsimage.format],
-        shape=[vipsimage.height, vipsimage.width, vipsimage.bands])
+        shape=shape)
     
 # convert numpy array to vips image
 def np2v(array):

@@ -908,8 +908,11 @@ public class MainController implements Initializable {
             //windowLightCurve.initModality(Modality.APPLICATION_MODAL);
             windowLightCurve.setScene(scene);
             windowLightCurve.setTitle("Plot Light Curve");
+            //windowLightCurve.setAlwaysOnTop(true);
         } catch (IOException ex) {
             Logger.getLogger(MainController.class.getName()).log(Level.SEVERE, null, ex);
+        } else {
+            windowLightCurve.toFront();
         }
         windowLightCurve.showAndWait();
     }

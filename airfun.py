@@ -1,9 +1,14 @@
 #!/usr/bin/python3
 
-VERSION="2.4a2"
+VERSION="2.5"
 """
 CHANGELOG
-    2.4a4 - xx Dec 2024
+    2.5 - 17 Apr 2025
+        * improc.imcrop: added option -b to keep requested crop size by adding
+            black border if required
+        * imutils.v2np: create 2D numpy array if input image has single band
+
+    2.4 - 27 Dec 2024
         * new requirement: python3-photutils
         * new function improc.bgmap
 
