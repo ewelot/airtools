@@ -14,13 +14,13 @@
 #       AO_BGVAR in _bgvar
 #       AO_REGIS in _register
 #       AO_STACK in _stack and _costack
-#       AO_AMASK and AO_ACOOR and AO_ABINN in _astrometry
+#       AO_AMASK, AO_ACOOR, AO_ABINN and AO_ASERV in _astrometry
 #
 ########################################################################
-AOVARS="AO_SKIP AO_FLATS AO_LIGHT AO_BGVAR AO_REGIS AO_STACK AO_AMASK AO_ACOOR AO_ABINN"
+AOVARS="AO_SKIP AO_FLATS AO_LIGHT AO_BGVAR AO_REGIS AO_STACK AO_AMASK AO_ACOOR AO_ABINN AO_ASERV"
 
-VERSION="1.6.1"
-VINFO="T. Lehmann, Mar. 2025"
+VERSION="1.6.2"
+VINFO="T. Lehmann, Jul. 2025"
 PINFO="\
     options:
       -h            show this help text
@@ -34,6 +34,10 @@ PINFO="\
       task          run given task    
 "
 CHANGELOG="
+    1.6.2 - 02 Jul 2025
+        * astrometry: new environment variable AO_ASERV to allow setting an
+            alternative vizier server for accessing reference catalog
+
     1.6.1 - 27 Mar 2025
         * imageinfo: output from img_info (DSLR files) is not resorted anymore
         * bgvar: deal with satellite trails from directory satpath
@@ -1852,6 +1856,8 @@ _astrometry () {
     #       values determined by imcoord automatically
     #       if set to "unknown" then do full sky search
     #       if set to "skipfirst" then skip solve_field and run AIwcs only
+    #   AO_ABINN
+    #   AO_ASERV
     local slist
     local set
     local ststack
@@ -2132,6 +2138,7 @@ _astrometry () {
         # options for AIwcs
         opts=""
         test "$AO_ABINN" && opts="-b $AO_ABINN"
+        test "$AO_ASERV" && opts="$opts -srv $AO_ASERV"
         test "$imcoord"  && opts="$opts -c $imcoord"
         test "$north"    && opts="$opts -n $north"
         test "$crossrad" && opts="$opts -cr $crossrad"
@@ -2157,19 +2164,20 @@ _astrometry () {
                 fi
             fi
         fi
-                
+
         # running AIwcs
         echo "# running: AIwcs" $opts "$set $catalog \"$maglim\" $thres" | tee -a $wcslog
         AIwcs $opts $set $catalog "$maglim" $thres >> $wcslog 2>&1
         if [ $? -ne 0 ]
         then
-            nsat=$(sexselect $set.src.dat "" "" "" "" "" 99 | grep -v "^#" | awk '{if(and($NF,4)) print $0}' | wc -l)
-            echo "$(tail -1 $wcslog | cut -d ')' -f1), nsat=$nsat"
+            tail -3 $wcslog | grep "^ERROR" >&2 && return 255
             nimg=$(tail -1 $wcslog | tr ' ,)' '\n' | grep nimg= | cut -d '=' -f2)
             ncat=$(tail -1 $wcslog | tr ' ,)' '\n' | grep ncat= | cut -d '=' -f2)
             (! is_number "$nimg" || ! is_number "$ncat") &&
                 echo "ERROR: unable to determine nimg and/or ncat from $wcslog" >&2 &&
                 return 255
+            nsat=$(sexselect $set.src.dat "" "" "" "" "" 99 | grep -v "^#" | awk '{if(and($NF,4)) print $0}' | wc -l)
+            echo "$(tail -1 $wcslog | cut -d ')' -f1), nsat=$nsat"
             if [ $ncat -lt $((nimg * 15/10)) ] && [ $ncat -lt 5000 ]
             then
                 maglim=$(echo $maglim 16 | awk '{print $1+1.0}')

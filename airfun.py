@@ -1,8 +1,12 @@
 #!/usr/bin/python3
 
-VERSION="2.5"
+VERSION="2.5.1"
 """
 CHANGELOG
+    2.5.1 - 31 Jul 2025
+        * comets.cometname: handle name of interstellar comet
+        * generally ignore AstropyDeprecationWarning
+
     2.5 - 17 Apr 2025
         * improc.imcrop: added option -b to keep requested crop size by adding
             black border if required
@@ -95,6 +99,10 @@ import sys
 import importlib
 import argparse
 import logging
+
+import warnings
+from astropy.utils.exceptions import AstropyDeprecationWarning
+warnings.simplefilter('ignore', AstropyDeprecationWarning)
 
 # default paths to search for modules
 # list of paths starting with highest priority are

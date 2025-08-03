@@ -7,6 +7,9 @@ def cometname (scname):
     # check for numbered periodic comet
     if re.compile('^[0-9]+P$').match(scname):
         return scname
+    # check for numbered interstellar comet
+    if re.compile('^[0-9]+I$').match(scname):
+        return scname
     # convert comet name [ACP]YYYYXX to [ACP]/YYYY XX
     if re.compile('^[ACP][0-9][0-9][0-9][0-9][A-Z]').match(scname):
         return scname[0]+"/"+scname[1:5]+" "+scname[5:]

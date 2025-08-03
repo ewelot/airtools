@@ -1,7 +1,4 @@
 
-import warnings
-from astropy.utils.exceptions import AstropyDeprecationWarning
-warnings.simplefilter('ignore', AstropyDeprecationWarning)
 from astropy.time import Time
 from astropy.time import TimeDelta
 

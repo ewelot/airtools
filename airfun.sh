@@ -14,9 +14,19 @@
 # - in order to use SAOImage DS9 analysis tasks (via AIexamine) you must
 #   have installed files airds9.ana and aircmd.sh
 ########################################################################
-AI_VERSION="5.5.2"
+AI_VERSION="5.5.3"
 : << '----'
 CHANGELOG
+    5.5.3 - 31 Jul 2025
+        * cometname, comet2icq: handle name of interstellar comets
+        * get_jd: if no keyword is matching then the fallback to derive JD from
+            DATE-OBS will now take AI_TZOFF into account
+        * get_jd_dmag: read JD from rawfiles.dat if present
+        * AIstack: get JD from rawfiles.dat
+        * check_url: if using word vizier in place of url then query first
+            server in VIZSERVERLIST
+        * AIwcs: improved handling of user provided name of catalog server
+
     5.5.2 - 28 Jun 2025
         * check_bayerpattern: rewrite for improved handling of options
         * AIfindbad: bugfix to work with images >100 MPix (work around limits
@@ -2743,6 +2753,20 @@ CHANGELOG
 #------------------------
 export LC_NUMERIC=C
 
+#--------------------------
+#   list of Vizier servers
+#--------------------------
+# ref.: https://github.com/astropy/astroquery/blob/main/astroquery/vizier/__init__.py
+export VIZSERVERLIST=$(echo $(echo "
+    vizier.cds.unistra.fr
+    vizier.cfa.harvard.edu
+    vizier.nao.ac.jp
+    vizier.ast.cam.ac.uk
+    vizier.iucaa.in
+    vizier.idia.ac.za
+    vizier.china-vo.org   # unstable
+    # vizier.inasan.ru
+" | sed 's,#.*,,'))
 
 #------------------------
 #   program aliases
@@ -5056,6 +5080,10 @@ get_jd () {
                     echo ${dobs:2} $tobs | tr -d '-' >&2 &&
                     jd=$(ut2jd $(echo $tobs ${dobs:2} | tr -d '-'))
             fi
+            test "$jd" && test "$AI_TZOFF" && test "$AI_TZOFF" != "0" &&
+                jd=$(echo $jd $AI_TZOFF | awk '{printf("%.5f\n", $1-2/24)}') &&
+                test -z "$do_quiet" &&
+                echo "WARNING: JD is calculated from DATA-OBS minus $AI_TZOFF hours" >&2
         fi
     done
     test -z "$jd" && ! test "$do_quiet" &&
@@ -5077,7 +5105,7 @@ get_jd_dmag () {
 
     local set=$1
     local reg="reg.dat"
-    local exifdat="exif.dat"
+    #local exifdat="exif.dat"
     local rawfilesdat="rawfiles.dat"
     local nlist
     local num
@@ -5129,34 +5157,30 @@ get_jd_dmag () {
         done
         return
     fi
+    
     for num in $nlist
     do
-        if [ -f measure/$num.src.head ]
+        if [ -f $rawfilesdat ]
         then
-            jd=$(grep -E "^MJD_|^JD " measure/$num.src.head | lines 1 | tr '=' ' ' | \
-                awk '{printf("%s", $2)}')
-            if [ -z "$jd" ]
-            then
-                dateobs=$(grep "^DATE-OBS=" measure/$num.src.head | tr -d "'" | awk '{print $2}')
-                test "$dateobs" && jd=$(ut2jd $(echo $dateobs | tr -d '-' | \
-                    awk -F "T" '{print $2" "substr($1,3)}'))
-            fi
-            test -z "$jd" &&
-                echo "ERROR: failed to get jd from measure/$num.src.head." >&2 && return 255
+            # get jd from rawfilesdat
+            jd=$(get_rdat jd $num)
+            test $? -ne 0 &&
+                echo "ERROR: unable to determine JD for image $num." >&2 && return 255
         else
-            # get texp jd from exifdat
-            set - $(test -e $exifdat && grep -v "^#" $exifdat | \
-                awk -v n=$num '{if($2==n){printf("%s", $0)}}' | lines 1) x
-            if [ $# -ge 3 ]
+            if [ -f measure/$num.src.head ]
             then
-                # we assume that time is in UT already
-                jd=$(ut2jd $3 $day | awk '{printf("%.5f", $1)}')
-                test ${3:0:1} -eq 0 && x=$(echo $x | awk '{printf("%.5f", $1+1)}')
+                jd=$(grep -E "^MJD_|^JD " measure/$num.src.head | lines 1 | tr '=' ' ' | \
+                    awk '{printf("%s", $2)}')
+                if [ -z "$jd" ]
+                then
+                    dateobs=$(grep "^DATE-OBS=" measure/$num.src.head | tr -d "'" | awk '{print $2}')
+                    test "$dateobs" && jd=$(ut2jd $(echo $dateobs | tr -d '-' | \
+                        awk -F "T" '{print $2" "substr($1,3)}'))
+                fi
+                test -z "$jd" &&
+                    echo "ERROR: failed to get jd from measure/$num.src.head." >&2 && return 255
             else
-                # get jd from rawfilesdat
-                jd=$(get_rdat jd $num)
-                test $? -ne 0 &&
-                    echo "ERROR: unable to determine JD for image $num." >&2 && return 255
+                echo "ERROR: unable to determine JD." >&2 && return 255
             fi
         fi
         
@@ -8512,6 +8536,7 @@ EOF
         test -z "$texp" && texp="-1"
         # get ccd temp
         temp=$(get_header -q $tmphdr CCD-TEMP | awk '{printf("%.0f", 1*$1)}')
+        test -z "$temp" && temp=$(get_header -q $tmphdr DET-TEMP | awk '{printf("%.0f", 1*$1)}')
         test -z "$temp" && temp="-"
         echo "$d$b $tstart $texp $jd $gain $w $h $temp"
         rm $tmphdr
@@ -8632,14 +8657,29 @@ renumber_rawfiles () {
 
 check_url () {
     # check if a given website is reachable
+    local showhelp
+    local i=1
+    for i in 1 2
+    do
+        (test "$1" == "-h" || test "$1" == "-help") && showhelp=1 && shift 1
+    done
     local url=${1:-"http://www.google.com"}
-    local tries=${2:-5}
+    local tries=${2:-3}
     local delay=2
     local retval
-    local i=1
-    (test "$1" == "-h" || test $# -gt 2) &&
-        echo "usage: check_url [url|$url] [trials|$tries]" >&2 &&
+    local vizlist
+            
+    (test "$showhelp" || test $# -gt 2) &&
+        echo "usage: check_url [vizier | url|$url] [trials|$tries]" >&2 &&
         return 1
+    
+    if [ $url == "vizier" ]
+    then
+        url=$(echo $VIZSERVERLIST | cut -d ' ' -f1)
+        vizlist=$VIZSERVERLIST
+        echo "# checking $url ..." >&2
+    fi
+    i=1
     while [ $i -le $tries ]
     do
         if [ $i -gt 1 ]
@@ -8654,7 +8694,15 @@ check_url () {
         test $retval -eq 0 && break
         i=$((i+1))
     done
-    test $retval -ne 0 && echo "ERROR: failed to connect to $url" >&2
+    if [ $retval -ne 0 ]
+    then
+        echo "ERROR: failed to connect to $url" >&2
+        if [ "$vizlist" ]
+        then
+            echo "  You could try using one of the following mirror servers:" >&2
+            for url in $vizlist; do echo "  $url" >&2; done
+        fi
+    fi
     return $retval
 }
 
@@ -8932,6 +8980,7 @@ mpchecker () {
 cometname () {
     # expand short comet name
     #   numbered (period.) comet: <num>P
+    #   numbered interstellar comet: <num>I
     #   numbered asteroid: (<num>)
     #   unnumbered asteroid: <year> <aa>...
     #   unnumbered and non-periodic comet: <pre>/<year> <a><n>
@@ -8947,6 +8996,14 @@ cometname () {
     if [ "$s" != "$str" ]
     then
         test "$AI_DEBUG" && echo "# object is a numbered periodic comet" >&2
+        echo $str && return
+    fi
+    
+    # check for numbered interstellar comet
+    s=$(echo $str | sed -e 's,^[0-9]\+I$,,')
+    if [ "$s" != "$str" ]
+    then
+        test "$AI_DEBUG" && echo "# object is a numbered interstellar comet" >&2
         echo $str && return
     fi
     
@@ -9634,15 +9691,8 @@ mkrefcat () {
 
     # list of vizier servers to check
     # ref: https://vizier.cfa.harvard.edu/vizier/mirrors.gml
-    serverlist="
-        https://vizier.cds.unistra.fr \
-        https://vizier.cfa.harvard.edu \
-        vizier.china-vo.org \
-        https://vizier.iucaa.in \
-        https://vizier.inasan.ru \
-        vizier.nao.ac.jp \
-        vizier.idia.ac.za \
-        "
+    # https://github.com/astropy/astroquery/blob/main/astroquery/vizier/__init__.py
+    serverlist=$VIZSERVERLIST
     test "$server" && serverlist="$server"
 
     # get vizier catalog identifier
@@ -9695,7 +9745,7 @@ mkrefcat () {
         # run database query
         test "$AI_DEBUG" &&
             echo "wget -O $tmp1 \"${url}?${args}${opts}&-c=${center}\"" >&2
-        wget -O $tmp1 "${url}?${args}${opts}&-c=${center}"
+        wget -O $tmp1 -t 2 "${url}?${args}${opts}&-c=${center}"
         test $? -ne 0 && echo "ERROR: wget failed" >&2 && continue
         
         # check for valid object entries
@@ -9948,6 +9998,28 @@ photplot () {
 }
 
 comet2icq () {
+    # convert short object name to icq notation
+    local name=$1
+    local suffix=" "
+    test "${name: -1}" == "P" && name=$(printf "%3d" ${name:0:-1})
+    test "${name: -1}" == "I" && name=$(printf "%3d" ${name:0:-1}) && suffix="I"
+    test "${name:0:1}" == "C" && name=$(printf "%s" ${name:1})
+    if is_integer $name
+    then
+        printf "%3d%s       " $name "$suffix"
+    else
+        # TODO: handle names longer than 8 characters like 2014UN271
+        test "$name" == "2014UN271" && name="2014UNR1"
+        if is_integer ${name:0:1}
+        then
+            printf "   %-8s" $name
+        else
+            printf "  %-9s" $name
+        fi
+    fi
+}
+
+comet2icq.old () {
     # convert object name to icq notation
     local name=$1
     test "${name: -1}" == "P" && name=$(printf "%3d" ${name:0:-1})
@@ -27630,23 +27702,27 @@ END     " >> wcs/$b.src.ahead
         then
             cmd="$cmd -astref_catalog file -astrefcat_name $refcatfile"
         else
-            cmd="$cmd -astref_catalog  $refcat -save_refcatalog Y"
             # requires aclient and online access to vizier database
-            test -z $server &&
-                server=$(echo $sopts | sed 's| -|\n-|g' | grep -i REF_SERVER | awk '{printf("%s", $2)}')
-            test -z $server &&
-                server=$(grep REF_SERVER $sconf | awk '{printf("%s", $2)}')
-            test "$AI_DEBUG" && echo "# server = $server"
+            cmd="$cmd -astref_catalog  $refcat -save_refcatalog Y"
             ! check_url &&
                 echo "ERROR: no internet connection." >&2 &&
                 return 255
-            # check server url
-            # NOTE: disabled, because cds server is not checked reliably
-            false && if ! check_url $server
+            if [ "$server" ]
             then
-                echo "# WARNING: server $server is unreachable, trying fallback (vizier.cfa.harvard.edu)"
-                cmd="$cmd -ref_server vizier.cfa.harvard.edu"
+                echo "# user supplied REF_SERVER = $server"
+                cmd="$cmd -ref_server $server"
+                check_url $server
+            else
+                test -z $server &&
+                    server=$(echo $sopts | sed 's| -|\n-|g' | grep -i REF_SERVER | awk '{printf("%s", $2)}')
+                test -z $server &&
+                    server=$(grep REF_SERVER $sconf | awk '{printf("%s", $2)}')
+                check_url vizier
             fi
+            # check server url
+            test $? -ne 0 &&
+                echo "ERROR: AIwcs failed, server $server is unreachable" >&2 &&
+                return 255
         fi
         test "$AI_DEBUG" && echo "# cmd=$cmd" >&2
         eval "$cmd" 2>&1 | $escfilter > $slog
@@ -28769,9 +28845,8 @@ AIstack () {
             fi
             if [ "$omove" ]
             then
-                ! grep -q "^MJD_OBS =" $wcs && ! grep -q "^JD      =" $wcs &&
-                    ! grep -q "^DATE-OBS=" $wcs &&
-                    echo "WARNING: skipping $fname (missing MJD_OBS in header file)." >&2 &&
+                ! grep -q "^$(basename ${fname%.*}) " rawfiles.dat &&
+                    echo "WARNING: skipping $fname (missing entry in rawfiles.dat)." >&2 &&
                     retval=1 && continue
             fi
             n=$(($n + 1))
@@ -28842,30 +28917,21 @@ AIstack () {
         ! is_diskspace_ok -v "$tdir" "$img" $((n+2)) $((bpp)) &&
             echo "ERROR: not enough disk space to process set $sname." >&2 && retval=1 && continue
         
-        # get jd, filter, pierside, imgroll from reference image header
-        jdref=""; filter=""; pierside=""; imgroll=""
+        # get jd of reference image
+        jdref=$(get_rdat jd $nref)
+        test $? -ne 0 && echo "ERROR: unable to determine JD of reference image $nref."  >&2 && retval=1 && continue
+
+        # get filter, pierside, imgroll from reference image header
+        filter=""; pierside=""; imgroll=""
         href=$nref.head
         test ! -f $href && href=measure/$nref.src.head
         if [ -f $href ]
         then
-            jdref=$(get_header -q $href JD)
-            test -z "$jdref" &&
-                jdref=$(grep -E "^MJD_REF =|^MJD_OBS =" $href | lines 1 | \
-                    awk '{printf("%s", $3)}')
-            if [ -z "$jdref" ]
-            then
-                dateobs=$(grep "^DATE-OBS=" $href | tr -d "'" | awk '{print $2}')
-                test "$dateobs" && jdref=$(ut2jd $(echo $dateobs | tr -d '-' | \
-                    awk -F "T" '{print $2" "substr($1,3)}'))
-            fi
             grep "^IMGROLL =" $href | tr -d "'" | grep -q -w Y &&
                 imgroll="yes"
             filter=$(get_header -q $href FILTER)
             pierside=$(get_header -q $href PIERSIDE)
         fi
-        test -z "$jdref" &&
-            echo "ERROR: cannot determine jd from reference image header." >&2 &&
-            retval=1 && continue
         # determine mean MJD_OBS (mean from all images)
         jdmean=$(printf "%.5f" $(get_jd_dmag $sname | mean - 2))
         test -z "$jdmean" &&
@@ -28930,13 +28996,7 @@ EOF
             then
                 # determine shifted reference pixel coordinates
                 #dsec=$(echo $(getImageDateSec $num) - $(getImageDateSec $nref) | bc)
-                jd=$(grep -E "^MJD_OBS =|^JD " $wcs | lines 1 | awk '{printf("%s", $3)}')
-                if [ -z "$jd" ]
-                then
-                    dateobs=$(grep "^DATE-OBS=" $wcs | tr -d "'" | awk '{print $2}')
-                    test "$dateobs" && jd=$(ut2jd $(echo $dateobs | tr -d '-' | \
-                        awk -F "T" '{print $2" "substr($1,3)}'))
-                fi
+                jd=$(get_rdat jd $(basename ${img%.*}))
                 dsec=$(echo $jd $jdref | awk '{print ($1-$2)*24*3600}')
                 if [ "${omove/@/}" == "$omove" ]
                 then
@@ -30929,6 +30989,7 @@ AIphotcal () {
                     ;;
             *)      opts=""
                     test "$server" && opts="-s $server"
+                    echo "#" mkrefcat $opts -n 10000 $catalog $centerdeg $catradius >&2
                     mkrefcat $opts -n 10000 $catalog $centerdeg $catradius > phot/$setname.$catalog.dat;;
         esac
     fi

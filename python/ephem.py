@@ -6,9 +6,6 @@ import ssl
 import requests
 
 from astroquery.jplhorizons import Horizons
-import warnings
-from astropy.utils.exceptions import AstropyDeprecationWarning
-warnings.simplefilter('ignore', AstropyDeprecationWarning)
 from astropy.table import vstack
 
 from misc import parse_csv
