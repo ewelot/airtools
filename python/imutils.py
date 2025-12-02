@@ -500,16 +500,18 @@ def bgnoise(inimg):
 
     w = inimg.width
     h = inimg.height
+    if w<600 or h<600: bsize=20
     sd=[]
     for xc in np.round(np.linspace(0.2*w, 0.8*w, 4)):
-        for xc in np.round(np.linspace(0.2*h, 0.8*h, 3)):
-            data=v2np(inimg.crop(xc-bsize/2, xc-bsize/2, bsize, bsize)).reshape(bsize*bsize)
+        for yc in np.round(np.linspace(0.2*h, 0.8*h, 3)):
+            data=v2np(inimg.crop(xc-bsize/2, yc-bsize/2, bsize, bsize)).reshape(bsize*bsize)
+            #print('{:f} {:f}'.format(xc, yc), file=sys.stderr)
             for it in range(3):
                 mn=np.median(data)
                 data=data[data<mn+3*np.std(data)]
             sd.append(np.std(data))
     sd=np.array(sd)
-    #print('{:.1f}'.format(np.quantile(sd, 0.3)))
+    #print('{:.1f}'.format(np.quantile(sd, 0.3)), file=sys.stderr)
     return np.quantile(sd, 0.3)
 
 

@@ -19,8 +19,8 @@
 ########################################################################
 AOVARS="AO_SKIP AO_FLATS AO_LIGHT AO_BGVAR AO_REGIS AO_STACK AO_AMASK AO_ACOOR AO_ABINN AO_ASERV"
 
-VERSION="1.6.2"
-VINFO="T. Lehmann, Jul. 2025"
+VERSION="1.6.4"
+VINFO="T. Lehmann, Nov. 2025"
 PINFO="\
     options:
       -h            show this help text
@@ -34,6 +34,16 @@ PINFO="\
       task          run given task    
 "
 CHANGELOG="
+    1.6.4 - 20 Nov 2025
+        * register: bugfix determining extension number used in AIsource
+        * badpix: by default exclude images listed in AI_EXCLUDE, use option -x
+            to ignore AI_EXCLUDE and use all images
+
+    1.6.3 - 21 Oct 2025
+        * bgvar: lower box size used in AIbgdiff for small images
+        * register, astrometry: lower detection threshold/magerrlim for images
+            with few sources to increase number of possible matches
+
     1.6.2 - 02 Jul 2025
         * astrometry: new environment variable AO_ASERV to allow setting an
             alternative vizier server for accessing reference catalog
@@ -1187,6 +1197,8 @@ _bgvar () {
     local mult
     local outext
     local msg
+    local s
+    local bsize
     
     slist=$(AIsetinfo -b | awk '{if($4=="o"){print $2}}')
     test "$setname" && slist=$setname
@@ -1222,7 +1234,7 @@ _bgvar () {
                 #       remove varbgm1.$set.$inext
                 AIsetinfo -b | grep -w o | awk '{printf("%s ", $8)}' | \
                     grep -q -w $num && continue
-                ! grep -q "^"$num"." bgdiff.dat && doit=1            
+                ! grep -q "^"$num"." bgdiff.dat && doit=1
             done
         fi
         
@@ -1236,8 +1248,8 @@ _bgvar () {
                 if [ ! -s bgvar/$num.bad.reg ] && [ -s $satpathdir/$num.sat.reg ]
                 then
                     test "$msg" && echo $msg >&2 && msg=""
-                    sat2badreg -f -num $num
-                    sat2badreg -c -num $num
+                    sat2badreg -f -nlist $num
+                    sat2badreg -c -nlist $num
                 fi
             done
             test -d "$bgvar" && for num in $nlist
@@ -1254,7 +1266,22 @@ _bgvar () {
         then
             for set in $slist
             do                
-                AIbgdiff -k -p $AO_BGVAR "$set" >> bgdiff.dat
+                # determine box size for smoothing
+                set - $(AIsetinfo -b $set)
+                nref=$8
+                inext=""
+                test -z "$inext" && test -f $AI_TMPDIR/$nref.fits && inext="fits"
+                test -z "$inext" && test -f $AI_TMPDIR/$nref.ppm && inext="ppm"
+                test -z "$inext" && test -f $AI_TMPDIR/$nref.pgm && inext="pgm"
+                test -z "$inext" &&
+                    echo "ERROR: missing calibrated image of $nref" >&2 &&
+                    return 255
+                s=$(imsize $AI_TMPDIR/$nref.$inext | tr ' ' '\n' | sort -n | lines 1)
+                bsize=128
+                test $s -lt 1000 && bsize=64
+                test $s -lt 500  && bsize=32
+                echo "# running: AIbgdiff -k -p" $AO_BGVAR "\"$set\" $bsize" >&2
+                AIbgdiff -k -p $AO_BGVAR "$set" $bsize >> bgdiff.dat
                 test $? -ne 0 && return 255
             done
         fi
@@ -1355,7 +1382,12 @@ _register () {
     local fwhm
     local num
     local img
+    local extnum
     local fwhm
+    local ns
+    local thres
+    local merrlim
+    local ropts
     local opts
     local filter
     local title
@@ -1363,9 +1395,6 @@ _register () {
     local retval=0
     local tmpcat=$(mktemp "/tmp/tmp_reg_XXXXXX.src.dat")
     
-    # if necessary set AI_TELESCOPE to a matching entry in camera.dat
-    #for set in le01 co03; do AI_TELESCOPE=GSO AIsource $set; done
-    #AI_TELESCOPE=GSO
     slist=$(AIsetinfo -b | awk '{if($4=="o"){print $2}}')
     test "$setname" && slist=$setname
     test -z "$slist" && return
@@ -1383,16 +1412,43 @@ _register () {
         # TODO: check if all images have been processed
         # make first guess of fwhm
         num=$(AIsetinfo -b $set | lines 1 | awk '{printf("%s", $8)}')
-        img=$(AIimlist -q | awk -v n=$num '{if($2==n)print $3}')
+        img=$(AIimlist -q $set | awk -v n=$num '{if($2==n)print $3}')
         test -z "$img" &&
             echo "ERROR: unable to find calibrated image for nref=$num." &&
             return 255
-        AI_MAGZERO=25 AIsource -q -g -o $tmpcat -dbc 0.1 $img
+        set -- $(get_imformat_bands $img)
+        extnum=$((($2+1)/2))  # select green channel sources
+        AI_MAGZERO=25 AIsource -q -$extnum -o $tmpcat -dbc 0.1 $img
+        test $? -ne 0 &&
+            echo "ERROR: failed command:" >&2 &&
+            echo "  AIsource -$extnum -o $tmpcat -dbc 0.1 $img" >&2 &&
+            return 255
+
+        # adjust settings for low number of sources to increase number of matches
+        # lower threshold in AIsource
+        thres=""
+        ns=$(get_header -e 2 $tmpcat NAXIS2)
+        test $ns -lt 150 && thres=7
+        test $ns -lt 50 && thres=5
+        test $ns -lt 20 && thres=3.5
+        test "$thres" && AI_MAGZERO=25 AIsource -q -$extnum -o $tmpcat -dbc 0.1 $img "" $thres
+        ns=$(get_header -e 2 $tmpcat NAXIS2)
+        test $ns -lt 10 &&
+            echo "WARNING: only $ns sources found in reference image of $set" >&2
         fwhm=$(sexselect $tmpcat | kappasigma - 6 | awk '{printf("%.1f", $1)}')
-        echo "#" AIsource -f $fwhm $set
-        
+
+        # set/increase magerrlim in AIregister
+        merrlim=""
+        ropts=""
+        test $ns -lt 150 && merrlim=0.05
+        test $ns -lt 50 && merrlim=0.1
+        test $ns -lt 20 && merrlim=0.15 && ropts="-dm 0.3"
+        test $ns -lt 10 && merrlim=0.2  && ropts="-dm 0.5"
+       
         # extract sources
-        AIsource -f $fwhm $set
+        test -z "$thres" && echo "#" AIsource -f $fwhm $set
+        test "$thres"    && echo "#" AIsource -f $fwhm $set \"\" $thres
+        AIsource -f $fwhm $set "" $thres
         if [ $? -eq 0 ]
         then
             # remove failed registrations (dmag <= -2)
@@ -1403,11 +1459,11 @@ _register () {
                 rm -f measure/$num.src.head
                 sed -i '/^'$num' /d' reg.dat
             done
-
+            
             # run AIregister
-            # rewrite AIregister using: type rvm | (head -1 ; dd of=/dev/null)
-            echo "#" AIregister $AO_REGIS $set
-            AIregister $AO_REGIS $set | tee -a reg.dat
+            test -z "$merrlim" && echo "#" AIregister $ropts $AO_REGIS $set
+            test "$merrlim"    && echo "#" AIregister $ropts $AO_REGIS $set \"\" $merrlim
+            AIregister $ropts $AO_REGIS $set "" $merrlim | tee -a reg.dat
             test ${PIPESTATUS[0]} -ne 0 && retval=255
             test "$AI_DEBUG" && echo "DEBUG: AI_VERSION=$AI_VERSION retval=$retval"
 
@@ -1425,15 +1481,19 @@ _register () {
             then
                 echo "WARNING: registration failed on $(echo $failedlist | wc -w) images, trying again ..."
                 opts="-p -q"
-                test -z "$AO_REGIS" && opts="-m 1.0 -p -q"
-                echo "# AIregister $opts $set \"\" 0.06" >&2
-                AIregister $opts $set "" 0.06 | tee -a reg.dat
+                test -z "$AO_REGIS" && opts="-dm 1.0 -p -q"
+                test "$merrlim" && merrlim=$(echo $merrlim | awk '{printf("%.2f", 1.6*$1)}')
+                test -z "$merrlim" && merrlim=0.06
+                echo "# AIregister $ropts $opts $AO_REGIS $set \"\" $merrlim" >&2
+                AIregister $ropts $opts $AO_REGIS $set "" $merrlim | tee -a reg.dat
                 test ${PIPESTATUS[0]} -ne 0 && retval=255
             fi
         else
             retval=255
         fi
         rm -f $tmpcat
+        test $retval -ne 0 &&
+            echo "# ERROR: register stoped due to errors." >&2 && return $retval
     done
     
     # show diagnostic plots
@@ -1474,10 +1534,12 @@ _badpix () {
     # note: at least 5 raw images must be present per set
     local use_all_images    # not implemented yet
     local use_all_sets      # if set then combine with masks of all sets of the telescope
+    local do_not_exclude    # ignore AI_EXCLUDE and use all images
     local i
     for i in 1 2
     do
         test "$1" == "-a" && use_all_sets=1 && shift 1
+        test "$1" == "-x" && do_not_exclude=1 && shift 1
     done
     local high=${1:-""}
     local low=${2:-""}
@@ -1509,7 +1571,7 @@ _badpix () {
     local tmpdat=$(mktemp "$tdir/tmp_list_XXXXXX.dat")
     local tmpbaddat=$(mktemp "$tdir/tmp_badlist_XXXXXX.dat")
     
-    AI_EXCLUDE=""
+    test "$do_not_exclude" && AI_EXCLUDE=""
 
     # collect set infos
     AIsetinfo -b -o | grep -v "^#" | while read x s x x texp x x nref x x tel
@@ -2020,7 +2082,8 @@ _astrometry () {
             rlim=""
             test "$AO_AMASK" && is_number "$AO_AMASK" && rlim=$AO_AMASK
             #   select bright sources
-            echo "sexselect -f $x -fm $fmax $set.src.dat \"\" 0.01 \"$rlim\" \"\" \"\" 99" >&2
+            test "$AI_DEBUG" &&
+                echo "sexselect -f $x -fm $fmax $set.src.dat \"\" 0.01 \"$rlim\" \"\" \"\" 99" >&2
             sexselect -f $x -fm $fmax $set.src.dat "" 0.01 "$rlim" "" "" 99 > $tmpcat
             #sexselect -f $x -fm $fmax $set.src.dat "" 0.002 "$rlim" "" "" 99 > $tmpcat
             
@@ -2040,6 +2103,14 @@ _astrometry () {
                 # relax detections
                 str="merrlim=0.05, fwhm<$fmax"
                 sexselect -f $x -fm $fmax $set.src.dat "" 0.05 "$rlim" "" "" 99 > $tmpcat
+                stilts tcopy ifmt=fits ofmt=fits-basic in=$tmpcat"#2" out=$tmpxy
+                nsrc=$(get_header $tmpxy NAXIS2)
+            fi
+            if [ $nsrc -lt 100 ]
+            then
+                # relax detections
+                str="merrlim=0.1, fwhm<$fmax, no rlim"
+                sexselect -f $x -fm $fmax $set.src.dat "" 0.1 "" "" "" 99 > $tmpcat
                 stilts tcopy ifmt=fits ofmt=fits-basic in=$tmpcat"#2" out=$tmpxy
                 nsrc=$(get_header $tmpxy NAXIS2)
             fi

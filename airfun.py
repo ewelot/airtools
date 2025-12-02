@@ -1,8 +1,23 @@
 #!/usr/bin/python3
 
-VERSION="2.5.1"
+VERSION="2.5.3"
 """
 CHANGELOG
+    2.5.3 - 13 Nov 2025
+        * allow to call rawproc.rawinfo
+        * rawproc.rawinfo: added option -c to check succesful reading of image
+        * improc.pnmccdred: need to first check for raw image using rawpy
+            because newer libvips does have partial support of reading raw
+            files as well
+
+    2.5.2 - 20 Oct 2025
+        * imconv.bgnoise: bugfix correcting crop areas, decrease boxsize on
+            small sizeed images
+        * ephem.addephem, ephem.mkephem: bugfix to correctly query comets
+            having fragments
+        * improc.imbgsub: do large enlargements in multiple smaller steps to
+            obtain smoother output image
+
     2.5.1 - 31 Jul 2025
         * comets.cometname: handle name of interstellar comet
         * generally ignore AstropyDeprecationWarning
@@ -141,6 +156,7 @@ def get_module(funcname):
 
     # others
     if (funcname == 'cometname'): modulename = 'comets'
+    if (funcname == 'rawinfo'): modulename = 'rawproc'
     
     if (modulename):
         return importlib.import_module(modulename)

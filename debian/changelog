@@ -1,3 +1,9 @@
+airtools (5.3-1) experimental; urgency=medium
+
+  * Update to airfun.sh version 5.6.0, airfun.py 2.5.3, airtools-cli 1.6.4
+
+ -- Thomas Lehmann <t.lehmann@mailbox.org>  Thu, 27 Nov 2025 22:17:25 +0100
+
 airtools (5.2.3-1) experimental; urgency=medium
 
   * Update to airfun.sh version 5.5.3
@@ -21,7 +27,7 @@ airtools (5.2.0-1) experimental; urgency=medium
   * Update to airfun.sh version 5.5.0, starting transition to using 32bit
     floating point FITS images
   * Split of airfun.py into multiple files
-  * debian/control: added dependencies on python3-photutilsi, python3-pyregion
+  * debian/control: added dependencies on python3-photutils, python3-pyregion
     and aladin
   * Bug fix in debian/airtools-core.postinst
 

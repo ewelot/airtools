@@ -80,8 +80,8 @@ def fits3toppm(param):
     r = pyvips.Image.new_from_file(red)
     g = pyvips.Image.new_from_file(green)
     b = pyvips.Image.new_from_file(blue)
-    rgb = r.bandjoin([g, b]).copy(interpretation="rgb16")
-    rgb.ppmsave(outppm, strip=1)
+    rgb = r.bandjoin([g, b])
+    writeimage(["-fmt", "ppm", rgb, outppm])
     exit()
 
 
@@ -106,7 +106,8 @@ def fitscubetoppm(param):
         source = pyvips.Source.new_from_descriptor(sys.stdin.fileno())
         inimg = pyvips.Image.new_from_source(source, "")
 
-    inimg.linear(mult,add).copy(interpretation="rgb16").ppmsave(outpnm, strip=1)
+    outimg = inimg.linear(mult,add)
+    writeimage(["-fmt", "pnm", outimg, outpnm])
     exit()
 
 

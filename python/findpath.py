@@ -119,8 +119,13 @@ def findpath(param):
         x1, y1, vl, va = region.coord_list
         
         # determine width of image strip to be used for path detection
-        swidth = 2*int(swidth_mult * (30+vl/150) / 2)
+        swidth = 2*int(swidth_mult * (20+vl/150) / 2)
+        # box width along path for smooting
         length = 2*int(length_mult * (30+vl/300) / 2)
+        # required minimum amplitude
+        amplmin=5*stddev/np.sqrt(length)
+        if verbose:
+            print('# strip width={:d}  box length={:d}  amplmin={:.1f}'.format(swidth, length, amplmin), file=sys.stderr)
         
         # middle point (FITS)
         pi=math.pi
@@ -173,10 +178,10 @@ def findpath(param):
             ydata = v2np(imgstrip.crop(x,0,1,swidth)).reshape(swidth)
             
             # gaussian fit to determine line center and width
-            p0guess = [np.median(ydata), 100, np.mean(xdata), 3]   # initial guess of ybase, ampl, xcenter, sigma
-            # note: it is much better to not provide initial guess, e.g. p0=p0guess
+            # initial guess of ybase, ampl, xcenter, sigma
+            p0guess = [np.median(ydata), 2*amplmin, np.mean(xdata), 3]
             try:
-                popt, pcov = curve_fit(gaussian1D, xdata, ydata)
+                popt, pcov = curve_fit(gaussian1D, xdata, ydata, p0=p0guess)
                 perr2 = np.diag(pcov)
                 if np.all(perr2 > 0):
                     perr = np.sqrt(perr2)
@@ -192,7 +197,6 @@ def findpath(param):
                         plt.plot(xdata, yfit, '-k', label='fit')
                         plt.show()
                     
-                    amplmin=5*stddev/np.sqrt(length)
                     if (fwhm < pwidthmax and ampl > amplmin and
                         err_xcenter < pwidthmax/2 and err_fwhm < pwidthmax):
                         line='{:d} {:.0f} {:.1f} {:.0f} {:.1f} {:.1f} {:.1f}\n'.format(
@@ -211,7 +215,10 @@ def findpath(param):
                 else:
                     if (verbose): print('WARNING: fitting failed at x=' + str(x))
             except RuntimeError:
-                if (verbose): print('WARNING: RuntimeError at x=' + str(x))
+                if (verbose):
+                    print('WARNING: RuntimeError at x=' + str(x))
+                    for i in range(swidth):
+                        print(xdata[i], ydata[i])
                 pass
 
         # closing output data file

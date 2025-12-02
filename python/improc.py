@@ -314,24 +314,17 @@ def pnmccdred(param):
     # reading input image
     if (infilename and infilename != '-'):
         try:
-            inimg = pyvips.Image.new_from_file(infilename)
+            raw = rawpy.imread(infilename)
+            # stretch to 16bit
+            premult=premult * int(2**16 / raw.white_level)
+            cfa = raw.raw_image_visible.copy()
+            if (not bayerpattern):
+                for ind in raw.raw_pattern.flatten():
+                    bayerpattern += "RGBG"[ind]
             if verbose:
-                print("# image loaded by libvips", file=sys.stderr)
-        except:
-            try:
-                raw = rawpy.imread(infilename)
-                # stretch to 16bit
-                premult=premult * int(2**16 / raw.white_level)
-                cfa = raw.raw_image_visible.copy()
-                if (not bayerpattern):
-                    for ind in raw.raw_pattern.flatten():
-                        bayerpattern += "RGBG"[ind]
-                if verbose:
-                    print("# raw DSLR image loaded by rawpy", file=sys.stderr)
-                    print("# bayer pattern:", bayerpattern, file=sys.stderr)
-            except:
-                print("ERROR: unsupported input image format.", file=sys.stderr)
-                exit(-1)
+                print("# raw DSLR image loaded by rawpy", file=sys.stderr)
+                print("# bayer pattern:", bayerpattern, file=sys.stderr)
+
             # convert to vips image   
             height, width = cfa.shape
             bands=1
@@ -339,6 +332,14 @@ def pnmccdred(param):
             inimg = pyvips.Image.new_from_memory(nparr.data, width, height, bands,
                 np_dtype_to_vips_format[str(cfa.dtype)])
             # TODO: check for possible scaling to 16bit in which case we must adjust mult
+        except:
+            try:
+                inimg = pyvips.Image.new_from_file(infilename)
+                if verbose:
+                    print("# image loaded by libvips", file=sys.stderr)
+            except:
+                print("ERROR: unsupported input image format.", file=sys.stderr)
+                exit(-1)
     else:
         source = pyvips.Source.new_from_descriptor(sys.stdin.fileno())
         inimg = pyvips.Image.new_from_source(source, "")
@@ -760,7 +761,7 @@ def mkcluster(param):
 
 
 def pnmcombine(param):
-    mode='mean' # sum, mean, median, stddev
+    mode='mean' # min, max, mean, median, stddev
     outfmt='pnm'
     if(param[0]=='-fmt'):
         outfmt=param[1]
@@ -799,6 +800,11 @@ def pnmcombine(param):
         for i in range(1,len(inimgarray)):
             outimg = outimg.add(inimgarray[i]);
         #outimg = outimg.rint()
+    elif mode=="min":
+        outimg = inimgarray[0].bandrank(inimgarray[1:], index=0)
+    elif mode=="max":
+        nimg = len(inimgarray)
+        outimg = inimgarray[0].bandrank(inimgarray[1:], index=nimg-1)
     else:
         meanimg = inimgarray[0]
         for i in range(1,len(inimgarray)):
@@ -1270,9 +1276,9 @@ def bgmap(param):
 
 
 # subtract background image (scaled and downsized)
-# syntax: imbgsub [-fmt outfmt] [-s] [-bgm bgmult] [-m outmult] [-b outbg] inpnm bgimg outpnm
+# syntax: imbgsub [-fmt outfmt] [-s] [-bgm bgmult] [-m outmult] [-b outbg] inimg bgimg outpnm
 # processing:
-#   - divide bgimg by bgmult and resize to fit inpnm
+#   - divide bgimg by bgmult and resize to fit inimg
 #   - subtract modified bgimg
 #   - multiply by outmult and add outbg
 #   - optionally slice output image, adding slice number (band index+1) to output file name
@@ -1281,6 +1287,7 @@ def imbgsub(param):
     bgmult=1
     outmult=1
     outbg=1000
+    do_adjust_bg=False
     do_slice=False
     for i in range(5):
         if (not param or not isinstance(param[0], str)): break
@@ -1314,8 +1321,38 @@ def imbgsub(param):
     # divide bgimg by bgmult and resize to fit inimg
     xscale=inimg.width/bgimg.width
     yscale=inimg.height/bgimg.height
-    bgimg2=bgimg.linear(1/bgmult, 0).resize(xscale, vscale=yscale, centre=True)
+    cflag=False
+    if False:
+        if (xscale > 15 and yscale > 15):
+            xscale, yscale = xscale/9, yscale/9
+            bgimg2=bgimg.linear(1/bgmult, 0).resize(3, centre=cflag)
+            bgimg2=bgimg2.resize(3, centre=cflag)
+            bgimg2=bgimg2.resize(xscale, vscale=yscale, centre=cflag)
+        elif (xscale > 5 and yscale > 5):
+            xscale, yscale = xscale/3, yscale/3
+            bgimg2=bgimg.linear(1/bgmult, 0).resize(3, centre=cflag)
+            bgimg2=bgimg2.resize(xscale, vscale=yscale, centre=cflag)
+        else:
+            bgimg2=bgimg.linear(1/bgmult, 0).resize(xscale, vscale=yscale, centre=cflag)
+    else:
+        bgimg2=bgimg.linear(1/bgmult, 0).resize(xscale, vscale=yscale, centre=cflag)
 
+    if do_adjust_bg:
+        # adjust level of bgim2 to match that of inimg
+        inmedian = np.zeros(inimg.bands)
+        cw, ch = int(inimg.width/2), int(inimg.height/2)
+        tmpim = inimg.crop(int(cw/2), int(ch/2), cw, ch)
+        for i in range(inimg.bands):
+            inmedian[i]=np.median(v2np(tmpim[i]))
+        #print(inmedian, file=sys.stderr)
+        
+        bgmedian = 0 * inmedian
+        tmpim = bgimg2.crop(int(cw/2), int(ch/2), cw, ch)
+        for i in range(inimg.bands):
+            bgmedian[i]=np.median(v2np(tmpim[i]))
+        #print(bgmedian, file=sys.stderr)
+        bgimg2 = bgimg2.linear(1, list(inmedian-bgmedian))
+    
     # subtract bgimg2
     if (outfmt == 'fits'):
         outimg=inimg.subtract(bgimg2).linear(outmult, outbg).cast('float')

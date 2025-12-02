@@ -98,9 +98,9 @@ def addephem (param):
                 exit(-1)
             try:
                 if (i==0):
-                    eph=hor.ephemerides(closest_apparition=True, cache=doCache)
+                    eph=hor.ephemerides(closest_apparition=True, no_fragments=True, cache=doCache)
                 else:
-                    eph=vstack([eph, hor.ephemerides(closest_apparition=True, cache=doCache)])
+                    eph=vstack([eph, hor.ephemerides(closest_apparition=True, no_fragments=True, cache=doCache)])
             except requests.exceptions.SSLError as e:
                 if ('SSLCertVerificationError' in str(e)):
                     print('ERROR: SSLError (SSLCertVerificationError)', file=sys.stderr)
@@ -226,7 +226,7 @@ def mkephem (param):
     if (hor == None):
         print('ERROR: object "' + longcometname + '" not known by JPL Horizons')
         exit(-1)
-    eph=hor.ephemerides(closest_apparition=True, cache=doCache)
+    eph=hor.ephemerides(closest_apparition=True, no_fragments=True, cache=doCache)
     # if not given use magnitude model parameters from JPL Horizons
     if not 'g' in locals(): g=eph[0]["M1"]
     if not 'k' in locals(): k=eph[0]["k1"]/2.5
@@ -253,7 +253,7 @@ def mkephem (param):
             if (hor == None):
                 print('ERROR: object "' + longcometname + '" not known by JPL Horizons')
                 exit(-1)
-            eph=hor.ephemerides(closest_apparition=True, cache=doCache)
+            eph=hor.ephemerides(closest_apparition=True, no_fragments=True, cache=doCache)
             junk=junk+1
         jd=jdlist[i]
         # note: eph is sorted by date, not by list of epoches, therefore we

@@ -26,7 +26,7 @@ stilts tmatchn matcher=exact nin=3 \
 ftselect -f uid_G,x_fit_G,y_fit_G,mag_R,mag_G,mag_B,magerr_G co01.RGBphot.fits "isrgb==true"
 """
 
-VERSION="0.3"
+VERSION="0.4"
 """
 CHANGELOG
     # TODO:
@@ -37,6 +37,9 @@ CHANGELOG
         - allow to use different area sizes for psf extraction and star
           subtraction by setting different radii
 
+    0.4 - 21 Nov 2025
+        * adopted to photutils 2.2
+        
     0.3 - 17 Jun 2025
         * increased psfsize to 31
         * added options to set saturation, fwhm and magzero
@@ -96,8 +99,8 @@ from photutils.background import Background2D, SExtractorBackground
 from photutils.segmentation import detect_sources
 from photutils.detection import DAOStarFinder, IRAFStarFinder
 from photutils.aperture import CircularAperture
-from photutils.psf import extract_stars, subtract_psf, EPSFBuilder, EPSFModel
-from photutils.psf import DAOGroup, BasicPSFPhotometry, DAOPhotPSFPhotometry
+from photutils.psf import extract_stars, EPSFBuilder, EPSFModel
+from photutils.psf import PSFPhotometry
 
 import warnings
 from astropy.utils.exceptions import AstropyDeprecationWarning
@@ -293,10 +296,11 @@ def background(img, bsize, do_plot_segmentimage=False):
     data = data - bg0.background
     # second iteration - mask bright sources before running statistics
     segment_map = detect_sources(data, 4*sd, npixels=5)
+    # TODO: dilate segment_map, amount should depend on FWHM)
     if do_plot_segmentimage:
         plt.figure()
         plt.title('Segment image ...')
-        plt.imshow(segment_map, origin=origin, cmap=segment_map.cmap,
+        plt.imshow(segment_map, cmap=segment_map.cmap,
             interpolation='nearest')
         plt.show(block=False)
     mask = segment_map.data.astype(bool)
@@ -832,7 +836,7 @@ def psfextract(param):
     bsize=20        # box width used by bg estimator
     # settings for ePSF builder
     do_remove_nearby_sources=True
-    psfsize=31      # min. box size of star cutout window
+    psfsize=25      # min. box size of star cutout window
     psfsample=2     # PSF upsampling factor
     # normrad=fwhm+1 # aperture radius used for normalizing flux
     # settings for PSF photometry
@@ -847,8 +851,12 @@ def psfextract(param):
 
     # show/hide plot windows
     do_show_plots=False
+    do_show_plots=True
     do_plot_segmentimage=False
+    do_plot_segmentimage=True
     do_plot_sources=False
+    do_plot_sources=True
+    
     do_plot_stars0=True
     do_plot_psf0=True
     do_plot_stars1=True
@@ -1049,7 +1057,8 @@ def psfextract(param):
     if (not trail):
         bgimg = pyvips.Image.black(imgwidth, imgheight).insert(np2v(bgdata), left, top)
         writeimage(['-fmt', 'fits', '-32', bgimg, outprefix + '.bg.fits'])
-
+    
+    # note: on dense field bg is still way off and sd much too high (10x)
 
     #########################################
     #   select PSF stars
@@ -1135,8 +1144,8 @@ def psfextract(param):
         outprefix, istrail=trail, iteration=0, do_show_plots=do_show_plots)
     print('initial psf extraction finished in {:.2f}s'.format(time.time() - start_time), flush=True)
 
-    #if do_show_plots: plt.show()
-    #exit(0)
+    if do_show_plots: plt.show()
+    exit(0)
     
 
     if do_remove_nearby_sources:

@@ -17,19 +17,26 @@ def rawimsize(param):
 
 # print basic info about raw image
 def rawinfo(param):
+    checkonly=False
+    for i in range(2):
+        if (not param or not isinstance(param[0], str)): break
+        if(param[0]=='-c'):
+            checkonly=True
+            del param[0]
     rawfilename=param[0]
 
-    tags = exifread.process_file(open(rawfilename, 'rb'))
-    for key, value in tags.items():
-        if (key != 'JPEGThumbnail'):
-            if (key.startswith('Image')):
-                print(f'{key}: {value}')
-
     try:
+        tags = exifread.process_file(open(rawfilename, 'rb'))
         raw = rawpy.imread(rawfilename)
     except:
         print("ERROR: unable to read file by using rawpy", file=sys.stderr)
         exit(-1)
+    if checkonly: exit(0)
+
+    for key, value in tags.items():
+        if (key != 'JPEGThumbnail'):
+            if (key.startswith('Image')):
+                print(f'{key}: {value}')
 
     print("raw type:   ", raw.raw_type)
     print("color desc: ", raw.color_desc)
